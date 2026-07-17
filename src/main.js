@@ -426,7 +426,7 @@ const renderCharacterModal = () => {
   return `
     <div class="modal-backdrop" data-action="close-character-modal">
       <section class="character-modal" role="dialog" aria-modal="true" aria-labelledby="characterModalTitle">
-        <div class="modal-head"><div><span class="eyebrow">CHARACTER DETAIL</span><h2 id="characterModalTitle">${escapeHtml(character.name)}</h2></div><button class="small-icon-button" data-action="close-character-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <div class="modal-head"><div><span class="eyebrow">CHARACTER DETAIL</span><h2 id="characterModalTitle">${escapeHtml(character.name)}</h2></div><div class="modal-head-actions"><button class="danger-button character-delete-button" data-action="delete-character" type="button">${icons.close} Delete</button><button class="small-icon-button" data-action="close-character-modal" aria-label="Close" type="button">${icons.close}</button></div></div>
         <div class="character-detail-grid">
           <div class="character-detail-sheet">${sheet ? renderMediaVisual(sheet) : `<div class="character-placeholder">${icons.magic}<span>Add an image version</span></div>`}${character.lockedVersionId ? '<span class="character-lock detail-lock">LOCKED VERSION</span>' : ''}</div>
           <div class="character-detail-copy">
@@ -856,6 +856,7 @@ const bindEvents = () => {
   app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
   app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
   app.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
+  app.querySelector('[data-action="delete-character"]')?.addEventListener('click', deleteCharacter);
   app.querySelectorAll('[data-action="activate-character-version"]').forEach((button) => button.addEventListener('click', () => activateCharacterVersion(button.dataset.versionId)));
   app.querySelector('[data-action="record-style-version"]')?.addEventListener('click', recordStyleVersion);
   app.querySelector('[data-action="lock-style"]')?.addEventListener('click', lockStyle);
@@ -1085,6 +1086,27 @@ const lockCharacter = () => {
 const unlockCharacter = () => {
   characterLibrary.unlockVersion(state.selectedCharacterId);
   renderApp();
+};
+
+const deleteCharacter = () => {
+  const character = characterById(state.selectedCharacterId);
+  if (!character) return;
+  const attachedClipCount = state.clips.filter((clip) => (clip.provenance.characterVersionIds || [])
+    .some((versionId) => character.versions.some((version) => version.id === versionId))).length;
+  const attachmentNote = attachedClipCount ? ` This will detach it from ${attachedClipCount} timeline ${attachedClipCount === 1 ? 'clip' : 'clips'}.` : '';
+  if (typeof globalThis.confirm === 'function' && !globalThis.confirm(`Delete character “${character.name}”?${attachmentNote}`)) return;
+  try {
+    clearTimeout(characterPollTimer);
+    characterPollTimer = null;
+    characterGenerationController = null;
+    characterLibrary.remove(character.id);
+    state.selectedCharacterId = null;
+    state.isCharacterModalOpen = false;
+    renderApp();
+    showToast(`Deleted character “${character.name}”.`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
 };
 
 const composerInputFromForm = () => {

@@ -119,3 +119,28 @@ test('rejects invalid character versions and leaves the timeline untouched', () 
   assert.equal(library.load()[0].versions.length, 0);
   assert.equal(store.getProject().timeline.clips.length, 0);
 });
+
+test('deletes a character and detaches its versions from timeline clips', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const library = createCharacterLibrary(store);
+  const sheetId = store.dispatch({type: 'asset/import', asset: {name: 'fox-sheet.png', kind: 'image', mimeType: 'image/png'}}).affectedId;
+  const shotId = store.dispatch({type: 'asset/import', asset: {name: 'shot.png', kind: 'image', mimeType: 'image/png'}}).affectedId;
+  const characterId = library.createDraft('Fox').affectedId;
+  library.recordVersion(characterId, {id: 'fox-version-1', sheetAssetId: sheetId, prompt: 'A fox', modelId: 'local/test'});
+  library.lockVersion(characterId, 'fox-version-1');
+  const clipId = store.dispatch({
+    type: 'clip/add',
+    assetId: shotId,
+    trackId: 'V1',
+    start: 0,
+    provenance: {characterVersionIds: ['fox-version-1']},
+  }).affectedId;
+  const revisionBeforeDelete = store.getProject().timeline.revision;
+
+  library.remove(characterId);
+
+  const project = store.getProject();
+  assert.equal(project.characters.length, 0);
+  assert.deepEqual(project.timeline.clips.find((clip) => clip.id === clipId).provenance.characterVersionIds, []);
+  assert.ok(project.timeline.revision > revisionBeforeDelete);
+});

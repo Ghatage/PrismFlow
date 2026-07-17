@@ -1184,6 +1184,19 @@ export const createProjectStore = ({
       project.characters.push(character);
       affectedId = character.id;
       changed = true;
+    } else if (command.type === 'character/remove') {
+      const characterIndex = project.characters.findIndex((candidate) => candidate.id === command.characterId);
+      if (characterIndex >= 0) {
+        const versionIds = new Set(project.characters[characterIndex].versions.map((version) => version.id));
+        project.characters.splice(characterIndex, 1);
+        for (const clip of project.timeline.clips) {
+          const previousIds = clip.provenance.characterVersionIds;
+          clip.provenance.characterVersionIds = previousIds.filter((versionId) => !versionIds.has(versionId));
+          if (clip.provenance.characterVersionIds.length !== previousIds.length) acceptedTimelineChanged = true;
+        }
+        affectedId = command.characterId;
+        changed = true;
+      }
     } else if (command.type === 'character/rename') {
       const character = project.characters.find((candidate) => candidate.id === command.characterId);
       const name = asString(command.name);

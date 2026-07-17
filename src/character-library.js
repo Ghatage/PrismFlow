@@ -19,6 +19,11 @@ export const createCharacterLibrary = ({getProject, dispatch}) => {
     name: requireText(name, 'Character name'),
   });
 
+  const remove = (characterId) => dispatch({
+    type: 'character/remove',
+    characterId: requireText(characterId, 'Character id'),
+  });
+
   const rename = (characterId, name) => dispatch({
     type: 'character/rename',
     characterId: requireText(characterId, 'Character id'),
@@ -54,5 +59,5 @@ export const createCharacterLibrary = ({getProject, dispatch}) => {
     characterId: requireText(characterId, 'Character id'),
   });
 
-  return {load, createDraft, rename, setStatus, recordVersion, activateVersion, lockVersion, unlockVersion};
+  return {load, createDraft, remove, rename, setStatus, recordVersion, activateVersion, lockVersion, unlockVersion};
 };

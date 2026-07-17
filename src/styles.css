@@ -434,6 +434,8 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
   width: 100%;
 }
 .modal-head { align-items: flex-start; display: flex; justify-content: space-between; margin-bottom: 18px; }
+.modal-head-actions { align-items: center; display: flex; gap: 8px; }
+.character-delete-button { margin: 0; }
 .modal-head h2 { font-family: var(--display); font-size: 18px; font-weight: 700; margin: 5px 0 0; }
 .character-detail-grid { display: grid; gap: 20px; grid-template-columns: minmax(240px, 1.1fr) 1fr; }
 .character-detail-sheet { aspect-ratio: 4 / 3; background: #0a0a10; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; position: relative; }
