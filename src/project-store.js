@@ -1,6 +1,7 @@
 export const PROJECT_SCHEMA_VERSION = 1;
 export const PROJECT_STORAGE_KEY = 'prismflow.project';
 export const TIMELINE_DIFF_SCHEMA_VERSION = 1;
+export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -99,6 +100,7 @@ const createDefaultProject = ({now, createId}) => {
     },
     scenes: [{id: sceneId, name: 'Opening scene', duration: DEFAULT_TIMELINE_DURATION, metadata: {}}],
     characters: [],
+    contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
     mediaAssets: [],
     timeline: {
       revision: 0,
@@ -404,6 +406,17 @@ const normalizeProject = (value, dependencies) => {
   const timelineDiffs = (Array.isArray(timelineDiffCollection.items) ? timelineDiffCollection.items : [])
     .map((diff) => restoreTimelineDiff(diff, diffContext))
     .filter(Boolean);
+  const contextIndex = isRecord(value.contextIndex) && value.contextIndex.schemaVersion === PROJECT_CONTEXT_SCHEMA_VERSION
+    ? {
+      schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
+      sourceRevision: Number.isInteger(value.contextIndex.sourceRevision) ? Math.max(0, value.contextIndex.sourceRevision) : revision,
+      generatedAt: asTimestamp(value.contextIndex.generatedAt, fallback.updatedAt),
+      entries: Array.isArray(value.contextIndex.entries) ? sanitizeJson(value.contextIndex.entries) || [] : [],
+    }
+    : {
+      ...fallback.contextIndex,
+      sourceRevision: revision,
+    };
 
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -418,6 +431,7 @@ const normalizeProject = (value, dependencies) => {
     characters: (Array.isArray(value.characters) ? value.characters : [])
       .map((character) => normalizeCharacter(character, dependencies))
       .filter(Boolean),
+    contextIndex,
     mediaAssets,
     timeline: {revision, activeSceneId, duration, tracks, clips},
     timelineDiffs: {schemaVersion: TIMELINE_DIFF_SCHEMA_VERSION, items: timelineDiffs},
@@ -430,6 +444,12 @@ const toPersistedProject = (project) => ({
   project: sanitizeJson(project.project),
   scenes: sanitizeJson(project.scenes),
   characters: sanitizeJson(project.characters),
+  contextIndex: {
+    schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
+    sourceRevision: project.contextIndex?.sourceRevision || 0,
+    generatedAt: project.contextIndex?.generatedAt,
+    entries: sanitizeJson(project.contextIndex?.entries || []),
+  },
   mediaAssets: project.mediaAssets.map((asset) => ({
     id: asset.id,
     name: asset.name,
@@ -925,6 +945,19 @@ export const createProjectStore = ({
         affectedId = scene.id;
         changed = true;
       }
+    } else if (command.type === 'context/index') {
+      const index = command.index;
+      if (!isRecord(index) || index.schemaVersion !== PROJECT_CONTEXT_SCHEMA_VERSION || !Array.isArray(index.entries)) {
+        throw new Error('Project context indexes must include a schema version and entries.');
+      }
+      project.contextIndex = {
+        schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
+        sourceRevision: Number.isInteger(index.sourceRevision) ? Math.max(0, index.sourceRevision) : project.timeline.revision,
+        generatedAt: asTimestamp(index.generatedAt, now()),
+        entries: sanitizeJson(index.entries) || [],
+      };
+      affectedId = 'context-index';
+      changed = true;
     } else if (command.type === 'character/create') {
       const character = normalizeCharacter({
         id: createId('character'),
