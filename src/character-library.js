@@ -25,6 +25,12 @@ export const createCharacterLibrary = ({getProject, dispatch}) => {
     name: requireText(name, 'Character name'),
   });
 
+  const setStatus = (characterId, status) => dispatch({
+    type: 'character/status',
+    characterId: requireText(characterId, 'Character id'),
+    status: requireText(status, 'Character status'),
+  });
+
   const recordVersion = (characterId, version) => dispatch({
     type: 'character/version-record',
     characterId: requireText(characterId, 'Character id'),
@@ -48,5 +54,5 @@ export const createCharacterLibrary = ({getProject, dispatch}) => {
     characterId: requireText(characterId, 'Character id'),
   });
 
-  return {load, createDraft, rename, recordVersion, activateVersion, lockVersion, unlockVersion};
+  return {load, createDraft, rename, setStatus, recordVersion, activateVersion, lockVersion, unlockVersion};
 };

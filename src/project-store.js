@@ -396,6 +396,13 @@ export const createProjectStore = ({
         affectedId = character.id;
         changed = true;
       }
+    } else if (command.type === 'character/status') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      if (character && ['draft', 'ready', 'failed'].includes(command.status)) {
+        character.status = command.status;
+        affectedId = character.id;
+        changed = true;
+      }
     } else if (command.type === 'character/version-record') {
       const character = project.characters.find((candidate) => candidate.id === command.characterId);
       if (character) {

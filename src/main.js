@@ -1,5 +1,11 @@
 import {createProjectStore} from './project-store.js';
 import {createCharacterLibrary} from './character-library.js';
+import {
+  createCharacterGenerationController,
+  createFakeCharacterGenerationAdapter,
+  normalizeCharacterGenerationInput,
+  recordCharacterSheetVersion,
+} from './character-generation.js';
 
 const projectStore = createProjectStore();
 let project = projectStore.getProject();
@@ -16,6 +22,8 @@ const state = {
   activeTab: 'media',
   selectedCharacterId: null,
   isCharacterModalOpen: false,
+  characterModalMode: 'detail',
+  characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
   previewSourceId: null,
   previewClipId: null,
   rafId: null,
@@ -34,6 +42,9 @@ const characterLibrary = createCharacterLibrary({
   getProject: () => project,
   dispatch: updateProject,
 });
+const characterGenerationAdapter = createFakeCharacterGenerationAdapter();
+let characterGenerationController = null;
+let characterPollTimer = null;
 
 const app = document.querySelector('#app');
 const fileInput = document.createElement('input');
@@ -202,6 +213,7 @@ const renderCharactersPanel = () => `
 `;
 
 const renderCharacterModal = () => {
+  if (state.characterModalMode === 'composer') return renderCharacterComposerModal();
   const character = characterById(state.selectedCharacterId);
   if (!character) return '';
   const activeVersion = characterVersion(character);
@@ -228,6 +240,39 @@ const renderCharacterModal = () => {
           </div>
         </div>
         <div class="character-version-list"><div class="version-list-head"><strong>Immutable versions</strong><span>${character.versions.length}</span></div>${character.versions.length ? character.versions.map((version, index) => { const asset = mediaById(version.sheetAssetId); const isActive = version.id === activeVersion?.id; return `<button class="character-version-row ${isActive ? 'active' : ''}" data-action="activate-character-version" data-version-id="${version.id}" type="button" ${character.lockedVersionId ? 'disabled' : ''}><span class="version-number">V${index + 1}</span><div class="version-thumb">${asset ? renderMediaVisual(asset) : icons.image}</div><div><strong>${escapeHtml(asset?.name || 'Missing sheet asset')}</strong><span>${escapeHtml(version.modelId)} · ${new Date(version.createdAt).toLocaleString()}</span></div><span>${version.id === character.lockedVersionId ? 'Locked' : isActive ? 'Active' : 'Select'}</span></button>`; }).join('') : '<div class="version-empty">Versions are append-only. Existing versions are never overwritten.</div>'}</div>
+      </section>
+    </div>
+  `;
+};
+
+const renderCharacterComposerModal = () => {
+  const job = characterGenerationController?.snapshot() || {status: 'idle', providerStatus: null, attempt: 0, error: null};
+  const isWorking = job.status === 'generating' || job.status === 'retrying';
+  const input = state.characterComposerInput;
+  const imageAssets = state.media.filter((asset) => asset.kind === 'image');
+  const action = job.status === 'failed'
+    ? '<button class="button primary" data-action="retry-character-generation" type="button">Retry generation</button>'
+    : `<button class="button primary" type="submit" ${isWorking ? 'disabled' : ''}>${isWorking ? 'Generating…' : 'Generate character sheet'}</button>`;
+  return `
+    <div class="modal-backdrop" data-action="close-character-modal">
+      <section class="character-modal composer-modal" role="dialog" aria-modal="true" aria-labelledby="characterComposerTitle">
+        <div class="modal-head"><div><span class="eyebrow">NEW CHARACTER</span><h2 id="characterComposerTitle">Character composer</h2></div><button class="small-icon-button" data-action="close-character-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <form class="character-composer-form" data-character-composer-form>
+          <div class="composer-fields">
+            <label for="composerName">Character name</label>
+            <input id="composerName" name="name" value="${escapeHtml(input.name)}" placeholder="Marlow the fox" ${isWorking ? 'disabled' : ''} required />
+            <label for="composerPrompt">Visual prompt</label>
+            <textarea id="composerPrompt" name="prompt" rows="5" placeholder="Describe appearance, clothing, proportions, and expressions…" ${isWorking ? 'disabled' : ''} required>${escapeHtml(input.prompt)}</textarea>
+            <label for="composerStyleNotes">Style notes</label>
+            <textarea id="composerStyleNotes" name="styleNotes" rows="3" placeholder="Palette, line quality, camera, rendering style…" ${isWorking ? 'disabled' : ''}>${escapeHtml(input.styleNotes)}</textarea>
+          </div>
+          <fieldset class="composer-references" ${isWorking ? 'disabled' : ''}><legend>Optional media references</legend>${imageAssets.length ? `<div class="reference-options">${imageAssets.map((asset) => `<label><input type="checkbox" name="referenceAssetIds" value="${asset.id}" ${input.referenceAssetIds.includes(asset.id) ? 'checked' : ''}/><span class="reference-option-thumb">${renderMediaVisual(asset)}</span><span>${escapeHtml(asset.name)}</span></label>`).join('')}</div>` : '<p>Import images in Media to use them as references.</p>'}</fieldset>
+          <div class="generation-job-card ${job.status}">
+            <span class="job-state-dot"></span>
+            <div><strong>${job.status === 'idle' ? 'Ready to compose' : job.status === 'failed' ? 'Generation failed' : job.status === 'ready' ? 'Character sheet ready' : job.status === 'retrying' ? 'Retrying character sheet' : 'Generating character sheet'}</strong><span>${job.status === 'idle' ? 'The local adapter creates a deterministic sheet without network calls.' : job.status === 'failed' ? escapeHtml(job.error || 'Unknown generation error') : `${escapeHtml(job.providerStatus || 'queued')} · attempt ${job.attempt}`}</span></div>
+          </div>
+          <div class="composer-foot"><small>Deterministic test path: include <code>[fail]</code> in the prompt, then remove it before retrying.</small>${action}</div>
+        </form>
       </section>
     </div>
   `;
@@ -283,6 +328,8 @@ const bindEvents = () => {
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
   app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
   app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
+  app.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
+  app.querySelector('[data-action="retry-character-generation"]')?.addEventListener('click', retryCharacterComposer);
   app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
   app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
   app.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
@@ -321,14 +368,17 @@ const bindEvents = () => {
 };
 
 const createCharacter = () => {
-  const result = characterLibrary.createDraft(`Character ${state.characters.length + 1}`);
-  state.selectedCharacterId = result.affectedId;
+  state.selectedCharacterId = null;
+  state.characterModalMode = 'composer';
+  state.characterComposerInput = {name: '', prompt: '', styleNotes: '', referenceAssetIds: []};
+  characterGenerationController = null;
   state.isCharacterModalOpen = true;
   renderApp();
 };
 
 const openCharacter = (characterId) => {
   state.selectedCharacterId = characterId;
+  state.characterModalMode = 'detail';
   state.isCharacterModalOpen = true;
   renderApp();
 };
@@ -379,6 +429,80 @@ const lockCharacter = () => {
 const unlockCharacter = () => {
   characterLibrary.unlockVersion(state.selectedCharacterId);
   renderApp();
+};
+
+const composerInputFromForm = () => {
+  const form = app.querySelector('[data-character-composer-form]');
+  if (!form) throw new Error('Character composer is unavailable.');
+  const data = new FormData(form);
+  return normalizeCharacterGenerationInput({
+    name: data.get('name'),
+    prompt: data.get('prompt'),
+    styleNotes: data.get('styleNotes'),
+    referenceAssetIds: data.getAll('referenceAssetIds'),
+  });
+};
+
+const createComposerController = (characterId) => createCharacterGenerationController({
+  adapter: characterGenerationAdapter,
+  onCompleted: async (result, input) => {
+    recordCharacterSheetVersion({
+      dispatch: updateProject,
+      library: characterLibrary,
+      characterId,
+      input,
+      result,
+    });
+  },
+});
+
+const submitCharacterComposer = async (event) => {
+  event.preventDefault();
+  try {
+    const input = composerInputFromForm();
+    state.characterComposerInput = input;
+    if (!state.selectedCharacterId) {
+      state.selectedCharacterId = characterLibrary.createDraft(input.name).affectedId;
+      characterGenerationController = createComposerController(state.selectedCharacterId);
+    } else {
+      characterLibrary.rename(state.selectedCharacterId, input.name);
+    }
+    await characterGenerationController.submit(input);
+    renderApp();
+    scheduleCharacterPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const retryCharacterComposer = async () => {
+  try {
+    const input = composerInputFromForm();
+    state.characterComposerInput = input;
+    characterLibrary.rename(state.selectedCharacterId, input.name);
+    characterLibrary.setStatus(state.selectedCharacterId, 'draft');
+    await characterGenerationController.retry(input);
+    renderApp();
+    scheduleCharacterPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const scheduleCharacterPoll = () => {
+  clearTimeout(characterPollTimer);
+  characterPollTimer = setTimeout(pollCharacterGeneration, 250);
+};
+
+const pollCharacterGeneration = async () => {
+  if (!characterGenerationController) return;
+  const job = await characterGenerationController.poll();
+  if (job.status === 'failed' && state.selectedCharacterId) {
+    characterLibrary.setStatus(state.selectedCharacterId, 'failed');
+  }
+  if (job.status === 'ready') state.characterModalMode = 'detail';
+  renderApp();
+  if (job.status === 'generating' || job.status === 'retrying') scheduleCharacterPoll();
 };
 
 const dropOnTimeline = (event, trackId) => {
