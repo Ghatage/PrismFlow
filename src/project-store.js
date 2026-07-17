@@ -18,7 +18,7 @@ const sanitizeJson = (value, depth = 0, seen = new WeakSet()) => {
   if (depth > 8 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
   if (value === null || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
-  if (typeof value === 'string') return value.startsWith('blob:') ? undefined : value;
+  if (typeof value === 'string') return /^(blob:|data:)/i.test(value) ? undefined : value;
   if (typeof value !== 'object' || seen.has(value)) return undefined;
 
   seen.add(value);
@@ -97,6 +97,47 @@ const normalizeAsset = (value, {now, createId}) => {
   };
 };
 
+const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
+  .map((entry) => asString(entry))
+  .filter(Boolean))];
+
+const normalizeCharacterVersion = (value, {now, createId}) => {
+  if (!isRecord(value)) return null;
+  const seed = typeof value.seed === 'string' || Number.isFinite(value.seed) ? value.seed : null;
+  return {
+    id: asString(value.id, createId('character-version')),
+    sheetAssetId: asString(value.sheetAssetId),
+    referenceAssetIds: normalizeStringIds(value.referenceAssetIds),
+    prompt: asString(value.prompt),
+    modelId: asString(value.modelId, 'local/manual'),
+    seed,
+    params: isRecord(value.params) ? sanitizeJson(value.params) || {} : {},
+    parentAssetIds: normalizeStringIds(value.parentAssetIds),
+    createdAt: asTimestamp(value.createdAt, now()),
+  };
+};
+
+const normalizeCharacter = (value, dependencies) => {
+  if (!isRecord(value)) return null;
+  const versions = (Array.isArray(value.versions) ? value.versions : [])
+    .map((version) => normalizeCharacterVersion(version, dependencies))
+    .filter(Boolean);
+  const versionIds = new Set(versions.map((version) => version.id));
+  const lockedVersionId = versionIds.has(value.lockedVersionId) ? value.lockedVersionId : null;
+  const requestedActiveVersionId = versionIds.has(value.activeVersionId) ? value.activeVersionId : null;
+  const activeVersionId = lockedVersionId || requestedActiveVersionId || versions.at(-1)?.id || null;
+  const requestedStatus = ['draft', 'ready', 'failed'].includes(value.status) ? value.status : null;
+
+  return {
+    id: asString(value.id, dependencies.createId('character')),
+    name: asString(value.name, 'Untitled character'),
+    status: versions.length ? (requestedStatus === 'failed' ? 'failed' : 'ready') : (requestedStatus || 'draft'),
+    lockedVersionId,
+    activeVersionId,
+    versions,
+  };
+};
+
 const normalizeClip = (value, {assetIds, sceneIds, trackIds, createId}) => {
   if (!isRecord(value)) return null;
   const assetId = asString(value.assetId || value.mediaId);
@@ -162,9 +203,9 @@ const normalizeProject = (value, dependencies) => {
       metadata: isRecord(projectMetadata.metadata) ? sanitizeJson(projectMetadata.metadata) || {} : fallback.project.metadata,
     },
     scenes,
-    characters: Array.isArray(value.characters)
-      ? value.characters.map((character) => sanitizeJson(character)).filter(isRecord)
-      : [],
+    characters: (Array.isArray(value.characters) ? value.characters : [])
+      .map((character) => normalizeCharacter(character, dependencies))
+      .filter(Boolean),
     mediaAssets,
     timeline: {activeSceneId, duration, tracks, clips},
   };
@@ -262,7 +303,7 @@ export const createProjectStore = ({
 
     if (command.type === 'asset/import') {
       const asset = normalizeAsset(command.asset, dependencies);
-      if (typeof command.asset?.url === 'string' && command.asset.url.startsWith('blob:')) {
+      if (typeof command.asset?.url === 'string' && command.asset.url.trim()) {
         assetUrls.set(asset.id, command.asset.url);
       }
       project.mediaAssets.push(asset);
@@ -335,6 +376,66 @@ export const createProjectStore = ({
         if (Number.isFinite(command.patch.duration)) scene.duration = asNumber(command.patch.duration, scene.duration, 0.1);
         if (isRecord(command.patch.metadata)) scene.metadata = sanitizeJson({...scene.metadata, ...command.patch.metadata}) || {};
         affectedId = scene.id;
+        changed = true;
+      }
+    } else if (command.type === 'character/create') {
+      const character = normalizeCharacter({
+        id: createId('character'),
+        name: command.name,
+        status: 'draft',
+        versions: [],
+      }, dependencies);
+      project.characters.push(character);
+      affectedId = character.id;
+      changed = true;
+    } else if (command.type === 'character/rename') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      const name = asString(command.name);
+      if (character && name) {
+        character.name = name;
+        affectedId = character.id;
+        changed = true;
+      }
+    } else if (command.type === 'character/version-record') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      if (character) {
+        const version = normalizeCharacterVersion({
+          ...command.version,
+          id: command.version?.id || createId('character-version'),
+        }, dependencies);
+        if (!version.sheetAssetId || !project.mediaAssets.some((asset) => asset.id === version.sheetAssetId)) {
+          throw new Error('A character version must reference an existing sheet asset.');
+        }
+        if (character.versions.some((candidate) => candidate.id === version.id)) {
+          throw new Error(`Character version already exists: ${version.id}`);
+        }
+        character.versions.push(version);
+        character.status = 'ready';
+        if (!character.lockedVersionId) character.activeVersionId = version.id;
+        affectedId = version.id;
+        changed = true;
+      }
+    } else if (command.type === 'character/version-activate') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      if (character && !character.lockedVersionId && character.versions.some((version) => version.id === command.versionId)) {
+        character.activeVersionId = command.versionId;
+        affectedId = character.id;
+        changed = true;
+      }
+    } else if (command.type === 'character/lock') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      if (character && character.versions.some((version) => version.id === command.versionId)) {
+        character.lockedVersionId = command.versionId;
+        character.activeVersionId = command.versionId;
+        affectedId = character.id;
+        changed = true;
+      }
+    } else if (command.type === 'character/unlock') {
+      const character = project.characters.find((candidate) => candidate.id === command.characterId);
+      if (character && character.lockedVersionId) {
+        character.lockedVersionId = null;
+        character.activeVersionId = character.versions.at(-1)?.id || null;
+        affectedId = character.id;
         changed = true;
       }
     } else {

@@ -1,10 +1,12 @@
 import {createProjectStore} from './project-store.js';
+import {createCharacterLibrary} from './character-library.js';
 
 const projectStore = createProjectStore();
 let project = projectStore.getProject();
 
 const state = {
   get media() { return project.mediaAssets; },
+  get characters() { return project.characters; },
   get clips() { return project.timeline.clips; },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
@@ -12,6 +14,8 @@ const state = {
   isPlaying: false,
   zoom: 1,
   activeTab: 'media',
+  selectedCharacterId: null,
+  isCharacterModalOpen: false,
   previewSourceId: null,
   previewClipId: null,
   rafId: null,
@@ -25,6 +29,11 @@ const updateProject = (command) => {
   project = result.project;
   return result;
 };
+
+const characterLibrary = createCharacterLibrary({
+  getProject: () => project,
+  dispatch: updateProject,
+});
 
 const app = document.querySelector('#app');
 const fileInput = document.createElement('input');
@@ -79,6 +88,8 @@ const mediaKind = (file) => {
 const kindIcon = (kind) => icons[kind] || icons.film;
 const clipById = (id) => state.clips.find((clip) => clip.id === id);
 const mediaById = (id) => state.media.find((item) => item.id === id);
+const characterById = (id) => state.characters.find((character) => character.id === id);
+const characterVersion = (character) => character?.versions.find((version) => version.id === (character.lockedVersionId || character.activeVersionId)) || null;
 const activeScene = () => project.scenes.find((scene) => scene.id === project.timeline.activeSceneId) || project.scenes[0];
 const scale = () => 88 * state.zoom;
 
@@ -112,9 +123,10 @@ const renderApp = () => {
         <aside class="sidebar left-panel">
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
+            <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'scenes' ? 'active' : ''}" data-tab="scenes" type="button">Scenes</button>
           </div>
-          ${state.activeTab === 'media' ? renderMediaPanel() : renderScenesPanel()}
+          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : renderScenesPanel()}
         </aside>
 
         <section class="stage">
@@ -148,6 +160,7 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
+    ${state.isCharacterModalOpen ? renderCharacterModal() : ''}
   `;
 
   bindEvents();
@@ -170,6 +183,55 @@ const renderMediaCard = (item) => `
     <button class="card-more" data-action="remove-media" data-media-id="${item.id}" type="button">${icons.more}</button>
   </div>
 `;
+
+const renderCharacterVisual = (character) => {
+  const version = characterVersion(character);
+  const asset = version ? mediaById(version.sheetAssetId) : null;
+  if (asset) return renderMediaVisual(asset);
+  return `<div class="character-placeholder">${icons.magic}<span>${character.status === 'failed' ? 'failed' : 'draft'}</span></div>`;
+};
+
+const renderCharactersPanel = () => `
+  <div class="panel-heading"><div><span class="eyebrow">IDENTITY LIBRARY</span><h2>Characters</h2></div></div>
+  <div class="character-grid">
+    <button class="character-card character-add-card" data-action="create-character" type="button"><span>${icons.plus}</span><strong>New character</strong></button>
+    ${characterLibrary.load().map((character) => `<button class="character-card" data-character-id="${character.id}" type="button"><div class="character-sheet">${renderCharacterVisual(character)}</div><div class="character-card-copy"><strong>${escapeHtml(character.name)}</strong><span>${character.lockedVersionId ? 'Locked' : character.status} · ${character.versions.length} ${character.versions.length === 1 ? 'version' : 'versions'}</span></div>${character.lockedVersionId ? '<span class="character-lock">LOCKED</span>' : ''}</button>`).join('')}
+  </div>
+  ${state.characters.length ? '' : '<div class="panel-empty"><span>Create reusable identities without adding clips to the timeline.</span></div>'}
+  <div class="panel-footnote"><span class="fal-dot"></span><span>Versioned references</span><span class="status-pill">local</span></div>
+`;
+
+const renderCharacterModal = () => {
+  const character = characterById(state.selectedCharacterId);
+  if (!character) return '';
+  const activeVersion = characterVersion(character);
+  const sheet = activeVersion ? mediaById(activeVersion.sheetAssetId) : null;
+  const imageAssets = state.media.filter((asset) => asset.kind === 'image');
+  return `
+    <div class="modal-backdrop" data-action="close-character-modal">
+      <section class="character-modal" role="dialog" aria-modal="true" aria-labelledby="characterModalTitle">
+        <div class="modal-head"><div><span class="eyebrow">CHARACTER DETAIL</span><h2 id="characterModalTitle">${escapeHtml(character.name)}</h2></div><button class="small-icon-button" data-action="close-character-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <div class="character-detail-grid">
+          <div class="character-detail-sheet">${sheet ? renderMediaVisual(sheet) : `<div class="character-placeholder">${icons.magic}<span>Add an image version</span></div>`}${character.lockedVersionId ? '<span class="character-lock detail-lock">LOCKED VERSION</span>' : ''}</div>
+          <div class="character-detail-copy">
+            <form class="character-name-form" data-character-name-form>
+              <label for="characterName">Character name</label>
+              <div><input id="characterName" name="name" value="${escapeHtml(character.name)}" required /><button class="button ghost" type="submit">Rename</button></div>
+            </form>
+            <div class="character-status-row"><span>Status</span><strong>${escapeHtml(character.status)}</strong><span>Active version</span><strong>${activeVersion ? escapeHtml(activeVersion.id) : 'None'}</strong></div>
+            <div class="character-version-actions">
+              <label for="characterVersionAsset">Create a version from imported media</label>
+              <div><select id="characterVersionAsset" ${imageAssets.length ? '' : 'disabled'}>${imageAssets.map((asset) => `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`).join('')}</select><button class="button ghost" data-action="record-character-version" type="button" ${imageAssets.length ? '' : 'disabled'}>Add version</button></div>
+              ${imageAssets.length ? '' : '<small>Import an image in Media first.</small>'}
+            </div>
+            <div class="character-lock-actions">${activeVersion ? character.lockedVersionId ? '<button class="button ghost" data-action="unlock-character" type="button">Unlock character</button>' : '<button class="button primary" data-action="lock-character" type="button">Lock character</button>' : '<span>Add a version before locking this identity.</span>'}</div>
+          </div>
+        </div>
+        <div class="character-version-list"><div class="version-list-head"><strong>Immutable versions</strong><span>${character.versions.length}</span></div>${character.versions.length ? character.versions.map((version, index) => { const asset = mediaById(version.sheetAssetId); const isActive = version.id === activeVersion?.id; return `<button class="character-version-row ${isActive ? 'active' : ''}" data-action="activate-character-version" data-version-id="${version.id}" type="button" ${character.lockedVersionId ? 'disabled' : ''}><span class="version-number">V${index + 1}</span><div class="version-thumb">${asset ? renderMediaVisual(asset) : icons.image}</div><div><strong>${escapeHtml(asset?.name || 'Missing sheet asset')}</strong><span>${escapeHtml(version.modelId)} · ${new Date(version.createdAt).toLocaleString()}</span></div><span>${version.id === character.lockedVersionId ? 'Locked' : isActive ? 'Active' : 'Select'}</span></button>`; }).join('') : '<div class="version-empty">Versions are append-only. Existing versions are never overwritten.</div>'}</div>
+      </section>
+    </div>
+  `;
+};
 
 const renderScenesPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">PROJECT MAP</span><h2>Scenes</h2></div><button class="small-icon-button" type="button">${icons.plus}</button></div>
@@ -217,6 +279,14 @@ const bindEvents = () => {
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
   app.querySelectorAll('[data-action="add-sample"]').forEach((button) => button.addEventListener('click', addSampleMedia));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
+  app.querySelector('[data-action="create-character"]')?.addEventListener('click', createCharacter);
+  app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
+  app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
+  app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
+  app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
+  app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
+  app.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
+  app.querySelectorAll('[data-action="activate-character-version"]').forEach((button) => button.addEventListener('click', () => activateCharacterVersion(button.dataset.versionId)));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragover', (event) => { event.preventDefault(); event.currentTarget.classList.add('dragging'); });
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragleave', (event) => event.currentTarget.classList.remove('dragging'));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('drop', (event) => { event.preventDefault(); event.currentTarget.classList.remove('dragging'); addFiles([...event.dataTransfer.files]); });
@@ -248,6 +318,67 @@ const bindEvents = () => {
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
   app.querySelector('[data-action="export"]')?.addEventListener('click', () => showToast('Export will be connected after the composition pipeline is defined.'));
   checkFalStatus();
+};
+
+const createCharacter = () => {
+  const result = characterLibrary.createDraft(`Character ${state.characters.length + 1}`);
+  state.selectedCharacterId = result.affectedId;
+  state.isCharacterModalOpen = true;
+  renderApp();
+};
+
+const openCharacter = (characterId) => {
+  state.selectedCharacterId = characterId;
+  state.isCharacterModalOpen = true;
+  renderApp();
+};
+
+const closeCharacterModal = () => {
+  state.isCharacterModalOpen = false;
+  renderApp();
+};
+
+const renameCharacter = (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    characterLibrary.rename(state.selectedCharacterId, String(form.get('name') || ''));
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const recordCharacterVersion = () => {
+  const assetId = app.querySelector('#characterVersionAsset')?.value;
+  const asset = mediaById(assetId);
+  if (!asset) return;
+  characterLibrary.recordVersion(state.selectedCharacterId, {
+    sheetAssetId: asset.id,
+    referenceAssetIds: [asset.id],
+    prompt: '',
+    modelId: 'local/manual',
+    seed: null,
+    params: {},
+    parentAssetIds: [asset.id],
+  });
+  renderApp();
+};
+
+const activateCharacterVersion = (versionId) => {
+  characterLibrary.activateVersion(state.selectedCharacterId, versionId);
+  renderApp();
+};
+
+const lockCharacter = () => {
+  const character = characterById(state.selectedCharacterId);
+  if (character?.activeVersionId) characterLibrary.lockVersion(character.id, character.activeVersionId);
+  renderApp();
+};
+
+const unlockCharacter = () => {
+  characterLibrary.unlockVersion(state.selectedCharacterId);
+  renderApp();
 };
 
 const dropOnTimeline = (event, trackId) => {
