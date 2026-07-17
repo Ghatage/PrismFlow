@@ -1,4 +1,4 @@
-import {readFile, rename, stat, writeFile, mkdir} from 'node:fs/promises';
+import {readFile, rename, writeFile, mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {HNSW} from 'tinkerbird';
 import {createTinyLmEmbedder} from './model-search.mjs';
@@ -27,6 +27,26 @@ const lexical = (query, text) => {
   const textTokens = tokens(text);
   if (!queryTokens.size) return 0;
   return [...queryTokens].filter((token) => textTokens.has(token)).length / queryTokens.size;
+};
+const asVector = (value) => {
+  if (!Array.isArray(value) && !(value instanceof Float32Array)) {
+    throw new Error('Video embedding provider returned an invalid vector.');
+  }
+  const vector = Array.from(value, Number);
+  if (!vector.length || vector.some((entry) => !Number.isFinite(entry))) {
+    throw new Error('Video embedding provider returned an invalid vector.');
+  }
+  return vector;
+};
+const embedBatch = async (embedder, texts) => {
+  const result = await embedder.embed(texts);
+  const vectors = Array.isArray(result?.data)
+    ? result.data.map((entry) => entry.embedding)
+    : result;
+  if (!Array.isArray(vectors) || vectors.length !== texts.length) {
+    throw new Error(`Video embedding provider returned ${vectors?.length || 0} vectors for ${texts.length} texts.`);
+  }
+  return vectors.map(asVector);
 };
 const readJson = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const writeJsonAtomically = async (path, payload) => {
@@ -62,7 +82,7 @@ export const createVideoSearchAdapter = ({
         searchText: clean(record.searchText || `${record.videoName || ''}. ${record.annotation || ''}`),
       }))
       .filter((record) => record.id && record.searchText);
-    const vectors = normalizedRecords.length ? await embedder.embed(normalizedRecords.map((record) => record.searchText)) : [];
+    const vectors = normalizedRecords.length ? await embedBatch(embedder, normalizedRecords.map((record) => record.searchText)) : [];
     const index = new hnswClass();
     const dimensions = vectors[0]?.length || 0;
     for (let indexNumber = 0; indexNumber < vectors.length; indexNumber += 1) {
@@ -78,9 +98,16 @@ export const createVideoSearchAdapter = ({
       const payload = await readJson(indexPath);
       if (payload.schemaVersion !== VIDEO_SEARCH_SCHEMA_VERSION) throw new Error('The video search index schema version is not supported.');
       const serialized = payload.hnsw || {};
+      const records = Array.isArray(payload.records) ? payload.records : [];
+      const serializedNodes = serialized.nodes || serialized.node || [];
+      if (records.length && (!payload.dimensions || serializedNodes.length !== records.length)) {
+        loadedState = await buildState(records);
+        await persist(loadedState);
+        return loadedState;
+      }
       loadedState = {
-        index: hnswClass.deserialize({...serialized, nodes: serialized.nodes || serialized.node || []}),
-        records: Array.isArray(payload.records) ? payload.records : [],
+        index: hnswClass.deserialize({...serialized, nodes: serializedNodes}),
+        records,
         dimensions: payload.dimensions || 0,
         embeddingModel: payload.embeddingModel || embedder.model,
         indexedAt: payload.indexedAt || null,
@@ -114,7 +141,7 @@ export const createVideoSearchAdapter = ({
     if (!normalizedQuery) throw new Error('A non-empty video search query is required.');
     const state = await load();
     if (!state.records.length) return {query: normalizedQuery, model: state.embeddingModel, results: []};
-    const [queryVector] = await embedder.embed([normalizedQuery]);
+    const [queryVector] = await embedBatch(embedder, [normalizedQuery]);
     if (state.dimensions && queryVector.length !== state.dimensions) throw new Error('Video query embedding dimensions do not match the index.');
     // TinkerBird supplies the approximate-neighbor pass; exact reranking keeps
     // project filtering and small local corpora deterministic.

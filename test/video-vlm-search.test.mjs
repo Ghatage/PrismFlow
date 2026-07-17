@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {mkdtemp} from 'node:fs/promises';
+import {mkdtemp, readFile, writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 
@@ -34,10 +34,10 @@ test('TinkerBird video search persists annotation records and traces frames to v
   const embedder = {
     model: 'fake-embedder',
     async embed(texts) {
-      return texts.map((text) => {
+      return {data: texts.map((text) => {
         const value = String(text).toLowerCase();
-        return [value.includes('fox') ? 1 : 0, value.includes('puddle') ? 1 : 0, value.includes('city') ? 1 : 0];
-      });
+        return {embedding: [value.includes('fox') ? 1 : 0, value.includes('puddle') ? 1 : 0, value.includes('city') ? 1 : 0]};
+      })};
     },
   };
   const search = createVideoSearchAdapter({indexPath: join(directory, 'video-index.json'), embedder});
@@ -53,4 +53,28 @@ test('TinkerBird video search persists annotation records and traces frames to v
   assert.equal((await reloaded.search('city', {projectId: 'project-1'})).results[0].videoAssetId, 'video-b');
   await reloaded.removeVideo('video-a');
   assert.equal((await reloaded.search('fox', {projectId: 'project-1'})).results.length, 0);
+});
+
+test('repairs a persisted video index that contains records but no HNSW nodes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'prismflow-video-search-repair-'));
+  const indexPath = join(directory, 'video-index.json');
+  const embedder = {
+    model: 'fake-embedder',
+    async embed(texts) {
+      return {data: texts.map((text) => ({embedding: [String(text).includes('fox') ? 1 : 0, 0]}))};
+    },
+  };
+  await writeFile(indexPath, JSON.stringify({
+    schemaVersion: 1,
+    embeddingModel: 'fake-embedder',
+    dimensions: 0,
+    records: [{id: 'video-a@0.000', videoAssetId: 'video-a', videoName: 'fox.mp4', time: 0, annotation: 'A fox', searchText: 'fox.mp4 A fox'}],
+    hnsw: {M: 16, efConstruction: 200, levelMax: 0, entryPointId: -1, node: []},
+  }));
+  const search = createVideoSearchAdapter({indexPath, embedder});
+  const result = await search.search('fox');
+  assert.equal(result.results[0].videoAssetId, 'video-a');
+  const repaired = JSON.parse(await readFile(indexPath, 'utf8'));
+  assert.equal(repaired.dimensions, 2);
+  assert.equal(repaired.hnsw.node.length, 1);
 });
