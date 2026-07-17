@@ -1,4 +1,5 @@
 import {landGenerationResult, normalizeGenerationResult, normalizeTimelineGenerationInput} from './timeline-generation.js';
+import {lockedStyleVersionIds} from './generation-request-builder.js';
 
 const clone = (value) => globalThis.structuredClone
   ? globalThis.structuredClone(value)
@@ -22,6 +23,9 @@ const changedFieldsFor = (clip, input) => {
   if (input.modelId !== original.modelId) changedFields.modelId = {from: original.modelId, to: input.modelId};
   if (input.seed !== original.seed) changedFields.seed = {from: original.seed, to: input.seed};
   if (!equalJson(input.params, original.params)) changedFields.params = {from: clone(original.params || {}), to: clone(input.params)};
+  if (!equalIds(stringIds(input.styleVersionIds), stringIds(original.styleVersionIds))) {
+    changedFields.styleVersionIds = {from: stringIds(original.styleVersionIds), to: stringIds(input.styleVersionIds)};
+  }
   return changedFields;
 };
 
@@ -46,7 +50,15 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
   };
 
   const deriveInput = (clip, overrides = {}) => {
+    const project = store.getProject();
     const characterVersionIds = stringIds(clip.provenance.characterVersionIds);
+    const persistedStyleVersionIds = stringIds(clip.provenance.styleVersionIds);
+    const styleVersionIds = persistedStyleVersionIds.length
+      ? persistedStyleVersionIds
+      : lockedStyleVersionIds(project);
+    if (Array.isArray(overrides.styleVersionIds) && !equalIds(styleVersionIds, stringIds(overrides.styleVersionIds))) {
+      throw new Error('A locked style version cannot be replaced during regeneration.');
+    }
     if (Array.isArray(overrides.characterVersionIds)
       && !equalIds(characterVersionIds, stringIds(overrides.characterVersionIds))) {
       throw new Error('A locked character version cannot be replaced during regeneration.');
@@ -59,6 +71,7 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
       seed: overrides.seed === undefined ? clip.provenance.seed : overrides.seed,
       params: overrides.params ?? clip.provenance.params,
       characterVersionIds,
+      styleVersionIds,
       parentAssetIds: [clip.assetId, ...(clip.provenance.parentAssetIds || [])],
       sceneId: clip.sceneId,
       trackId: clip.trackId,

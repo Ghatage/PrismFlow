@@ -1,6 +1,7 @@
 import {createProjectStore} from './project-store.js';
 import {createBrowserDatabase} from './browser-database.js';
 import {createCharacterLibrary} from './character-library.js';
+import {createStyleLibrary} from './style-library.js';
 import {
   createCharacterGenerationController,
   createFakeCharacterGenerationAdapter,
@@ -45,6 +46,7 @@ let project = projectStore.getProject();
 const state = {
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
+  get styles() { return project.styles; },
   get clips() { return project.timeline.clips; },
   get tracks() { return project.timeline.tracks; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
@@ -62,6 +64,8 @@ const state = {
   selectedCharacterId: null,
   isCharacterModalOpen: false,
   characterModalMode: 'detail',
+  selectedStyleId: null,
+  isStyleModalOpen: false,
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
   rebaseConflicts: {},
   mediaPanelOpen: true,
@@ -82,6 +86,10 @@ const updateProject = (command) => {
 };
 
 const characterLibrary = createCharacterLibrary({
+  getProject: () => project,
+  dispatch: updateProject,
+});
+const styleLibrary = createStyleLibrary({
   getProject: () => project,
   dispatch: updateProject,
 });
@@ -172,6 +180,8 @@ const selectReviewItem = (item) => {
 const mediaById = (id) => state.media.find((item) => item.id === id);
 const characterById = (id) => state.characters.find((character) => character.id === id);
 const characterVersion = (character) => character?.versions.find((version) => version.id === (character.lockedVersionId || character.activeVersionId)) || null;
+const styleById = (id) => state.styles.find((style) => style.id === id);
+const styleVersion = (style) => style?.versions.find((version) => version.id === (style.lockedVersionId || style.activeVersionId)) || null;
 const activeScene = () => project.scenes.find((scene) => scene.id === project.timeline.activeSceneId) || project.scenes[0];
 const scale = () => 88 * state.zoom;
 
@@ -217,9 +227,10 @@ const renderApp = () => {
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
+            <button class="panel-tab ${state.activeTab === 'styles' ? 'active' : ''}" data-tab="styles" type="button">Styles <span class="tab-count">${state.styles.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'scenes' ? 'active' : ''}" data-tab="scenes" type="button">Scenes</button>
           </div>
-          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : renderScenesPanel()}
+          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : state.activeTab === 'styles' ? renderStylesPanel() : renderScenesPanel()}
         </aside>
 
         <section class="stage">
@@ -250,7 +261,7 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
-    ${state.isCharacterModalOpen ? renderCharacterModal() : ''}
+    ${state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : ''}
   `;
 
   bindEvents();
@@ -289,6 +300,23 @@ const renderCharactersPanel = () => `
   <div class="panel-footnote"><span class="fal-dot"></span><span>Versioned references</span><span class="status-pill">local</span></div>
 `;
 
+const renderStyleVisual = (style) => {
+  const version = styleVersion(style);
+  const asset = version?.referenceAssetIds.map(mediaById).find(Boolean);
+  if (asset) return renderMediaVisual(asset);
+  return `<div class="character-placeholder">${icons.magic}<span>${style.status === 'failed' ? 'failed' : 'draft'}</span></div>`;
+};
+
+const renderStylesPanel = () => `
+  <div class="panel-heading"><div><span class="eyebrow">REFERENCE LIBRARY</span><h2>Styles</h2></div></div>
+  <div class="character-grid">
+    <button class="character-card character-add-card" data-action="create-style" type="button"><span>${icons.plus}</span><strong>New style</strong></button>
+    ${styleLibrary.load().map((style) => `<button class="character-card" data-style-id="${style.id}" type="button"><div class="character-sheet">${renderStyleVisual(style)}</div><div class="character-card-copy"><strong>${escapeHtml(style.name)}</strong><span>${style.lockedVersionId ? 'Locked' : style.status} · ${style.versions.length} ${style.versions.length === 1 ? 'version' : 'versions'}</span></div>${style.lockedVersionId ? '<span class="character-lock">LOCKED</span>' : ''}</button>`).join('')}
+  </div>
+  ${state.styles.length ? '' : '<div class="panel-empty"><span>Lock reusable visual references for future generations.</span></div>'}
+  <div class="panel-footnote"><span class="fal-dot"></span><span>Auto-attached to new generations</span><span class="status-pill">local</span></div>
+`;
+
 const renderCharacterModal = () => {
   if (state.characterModalMode === 'composer') return renderCharacterComposerModal();
   const character = characterById(state.selectedCharacterId);
@@ -317,6 +345,37 @@ const renderCharacterModal = () => {
           </div>
         </div>
         <div class="character-version-list"><div class="version-list-head"><strong>Immutable versions</strong><span>${character.versions.length}</span></div>${character.versions.length ? character.versions.map((version, index) => { const asset = mediaById(version.sheetAssetId); const isActive = version.id === activeVersion?.id; return `<button class="character-version-row ${isActive ? 'active' : ''}" data-action="activate-character-version" data-version-id="${version.id}" type="button" ${character.lockedVersionId ? 'disabled' : ''}><span class="version-number">V${index + 1}</span><div class="version-thumb">${asset ? renderMediaVisual(asset) : icons.image}</div><div><strong>${escapeHtml(asset?.name || 'Missing sheet asset')}</strong><span>${escapeHtml(version.modelId)} · ${new Date(version.createdAt).toLocaleString()}</span></div><span>${version.id === character.lockedVersionId ? 'Locked' : isActive ? 'Active' : 'Select'}</span></button>`; }).join('') : '<div class="version-empty">Versions are append-only. Existing versions are never overwritten.</div>'}</div>
+      </section>
+    </div>
+  `;
+};
+
+const renderStyleModal = () => {
+  const style = styleById(state.selectedStyleId);
+  if (!style) return '';
+  const activeVersion = styleVersion(style);
+  const imageAssets = state.media.filter((asset) => asset.kind === 'image');
+  return `
+    <div class="modal-backdrop" data-action="close-style-modal">
+      <section class="character-modal" role="dialog" aria-modal="true" aria-labelledby="styleModalTitle">
+        <div class="modal-head"><div><span class="eyebrow">STYLE DETAIL</span><h2 id="styleModalTitle">${escapeHtml(style.name)}</h2></div><button class="small-icon-button" data-action="close-style-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <div class="character-detail-grid">
+          <div class="character-detail-sheet">${activeVersion ? renderStyleVisual(style) : `<div class="character-placeholder">${icons.magic}<span>Add reference images</span></div>`}${style.lockedVersionId ? '<span class="character-lock detail-lock">LOCKED VERSION</span>' : ''}</div>
+          <div class="character-detail-copy">
+            <form class="style-name-form" data-style-name-form>
+              <label for="styleName">Style name</label>
+              <div><input id="styleName" name="name" value="${escapeHtml(style.name)}" required /><button class="button ghost" type="submit">Rename</button></div>
+            </form>
+            <div class="character-status-row"><span>Status</span><strong>${escapeHtml(style.status)}</strong><span>Active version</span><strong>${activeVersion ? escapeHtml(activeVersion.id) : 'None'}</strong></div>
+            <div class="character-version-actions">
+              <label for="styleVersionAssets">Create a version from imported images</label>
+              <div><select id="styleVersionAssets" multiple size="${Math.min(4, Math.max(2, imageAssets.length))}" ${imageAssets.length ? '' : 'disabled'}>${imageAssets.map((asset) => `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`).join('')}</select><button class="button ghost" data-action="record-style-version" type="button" ${imageAssets.length ? '' : 'disabled'}>Add version</button></div>
+              ${imageAssets.length ? '<small>Choose one or more images, then add an immutable reference version.</small>' : '<small>Import an image in Media first.</small>'}
+            </div>
+            <div class="character-lock-actions">${activeVersion ? style.lockedVersionId ? '<button class="button ghost" data-action="unlock-style" type="button">Unlock style</button>' : '<button class="button primary" data-action="lock-style" type="button">Lock style</button>' : '<span>Add a reference version before locking this style.</span>'}</div>
+          </div>
+        </div>
+        <div class="character-version-list"><div class="version-list-head"><strong>Immutable versions</strong><span>${style.versions.length}</span></div>${style.versions.length ? style.versions.map((version, index) => { const asset = version.referenceAssetIds.map(mediaById).find(Boolean); const isActive = version.id === activeVersion?.id; return `<button class="character-version-row ${isActive ? 'active' : ''}" data-action="activate-style-version" data-version-id="${version.id}" type="button" ${style.lockedVersionId ? 'disabled' : ''}><span class="version-number">V${index + 1}</span><div class="version-thumb">${asset ? renderMediaVisual(asset) : icons.image}</div><div><strong>${escapeHtml(asset?.name || 'Missing reference asset')}</strong><span>${version.referenceAssetIds.length} reference${version.referenceAssetIds.length === 1 ? '' : 's'} · ${new Date(version.createdAt).toLocaleString()}</span></div><span>${version.id === style.lockedVersionId ? 'Locked' : isActive ? 'Active' : 'Select'}</span></button>`; }).join('') : '<div class="version-empty">Versions are append-only. Existing references are never overwritten.</div>'}</div>
       </section>
     </div>
   `;
@@ -556,14 +615,22 @@ const bindEvents = () => {
   app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
   app.querySelector('[data-action="create-character"]')?.addEventListener('click', createCharacter);
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
+  app.querySelector('[data-action="create-style"]')?.addEventListener('click', createStyle);
+  app.querySelectorAll('[data-style-id]').forEach((button) => button.addEventListener('click', () => openStyle(button.dataset.styleId)));
   app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
+  app.querySelectorAll('[data-action="close-style-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleModal(); }));
   app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
+  app.querySelector('[data-style-name-form]')?.addEventListener('submit', renameStyle);
   app.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
   app.querySelector('[data-action="retry-character-generation"]')?.addEventListener('click', retryCharacterComposer);
   app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
   app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
   app.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
   app.querySelectorAll('[data-action="activate-character-version"]').forEach((button) => button.addEventListener('click', () => activateCharacterVersion(button.dataset.versionId)));
+  app.querySelector('[data-action="record-style-version"]')?.addEventListener('click', recordStyleVersion);
+  app.querySelector('[data-action="lock-style"]')?.addEventListener('click', lockStyle);
+  app.querySelector('[data-action="unlock-style"]')?.addEventListener('click', unlockStyle);
+  app.querySelectorAll('[data-action="activate-style-version"]').forEach((button) => button.addEventListener('click', () => activateStyleVersion(button.dataset.versionId)));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragover', (event) => { event.preventDefault(); event.currentTarget.classList.add('dragging'); });
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragleave', (event) => event.currentTarget.classList.remove('dragging'));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('drop', (event) => { event.preventDefault(); event.currentTarget.classList.remove('dragging'); addFiles([...event.dataTransfer.files]); });
@@ -686,6 +753,64 @@ const openCharacter = (characterId) => {
 
 const closeCharacterModal = () => {
   state.isCharacterModalOpen = false;
+  renderApp();
+};
+
+const createStyle = () => {
+  state.selectedStyleId = styleLibrary.createDraft('Untitled style').affectedId;
+  state.isStyleModalOpen = true;
+  renderApp();
+};
+
+const openStyle = (styleId) => {
+  state.selectedStyleId = styleId;
+  state.isStyleModalOpen = true;
+  renderApp();
+};
+
+const closeStyleModal = () => {
+  state.isStyleModalOpen = false;
+  renderApp();
+};
+
+const renameStyle = (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    styleLibrary.rename(state.selectedStyleId, String(form.get('name') || ''));
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const recordStyleVersion = () => {
+  const assetIds = [...(app.querySelector('#styleVersionAssets')?.selectedOptions || [])].map((option) => option.value);
+  if (!assetIds.length) return;
+  styleLibrary.recordVersion(state.selectedStyleId, {
+    referenceAssetIds: assetIds,
+    prompt: '',
+    modelId: 'local/manual',
+    seed: null,
+    params: {},
+    parentAssetIds: assetIds,
+  });
+  renderApp();
+};
+
+const activateStyleVersion = (versionId) => {
+  styleLibrary.activateVersion(state.selectedStyleId, versionId);
+  renderApp();
+};
+
+const lockStyle = () => {
+  const style = styleById(state.selectedStyleId);
+  if (style?.activeVersionId) styleLibrary.lockVersion(style.id, style.activeVersionId);
+  renderApp();
+};
+
+const unlockStyle = () => {
+  styleLibrary.unlockVersion(state.selectedStyleId);
   renderApp();
 };
 

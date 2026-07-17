@@ -115,6 +115,20 @@ const characterEntry = (character) => ({
   },
 });
 
+const styleEntry = (style) => ({
+  id: `style:${style.id}`,
+  type: 'style',
+  styleId: style.id,
+  text: `${style.name}. ${(style.versions || []).flatMap((version) => version.prompt ? [version.prompt] : []).join('. ')}`.trim(),
+  description: style.name,
+  metadata: {
+    status: style.status,
+    lockedVersionId: style.lockedVersionId,
+    activeVersionId: style.activeVersionId,
+    referenceAssetIds: [...new Set((style.versions || []).flatMap((version) => version.referenceAssetIds || []))],
+  },
+});
+
 export const buildProjectContextIndex = (project, {now = () => new Date().toISOString()} = {}) => ({
   schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
   sourceRevision: project?.timeline?.revision || 0,
@@ -123,6 +137,7 @@ export const buildProjectContextIndex = (project, {now = () => new Date().toISOS
     ...(project?.scenes || []).map(sceneEntry),
     ...(project?.timeline?.clips || []).map((clip) => clipEntry(project, clip)),
     ...(project?.characters || []).map(characterEntry),
+    ...(project?.styles || []).map(styleEntry),
   ],
 });
 

@@ -44,6 +44,7 @@ export const normalizeTimelineGenerationInput = (input = {}) => {
     seed,
     params: input.params && typeof input.params === 'object' && !Array.isArray(input.params) ? clone(input.params) : {},
     characterVersionIds: stringIds(input.characterVersionIds),
+    styleVersionIds: stringIds(input.styleVersionIds),
     parentAssetIds: stringIds(input.parentAssetIds),
     sceneId: typeof input.sceneId === 'string' && input.sceneId.trim() ? input.sceneId.trim() : null,
     trackId: typeof input.trackId === 'string' && input.trackId.trim() ? input.trackId.trim() : null,
@@ -65,6 +66,11 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
   const characterVersionIds = inputSpecifiedCharacters ? input.characterVersionIds : sourceCharacterIds;
   if (acceptedSource && !sameIds(sourceCharacterIds, characterVersionIds)) {
     throw new Error('Generation cannot replace the source clip character versions.');
+  }
+  const sourceStyleIds = stringIds(acceptedSource?.provenance?.styleVersionIds);
+  const styleVersionIds = input.styleVersionIds.length || !sourceStyleIds.length ? input.styleVersionIds : sourceStyleIds;
+  if (acceptedSource && !sameIds(sourceStyleIds, styleVersionIds)) {
+    throw new Error('Generation cannot replace the source clip style versions.');
   }
 
   const modelId = requiredText(output.modelId || input.modelId, 'Generation model id');
@@ -99,6 +105,7 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
       changedFields: job?.changedFields && typeof job.changedFields === 'object' ? clone(job.changedFields) : {},
     },
     characterVersionIds,
+    styleVersionIds,
   };
   const asset = {
     id: assetId,

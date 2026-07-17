@@ -54,7 +54,7 @@ const normalizeProvenance = (value) => {
   const parentAssetIds = normalizeStringIds(provenance.parentAssetIds);
   const parentAssetId = asNullableString(provenance.parentAssetId) || parentAssetIds[0] || null;
   if (parentAssetId && !parentAssetIds.includes(parentAssetId)) parentAssetIds.unshift(parentAssetId);
-  return {
+  const normalized = {
     prompt: asNullableString(provenance.prompt),
     modelId: asNullableString(provenance.modelId),
     seed,
@@ -64,6 +64,9 @@ const normalizeProvenance = (value) => {
     derivedMetadata: isRecord(derivedMetadata) ? sanitizeJson(derivedMetadata) || {} : null,
     characterVersionIds: normalizeStringIds(provenance.characterVersionIds),
   };
+  const styleVersionIds = normalizeStringIds(provenance.styleVersionIds);
+  if (styleVersionIds.length || Array.isArray(provenance.styleVersionIds)) normalized.styleVersionIds = styleVersionIds;
+  return normalized;
 };
 
 const mergeProvenance = (current, proposed) => {
@@ -79,6 +82,9 @@ const mergeProvenance = (current, proposed) => {
     characterVersionIds: Array.isArray(proposed.characterVersionIds)
       ? proposed.characterVersionIds
       : before.characterVersionIds,
+    styleVersionIds: Array.isArray(proposed.styleVersionIds)
+      ? proposed.styleVersionIds
+      : before.styleVersionIds,
   });
 };
 
@@ -100,6 +106,7 @@ const createDefaultProject = ({now, createId}) => {
     },
     scenes: [{id: sceneId, name: 'Opening scene', duration: DEFAULT_TIMELINE_DURATION, metadata: {}}],
     characters: [],
+    styles: [],
     contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
     mediaAssets: [],
     timeline: {
@@ -165,6 +172,42 @@ const normalizeCharacter = (value, dependencies) => {
   return {
     id: asString(value.id, dependencies.createId('character')),
     name: asString(value.name, 'Untitled character'),
+    status: versions.length ? (requestedStatus === 'failed' ? 'failed' : 'ready') : (requestedStatus || 'draft'),
+    lockedVersionId,
+    activeVersionId,
+    versions,
+  };
+};
+
+const normalizeStyleVersion = (value, {now, createId}) => {
+  if (!isRecord(value)) return null;
+  const seed = typeof value.seed === 'string' || Number.isFinite(value.seed) ? value.seed : null;
+  return {
+    id: asString(value.id, createId('style-version')),
+    referenceAssetIds: normalizeStringIds(value.referenceAssetIds),
+    prompt: asString(value.prompt),
+    modelId: asString(value.modelId, 'local/manual'),
+    seed,
+    params: isRecord(value.params) ? sanitizeJson(value.params) || {} : {},
+    parentAssetIds: normalizeStringIds(value.parentAssetIds),
+    createdAt: asTimestamp(value.createdAt, now()),
+  };
+};
+
+const normalizeStyle = (value, dependencies) => {
+  if (!isRecord(value)) return null;
+  const versions = (Array.isArray(value.versions) ? value.versions : [])
+    .map((version) => normalizeStyleVersion(version, dependencies))
+    .filter(Boolean);
+  const versionIds = new Set(versions.map((version) => version.id));
+  const lockedVersionId = versionIds.has(value.lockedVersionId) ? value.lockedVersionId : null;
+  const requestedActiveVersionId = versionIds.has(value.activeVersionId) ? value.activeVersionId : null;
+  const activeVersionId = lockedVersionId || requestedActiveVersionId || versions.at(-1)?.id || null;
+  const requestedStatus = ['draft', 'ready', 'failed'].includes(value.status) ? value.status : null;
+
+  return {
+    id: asString(value.id, dependencies.createId('style')),
+    name: asString(value.name, 'Untitled style'),
     status: versions.length ? (requestedStatus === 'failed' ? 'failed' : 'ready') : (requestedStatus || 'draft'),
     lockedVersionId,
     activeVersionId,
@@ -431,6 +474,9 @@ const normalizeProject = (value, dependencies) => {
     characters: (Array.isArray(value.characters) ? value.characters : [])
       .map((character) => normalizeCharacter(character, dependencies))
       .filter(Boolean),
+    styles: (Array.isArray(value.styles) ? value.styles : [])
+      .map((style) => normalizeStyle(style, dependencies))
+      .filter(Boolean),
     contextIndex,
     mediaAssets,
     timeline: {revision, activeSceneId, duration, tracks, clips},
@@ -444,6 +490,7 @@ const toPersistedProject = (project) => ({
   project: sanitizeJson(project.project),
   scenes: sanitizeJson(project.scenes),
   characters: sanitizeJson(project.characters),
+  styles: sanitizeJson(project.styles),
   contextIndex: {
     schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
     sourceRevision: project.contextIndex?.sourceRevision || 0,
@@ -1023,6 +1070,73 @@ export const createProjectStore = ({
         character.lockedVersionId = null;
         character.activeVersionId = character.versions.at(-1)?.id || null;
         affectedId = character.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/create') {
+      const style = normalizeStyle({
+        id: createId('style'),
+        name: command.name,
+        status: 'draft',
+        versions: [],
+      }, dependencies);
+      project.styles.push(style);
+      affectedId = style.id;
+      changed = true;
+    } else if (command.type === 'style/rename') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      const name = asString(command.name);
+      if (style && name) {
+        style.name = name;
+        affectedId = style.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/status') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      if (style && ['draft', 'ready', 'failed'].includes(command.status)) {
+        style.status = command.status;
+        affectedId = style.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/version-record') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      if (style) {
+        const version = normalizeStyleVersion({
+          ...command.version,
+          id: command.version?.id || createId('style-version'),
+        }, dependencies);
+        if (!version.referenceAssetIds.length || version.referenceAssetIds.some((assetId) => !project.mediaAssets.some((asset) => asset.id === assetId))) {
+          throw new Error('A style version must reference at least one existing asset.');
+        }
+        if (style.versions.some((candidate) => candidate.id === version.id)) {
+          throw new Error(`Style version already exists: ${version.id}`);
+        }
+        style.versions.push(version);
+        style.status = 'ready';
+        if (!style.lockedVersionId) style.activeVersionId = version.id;
+        affectedId = version.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/version-activate') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      if (style && !style.lockedVersionId && style.versions.some((version) => version.id === command.versionId)) {
+        style.activeVersionId = command.versionId;
+        affectedId = style.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/lock') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      if (style && style.versions.some((version) => version.id === command.versionId)) {
+        style.lockedVersionId = command.versionId;
+        style.activeVersionId = command.versionId;
+        affectedId = style.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/unlock') {
+      const style = project.styles.find((candidate) => candidate.id === command.styleId);
+      if (style && style.lockedVersionId) {
+        style.lockedVersionId = null;
+        style.activeVersionId = style.versions.at(-1)?.id || null;
+        affectedId = style.id;
         changed = true;
       }
     } else {
