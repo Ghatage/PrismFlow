@@ -29,6 +29,8 @@ import {
 import {createClipRegenerationService} from './clip-regeneration.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
 import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
+import {createAgentWorkspace} from './agent-workspace.js';
+import {createProjectContextService} from './project-context.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -48,6 +50,7 @@ const state = {
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get styles() { return project.styles; },
+  get agentWorkspace() { return project.agentWorkspace; },
   get clips() { return project.timeline.clips; },
   get tracks() { return project.timeline.tracks; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
@@ -61,6 +64,7 @@ const state = {
   isPlaying: false,
   zoom: 1,
   activeTab: 'media',
+  agentPaneOpen: false,
   trackMenuOpen: false,
   selectedCharacterId: null,
   isCharacterModalOpen: false,
@@ -91,6 +95,14 @@ const characterLibrary = createCharacterLibrary({
   dispatch: updateProject,
 });
 const styleLibrary = createStyleLibrary({
+  getProject: () => project,
+  dispatch: updateProject,
+});
+const agentWorkspace = createAgentWorkspace({
+  getProject: () => project,
+  dispatch: updateProject,
+});
+const projectContext = createProjectContextService({
   getProject: () => project,
   dispatch: updateProject,
 });
@@ -224,21 +236,22 @@ const renderApp = () => {
         </div>
       </header>
 
-      <main class="workspace ${state.mediaPanelOpen ? '' : 'media-panel-hidden'}">
+      <main class="workspace ${state.mediaPanelOpen ? '' : 'media-panel-hidden'} ${state.agentPaneOpen ? 'agent-pane-open' : ''}">
         <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'}">
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'styles' ? 'active' : ''}" data-tab="styles" type="button">Styles <span class="tab-count">${state.styles.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'scenes' ? 'active' : ''}" data-tab="scenes" type="button">Scenes</button>
+            <button class="panel-tab ${state.activeTab === 'script' ? 'active' : ''}" data-tab="script" type="button">Script <span class="tab-count">${state.agentWorkspace.script.beats.length || ''}</span></button>
           </div>
-          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : state.activeTab === 'styles' ? renderStylesPanel() : renderScenesPanel()}
+          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : state.activeTab === 'styles' ? renderStylesPanel() : state.activeTab === 'script' ? renderScriptPanel() : renderScenesPanel()}
         </aside>
 
         <section class="stage">
           <div class="stage-toolbar">
             <div class="breadcrumb"><span class="eyebrow">STORYBOARD</span><span class="slash">/</span><span>${escapeHtml(project.project.name)}</span></div>
-            <div class="stage-tools"><button class="toolbar-button media-toggle" data-action="toggle-media-panel" aria-pressed="${state.mediaPanelOpen}" type="button">${icons.grid} ${state.mediaPanelOpen ? 'Hide media' : 'Show media'}</button><button class="toolbar-button" type="button">${icons.grid} Fit</button><button class="toolbar-button" type="button">100%</button><button class="toolbar-button" type="button">${icons.more}</button></div>
+            <div class="stage-tools"><button class="toolbar-button media-toggle" data-action="toggle-media-panel" aria-pressed="${state.mediaPanelOpen}" type="button">${icons.grid} ${state.mediaPanelOpen ? 'Hide media' : 'Show media'}</button><button class="toolbar-button" data-action="toggle-agent-pane" aria-pressed="${state.agentPaneOpen}" type="button">${icons.magic} ${state.agentPaneOpen ? 'Hide agent' : 'Agent'}</button><button class="toolbar-button" type="button">${icons.grid} Fit</button><button class="toolbar-button" type="button">100%</button><button class="toolbar-button" type="button">${icons.more}</button></div>
           </div>
           <div class="preview-wrap">
             <div class="preview-frame" id="previewFrame">
@@ -257,6 +270,7 @@ const renderApp = () => {
           ${renderContextPanel()}
           <div class="stage-footer"><div class="tip"><span class="tip-icon">${icons.magic}</span><span>FAL-ready workspace</span><span class="muted">Generation hooks are isolated until you are ready.</span></div><div class="keyboard-hint"><kbd>Space</kbd> play/pause <kbd>⌘K</kbd> command menu</div></div>
         </section>
+        ${renderAgentPane()}
       </main>
 
       <section class="timeline-panel">
@@ -422,6 +436,25 @@ const renderScenesPanel = () => `
   <div class="scene-empty"><div class="scene-line"></div><span>Scenes will group timeline beats as your story grows.</span></div>
 `;
 
+const renderScriptPanel = () => {
+  const script = state.agentWorkspace.script;
+  return `
+    <div class="panel-heading"><div><span class="eyebrow">SCRIPT VIEW</span><h2>Script</h2></div></div>
+    <form class="script-title-form" data-script-title-form><input name="title" value="${escapeHtml(script.title)}" aria-label="Script title" /><button class="button ghost" type="submit">Save</button></form>
+    <div class="script-beat-list">
+      ${script.beats.length ? script.beats.map((beat, index) => `<form class="script-beat" data-script-beat-form data-beat-id="${escapeHtml(beat.id)}"><div class="script-beat-head"><span>${String(index + 1).padStart(2, '0')}</span><select name="sceneId" aria-label="Scene for beat"><option value="">No scene link</option>${project.scenes.map((scene) => `<option value="${escapeHtml(scene.id)}" ${scene.id === beat.sceneId ? 'selected' : ''}>${escapeHtml(scene.name)}</option>`).join('')}</select></div><textarea name="text" rows="3" aria-label="Script beat">${escapeHtml(beat.text)}</textarea><div class="script-beat-foot"><input name="clipIds" value="${escapeHtml(beat.clipIds.join(', '))}" placeholder="Clip IDs (optional)" /><button class="button ghost" type="submit">Save beat</button></div></form>`).join('') : '<div class="panel-empty"><span>Add beats, then link them to scenes and clips.</span></div>'}
+    </div>
+    <form class="script-add-form" data-script-add-form><textarea name="text" rows="3" placeholder="Write the next beat…" required></textarea><button class="button primary" type="submit">Add script beat</button></form>
+  `;
+};
+
+const renderAgentPane = () => {
+  const workspace = state.agentWorkspace;
+  const entries = projectContext.getIndex().entries;
+  const entryById = new Map(entries.map((entry) => [entry.id, entry]));
+  return `<aside class="agent-pane ${state.agentPaneOpen ? '' : 'is-hidden'}" aria-label="Agent workspace"><div class="agent-pane-head"><div><span class="eyebrow">PROJECT AGENT</span><h2>Agent</h2></div><button class="small-icon-button" data-action="toggle-agent-pane" aria-label="Close agent" type="button">${icons.close}</button></div><div class="agent-messages">${workspace.messages.length ? workspace.messages.map((message) => `<article class="agent-message ${message.role}"><span>${escapeHtml(message.role)}</span><p>${escapeHtml(message.text)}</p>${message.resultIds.length ? `<div class="agent-results">${message.resultIds.map((id) => { const entry = entryById.get(id); return entry ? `<button type="button" class="agent-result" data-agent-result-id="${escapeHtml(id)}"><strong>${escapeHtml(entry.description || entry.text)}</strong><small>${escapeHtml(entry.type)}${entry.start !== undefined ? ` · ${formatTime(entry.start)}` : ''}</small></button>` : ''; }).join('')}</div>` : ''}</article>`).join('') : '<div class="agent-empty"><span>${icons.magic}</span><p>Ask about shots, characters, scenes, or provenance.</p><small>Search is grounded in this project’s accepted timeline and durable context index.</small></div>'}</div><form class="agent-form" data-agent-form><textarea name="query" rows="3" placeholder="Find the shot where the fox jumps…" required></textarea><button class="button primary" type="submit">Search project</button></form></aside>`;
+};
+
 const renderInspectorCharacters = (clip) => {
   const attached = timelineCharacterAttachments.attachedVersions(clip.id);
   const available = timelineCharacterAttachments.lockedVersions(clip.id);
@@ -550,6 +583,65 @@ const renderContextPanel = () => {
   return '';
 };
 
+const submitAgentQuery = (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const query = String(new FormData(form).get('query') || '').trim();
+  if (!query) return;
+  try {
+    const results = projectContext.search(query, {limit: 5});
+    agentWorkspace.addMessage({role: 'user', text: query});
+    agentWorkspace.addMessage({
+      role: 'assistant',
+      text: results.length ? `Found ${results.length} matching project ${results.length === 1 ? 'record' : 'records'}.` : 'No matching project records yet.',
+      resultIds: results.map((result) => result.id),
+    });
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const saveScriptTitle = (event) => {
+  event.preventDefault();
+  const title = String(new FormData(event.currentTarget).get('title') || '').trim();
+  if (!title) return;
+  agentWorkspace.updateScript({title});
+  renderApp();
+};
+
+const addScriptBeat = (event) => {
+  event.preventDefault();
+  const text = String(new FormData(event.currentTarget).get('text') || '').trim();
+  if (!text) return;
+  agentWorkspace.addBeat({text});
+  renderApp();
+};
+
+const saveScriptBeat = (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = new FormData(form);
+  agentWorkspace.updateBeat(form.dataset.beatId, {
+    text: String(data.get('text') || ''),
+    sceneId: String(data.get('sceneId') || '') || null,
+    clipIds: String(data.get('clipIds') || '').split(',').map((id) => id.trim()).filter(Boolean),
+  });
+  renderApp();
+};
+
+const selectAgentResult = (entryId) => {
+  const entry = projectContext.getIndex().entries.find((candidate) => candidate.id === entryId);
+  if (!entry) return;
+  if (entry.clipId) {
+    state.selectedClipId = entry.clipId;
+    state.selectedGhostKey = null;
+    state.previewDiffId = null;
+    state.currentTime = entry.start || 0;
+  }
+  renderApp();
+};
+
 const renderTimeline = () => {
   const duration = playbackDuration();
   const timelineWidth = Math.max(900, (duration + 3) * scale());
@@ -621,6 +713,12 @@ const bindEvents = () => {
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
   app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
+  app.querySelectorAll('[data-action="toggle-agent-pane"]').forEach((button) => button.addEventListener('click', () => { state.agentPaneOpen = !state.agentPaneOpen; renderApp(); }));
+  app.querySelector('[data-agent-form]')?.addEventListener('submit', submitAgentQuery);
+  app.querySelector('[data-script-title-form]')?.addEventListener('submit', saveScriptTitle);
+  app.querySelector('[data-script-add-form]')?.addEventListener('submit', addScriptBeat);
+  app.querySelectorAll('[data-script-beat-form]').forEach((form) => form.addEventListener('submit', saveScriptBeat));
+  app.querySelectorAll('[data-agent-result-id]').forEach((button) => button.addEventListener('click', () => selectAgentResult(button.dataset.agentResultId)));
   app.querySelector('[data-action="create-character"]')?.addEventListener('click', createCharacter);
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
   app.querySelector('[data-action="create-style"]')?.addEventListener('click', createStyle);

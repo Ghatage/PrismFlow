@@ -3,6 +3,7 @@ export const PROJECT_STORAGE_KEY = 'prismflow.project';
 export const TIMELINE_DIFF_SCHEMA_VERSION = 1;
 export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
 export const PROJECT_USAGE_SCHEMA_VERSION = 1;
+export const AGENT_WORKSPACE_SCHEMA_VERSION = 1;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -37,6 +38,43 @@ const normalizeUsage = (value, {now}) => {
     generationCount: Number.isInteger(usage.generationCount) ? Math.max(0, usage.generationCount) : entries.length,
     updatedAt: asTimestamp(usage.updatedAt, now()),
     entries,
+  };
+};
+
+const normalizeAgentWorkspace = (value, {now, createId}) => {
+  const workspace = isRecord(value) ? value : {};
+  const script = isRecord(workspace.script) ? workspace.script : {};
+  const beats = (Array.isArray(script.beats) ? script.beats : [])
+    .filter(isRecord)
+    .map((beat) => ({
+      id: asString(beat.id, createId('script-beat')),
+      text: asString(beat.text),
+      sceneId: asNullableString(beat.sceneId),
+      clipIds: normalizeStringIds(beat.clipIds),
+      notes: asString(beat.notes),
+      status: ['draft', 'locked', 'complete'].includes(beat.status) ? beat.status : 'draft',
+      createdAt: asTimestamp(beat.createdAt, now()),
+      updatedAt: asTimestamp(beat.updatedAt, now()),
+    }));
+  const messages = (Array.isArray(workspace.messages) ? workspace.messages : [])
+    .filter(isRecord)
+    .map((message) => ({
+      id: asString(message.id, createId('agent-message')),
+      role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'assistant',
+      text: asString(message.text),
+      resultIds: normalizeStringIds(message.resultIds),
+      createdAt: asTimestamp(message.createdAt, now()),
+    }))
+    .filter((message) => message.text);
+  return {
+    schemaVersion: AGENT_WORKSPACE_SCHEMA_VERSION,
+    updatedAt: asTimestamp(workspace.updatedAt, now()),
+    messages,
+    script: {
+      title: asString(script.title, 'Untitled story'),
+      metadata: isRecord(script.metadata) ? sanitizeJson(script.metadata) || {} : {},
+      beats,
+    },
   };
 };
 
@@ -132,6 +170,7 @@ const createDefaultProject = ({now, createId}) => {
     characters: [],
     styles: [],
     usage: {schemaVersion: PROJECT_USAGE_SCHEMA_VERSION, estimatedUsd: 0, credits: 0, generationCount: 0, updatedAt: timestamp, entries: []},
+    agentWorkspace: {schemaVersion: AGENT_WORKSPACE_SCHEMA_VERSION, updatedAt: timestamp, messages: [], script: {title: 'Untitled story', metadata: {}, beats: []}},
     contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
     mediaAssets: [],
     timeline: {
@@ -486,6 +525,7 @@ const normalizeProject = (value, dependencies) => {
       sourceRevision: revision,
     };
   const usage = normalizeUsage(value.usage || fallback.usage, dependencies);
+  const agentWorkspace = normalizeAgentWorkspace(value.agentWorkspace || fallback.agentWorkspace, dependencies);
 
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -504,6 +544,7 @@ const normalizeProject = (value, dependencies) => {
       .map((style) => normalizeStyle(style, dependencies))
       .filter(Boolean),
     usage,
+    agentWorkspace,
     contextIndex,
     mediaAssets,
     timeline: {revision, activeSceneId, duration, tracks, clips},
@@ -526,6 +567,7 @@ const toPersistedProject = (project) => ({
     updatedAt: project.usage?.updatedAt,
     entries: sanitizeJson(project.usage?.entries || []),
   },
+  agentWorkspace: sanitizeJson(project.agentWorkspace),
   contextIndex: {
     schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
     sourceRevision: project.contextIndex?.sourceRevision || 0,
@@ -1068,6 +1110,67 @@ export const createProjectStore = ({
         changed = true;
       } else {
         affectedId = id;
+      }
+    } else if (command.type === 'agent/message-add') {
+      const text = asString(command.message?.text ?? command.text);
+      if (!text) throw new Error('Agent messages require text.');
+      const role = ['user', 'assistant', 'system'].includes(command.message?.role ?? command.role)
+        ? (command.message?.role ?? command.role)
+        : 'user';
+      const message = {
+        id: asString(command.message?.id, createId('agent-message')),
+        role,
+        text,
+        resultIds: normalizeStringIds(command.message?.resultIds ?? command.resultIds),
+        createdAt: asTimestamp(command.message?.createdAt, now()),
+      };
+      project.agentWorkspace.messages.push(message);
+      project.agentWorkspace.updatedAt = now();
+      affectedId = message.id;
+      changed = true;
+    } else if (command.type === 'script/update') {
+      if (isRecord(command.patch)) {
+        project.agentWorkspace.script.title = asString(command.patch.title, project.agentWorkspace.script.title);
+        if (isRecord(command.patch.metadata)) {
+          project.agentWorkspace.script.metadata = sanitizeJson({...project.agentWorkspace.script.metadata, ...command.patch.metadata}) || {};
+        }
+        project.agentWorkspace.updatedAt = now();
+        affectedId = 'script';
+        changed = true;
+      }
+    } else if (command.type === 'script/beat-add') {
+      const text = asString(command.beat?.text ?? command.text);
+      if (!text) throw new Error('Script beats require text.');
+      const beat = normalizeAgentWorkspace({script: {beats: [{
+        ...command.beat,
+        id: command.beat?.id || createId('script-beat'),
+        text,
+        createdAt: now(),
+        updatedAt: now(),
+      }]}}, dependencies).script.beats[0];
+      project.agentWorkspace.script.beats.push(beat);
+      project.agentWorkspace.updatedAt = now();
+      affectedId = beat.id;
+      changed = true;
+    } else if (command.type === 'script/beat-update') {
+      const beat = project.agentWorkspace.script.beats.find((candidate) => candidate.id === command.beatId);
+      if (beat && isRecord(command.patch)) {
+        if (command.patch.text !== undefined) beat.text = asString(command.patch.text, beat.text);
+        if (command.patch.sceneId !== undefined) beat.sceneId = asNullableString(command.patch.sceneId);
+        if (command.patch.clipIds !== undefined) beat.clipIds = normalizeStringIds(command.patch.clipIds);
+        if (command.patch.notes !== undefined) beat.notes = asString(command.patch.notes);
+        if (['draft', 'locked', 'complete'].includes(command.patch.status)) beat.status = command.patch.status;
+        beat.updatedAt = now();
+        project.agentWorkspace.updatedAt = now();
+        affectedId = beat.id;
+        changed = true;
+      }
+    } else if (command.type === 'script/beat-remove') {
+      if (project.agentWorkspace.script.beats.some((beat) => beat.id === command.beatId)) {
+        project.agentWorkspace.script.beats = project.agentWorkspace.script.beats.filter((beat) => beat.id !== command.beatId);
+        project.agentWorkspace.updatedAt = now();
+        affectedId = command.beatId;
+        changed = true;
       }
     } else if (command.type === 'character/create') {
       const character = normalizeCharacter({
