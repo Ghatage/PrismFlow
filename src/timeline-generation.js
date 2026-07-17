@@ -1,3 +1,5 @@
+import {createGenerationUsageEntry, estimateGenerationCost, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
+
 const ACTIVE_JOB_STATES = new Set(['queued', 'running', 'retrying']);
 
 const clone = (value) => globalThis.structuredClone
@@ -36,6 +38,14 @@ const fakeAssetUrl = ({prompt, modelId, seed}) => {
 export const normalizeTimelineGenerationInput = (input = {}) => {
   const operation = input.operation === 'add' ? 'add' : 'replace';
   const seed = typeof input.seed === 'string' || Number.isFinite(input.seed) ? input.seed : null;
+  const qualityTier = normalizeQualityTier(input.qualityTier);
+  const unitPrice = Number.isFinite(input.unitPrice) && input.unitPrice >= 0 ? input.unitPrice : null;
+  const cost = estimateGenerationCost({
+    unitPrice,
+    unit: input.costUnit,
+    quantity: input.costQuantity,
+    qualityTier,
+  });
   return {
     operation,
     sourceClipId: typeof input.sourceClipId === 'string' && input.sourceClipId.trim() ? input.sourceClipId.trim() : null,
@@ -43,6 +53,9 @@ export const normalizeTimelineGenerationInput = (input = {}) => {
     modelId: requiredText(input.modelId, 'Generation model id'),
     seed,
     params: input.params && typeof input.params === 'object' && !Array.isArray(input.params) ? clone(input.params) : {},
+    qualityTier,
+    qualitySettings: qualitySettingsFor(qualityTier, input.qualitySettings),
+    ...(unitPrice !== null ? {unitPrice, costUnit: cost?.unit || 'generation', costQuantity: cost?.quantity || 1} : {}),
     characterVersionIds: stringIds(input.characterVersionIds),
     styleVersionIds: stringIds(input.styleVersionIds),
     parentAssetIds: stringIds(input.parentAssetIds),
@@ -81,6 +94,12 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
     ...(acceptedSource?.provenance?.parentAssetId ? [acceptedSource.provenance.parentAssetId] : []),
     ...input.parentAssetIds,
   ]);
+  const estimatedCost = output.cost || estimateGenerationCost({
+    unitPrice: input.unitPrice,
+    unit: input.costUnit,
+    quantity: input.costQuantity,
+    qualityTier: input.qualityTier,
+  });
   const safeJobId = safeIdPart(jobId);
   const assetId = typeof output.asset.id === 'string' && output.asset.id.trim()
     ? output.asset.id.trim()
@@ -106,6 +125,9 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
     },
     characterVersionIds,
     styleVersionIds,
+    qualityTier: input.qualityTier,
+    qualitySettings: input.qualitySettings,
+    ...(estimatedCost ? {estimatedUsd: estimatedCost.estimatedUsd} : {}),
   };
   const asset = {
     id: assetId,
@@ -172,7 +194,9 @@ export const landGenerationResult = ({store, diffs, job, output, sourceClip = nu
     project = store.getProject();
   }
   const created = diffs.createProposal(normalized.diff);
-  return {assetId: normalized.asset.id, diffId: created.affectedId, changed: true};
+  const usage = createGenerationUsageEntry({job, output});
+  const usageResult = usage ? store.dispatch({type: 'usage/record', entry: usage}) : null;
+  return {assetId: normalized.asset.id, diffId: created.affectedId, usageId: usageResult?.affectedId || null, changed: true};
 };
 
 export const createFakeTimelineGenerationAdapter = ({

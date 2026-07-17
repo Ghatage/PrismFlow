@@ -2,6 +2,7 @@ export const PROJECT_SCHEMA_VERSION = 1;
 export const PROJECT_STORAGE_KEY = 'prismflow.project';
 export const TIMELINE_DIFF_SCHEMA_VERSION = 1;
 export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
+export const PROJECT_USAGE_SCHEMA_VERSION = 1;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -22,6 +23,22 @@ const asTimestamp = (value, fallback) => typeof value === 'string' && Number.isF
 const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
   .map((entry) => asString(entry))
   .filter(Boolean))];
+
+const normalizeUsage = (value, {now}) => {
+  const usage = isRecord(value) ? value : {};
+  const entries = (Array.isArray(usage.entries) ? usage.entries : [])
+    .filter(isRecord)
+    .map((entry) => sanitizeJson(entry))
+    .filter(Boolean);
+  return {
+    schemaVersion: PROJECT_USAGE_SCHEMA_VERSION,
+    estimatedUsd: asNumber(usage.estimatedUsd),
+    credits: asNumber(usage.credits),
+    generationCount: Number.isInteger(usage.generationCount) ? Math.max(0, usage.generationCount) : entries.length,
+    updatedAt: asTimestamp(usage.updatedAt, now()),
+    entries,
+  };
+};
 
 const sanitizeJson = (value, depth = 0, seen = new WeakSet()) => {
   if (depth > 16 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
@@ -54,6 +71,7 @@ const normalizeProvenance = (value) => {
   const parentAssetIds = normalizeStringIds(provenance.parentAssetIds);
   const parentAssetId = asNullableString(provenance.parentAssetId) || parentAssetIds[0] || null;
   if (parentAssetId && !parentAssetIds.includes(parentAssetId)) parentAssetIds.unshift(parentAssetId);
+  const qualityTier = provenance.qualityTier === 'final' || provenance.qualityTier === 'draft' ? provenance.qualityTier : null;
   const normalized = {
     prompt: asNullableString(provenance.prompt),
     modelId: asNullableString(provenance.modelId),
@@ -66,6 +84,9 @@ const normalizeProvenance = (value) => {
   };
   const styleVersionIds = normalizeStringIds(provenance.styleVersionIds);
   if (styleVersionIds.length || Array.isArray(provenance.styleVersionIds)) normalized.styleVersionIds = styleVersionIds;
+  if (qualityTier) normalized.qualityTier = qualityTier;
+  if (isRecord(provenance.qualitySettings)) normalized.qualitySettings = sanitizeJson(provenance.qualitySettings) || {};
+  if (Number.isFinite(provenance.estimatedUsd)) normalized.estimatedUsd = Math.max(0, provenance.estimatedUsd);
   return normalized;
 };
 
@@ -85,6 +106,9 @@ const mergeProvenance = (current, proposed) => {
     styleVersionIds: Array.isArray(proposed.styleVersionIds)
       ? proposed.styleVersionIds
       : before.styleVersionIds,
+    qualityTier: proposed.qualityTier === undefined ? before.qualityTier : proposed.qualityTier,
+    qualitySettings: proposed.qualitySettings === undefined ? before.qualitySettings : proposed.qualitySettings,
+    estimatedUsd: proposed.estimatedUsd === undefined ? before.estimatedUsd : proposed.estimatedUsd,
   });
 };
 
@@ -107,6 +131,7 @@ const createDefaultProject = ({now, createId}) => {
     scenes: [{id: sceneId, name: 'Opening scene', duration: DEFAULT_TIMELINE_DURATION, metadata: {}}],
     characters: [],
     styles: [],
+    usage: {schemaVersion: PROJECT_USAGE_SCHEMA_VERSION, estimatedUsd: 0, credits: 0, generationCount: 0, updatedAt: timestamp, entries: []},
     contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
     mediaAssets: [],
     timeline: {
@@ -460,6 +485,7 @@ const normalizeProject = (value, dependencies) => {
       ...fallback.contextIndex,
       sourceRevision: revision,
     };
+  const usage = normalizeUsage(value.usage || fallback.usage, dependencies);
 
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -477,6 +503,7 @@ const normalizeProject = (value, dependencies) => {
     styles: (Array.isArray(value.styles) ? value.styles : [])
       .map((style) => normalizeStyle(style, dependencies))
       .filter(Boolean),
+    usage,
     contextIndex,
     mediaAssets,
     timeline: {revision, activeSceneId, duration, tracks, clips},
@@ -491,6 +518,14 @@ const toPersistedProject = (project) => ({
   scenes: sanitizeJson(project.scenes),
   characters: sanitizeJson(project.characters),
   styles: sanitizeJson(project.styles),
+  usage: {
+    schemaVersion: PROJECT_USAGE_SCHEMA_VERSION,
+    estimatedUsd: project.usage?.estimatedUsd || 0,
+    credits: project.usage?.credits || 0,
+    generationCount: project.usage?.generationCount || 0,
+    updatedAt: project.usage?.updatedAt,
+    entries: sanitizeJson(project.usage?.entries || []),
+  },
   contextIndex: {
     schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION,
     sourceRevision: project.contextIndex?.sourceRevision || 0,
@@ -1005,6 +1040,35 @@ export const createProjectStore = ({
       };
       affectedId = 'context-index';
       changed = true;
+    } else if (command.type === 'usage/record') {
+      const input = isRecord(command.entry) ? command.entry : {};
+      const modelId = asString(input.modelId);
+      if (!modelId || !Number.isFinite(input.estimatedUsd) || !Number.isFinite(input.credits)) {
+        throw new Error('Usage entries require a model id, estimated USD, and credits.');
+      }
+      const id = asString(input.id, createId('usage'));
+      if (!project.usage.entries.some((entry) => entry.id === id)) {
+        const entry = {
+          id,
+          generationJobId: asNullableString(input.generationJobId),
+          modelId,
+          qualityTier: input.qualityTier === 'final' ? 'final' : 'draft',
+          estimatedUsd: asNumber(input.estimatedUsd),
+          credits: asNumber(input.credits),
+          unit: asString(input.unit, 'generation'),
+          quantity: asNumber(input.quantity, 1),
+          createdAt: asTimestamp(input.createdAt, now()),
+        };
+        project.usage.entries.push(entry);
+        project.usage.estimatedUsd += entry.estimatedUsd;
+        project.usage.credits += entry.credits;
+        project.usage.generationCount += 1;
+        project.usage.updatedAt = now();
+        affectedId = id;
+        changed = true;
+      } else {
+        affectedId = id;
+      }
     } else if (command.type === 'character/create') {
       const character = normalizeCharacter({
         id: createId('character'),

@@ -23,6 +23,10 @@ const changedFieldsFor = (clip, input) => {
   if (input.modelId !== original.modelId) changedFields.modelId = {from: original.modelId, to: input.modelId};
   if (input.seed !== original.seed) changedFields.seed = {from: original.seed, to: input.seed};
   if (!equalJson(input.params, original.params)) changedFields.params = {from: clone(original.params || {}), to: clone(input.params)};
+  if (input.qualityTier !== (original.qualityTier || 'draft')) changedFields.qualityTier = {from: original.qualityTier || 'draft', to: input.qualityTier};
+  if (!equalJson(input.qualitySettings, original.qualitySettings || {})) {
+    changedFields.qualitySettings = {from: clone(original.qualitySettings || {}), to: clone(input.qualitySettings)};
+  }
   if (!equalIds(stringIds(input.styleVersionIds), stringIds(original.styleVersionIds))) {
     changedFields.styleVersionIds = {from: stringIds(original.styleVersionIds), to: stringIds(input.styleVersionIds)};
   }
@@ -70,6 +74,8 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
       modelId: overrides.modelId ?? clip.provenance.modelId,
       seed: overrides.seed === undefined ? clip.provenance.seed : overrides.seed,
       params: overrides.params ?? clip.provenance.params,
+      qualityTier: overrides.qualityTier ?? clip.provenance.qualityTier,
+      qualitySettings: overrides.qualitySettings ?? clip.provenance.qualitySettings,
       characterVersionIds,
       styleVersionIds,
       parentAssetIds: [clip.assetId, ...(clip.provenance.parentAssetIds || [])],

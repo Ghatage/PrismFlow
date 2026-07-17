@@ -54,6 +54,7 @@ export const createFalTimelineGenerationAdapter = ({fal}) => {
           modelId: input.modelId,
           seed: result?.seed ?? input.seed,
           params: input.params,
+          cost: result?.cost || result?.usage?.cost || null,
           source: {provider: 'fal', jobId, modelId: input.modelId},
         };
       } catch (error) {

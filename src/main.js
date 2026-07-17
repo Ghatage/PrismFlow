@@ -28,6 +28,7 @@ import {
 } from './timeline-generation.js';
 import {createClipRegenerationService} from './clip-regeneration.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
+import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -216,6 +217,7 @@ const renderApp = () => {
             <span class="fal-chip-label">FAL</span>
             <span id="falStatus">Checking…</span>
           </div>
+          <div class="usage-chip" title="Estimated generation usage"><span>${formatCredits(project.usage?.credits || 0)}</span><small>${formatUsd(project.usage?.estimatedUsd || 0)}</small></div>
           <button class="button ghost" type="button" data-action="export">Export</button>
           <button class="button primary" type="button" data-action="render"><span class="button-spark">${icons.magic}</span> Render draft</button>
           <button class="avatar" type="button" aria-label="Account">PF</button>
@@ -449,6 +451,8 @@ const renderRegenerationTools = (clip) => {
         <div><span>Parameters</span><strong>${escapeHtml(JSON.stringify(clip.provenance.params || {}))}</strong></div>
         <div><span>Parent assets</span><strong>${(clip.provenance.parentAssetIds || []).map(escapeHtml).join(', ') || 'None'}</strong></div>
         <div><span>Characters</span><strong>${(clip.provenance.characterVersionIds || []).map(escapeHtml).join(', ') || 'None'}</strong></div>
+        <div><span>Styles</span><strong>${(clip.provenance.styleVersionIds || []).map(escapeHtml).join(', ') || 'Auto-locked styles'}</strong></div>
+        <div><span>Quality</span><strong>${escapeHtml(clip.provenance.qualityTier || 'draft')}</strong></div>
       </div>
       <div class="regeneration-actions">
         <button class="button ghost" data-action="edit-clip-prompt" type="button">Edit prompt</button>
@@ -462,7 +466,11 @@ const renderRegenerationTools = (clip) => {
           <textarea id="regenerationPrompt" name="prompt" rows="4" required>${escapeHtml(clip.provenance.prompt)}</textarea>
           <label for="regenerationModel">Model ID</label>
           <input id="regenerationModel" name="modelId" value="${escapeHtml(clip.provenance.modelId)}" required />
-          <div class="regeneration-form-row"><div><label for="regenerationSeed">Seed</label><input id="regenerationSeed" name="seed" value="${escapeHtml(clip.provenance.seed ?? '')}" /></div><div><label for="regenerationParams">Parameters (JSON)</label><textarea id="regenerationParams" name="params" rows="2">${escapeHtml(JSON.stringify(clip.provenance.params || {}))}</textarea></div></div>
+          <div class="regeneration-form-row"><div><label for="regenerationSeed">Seed</label><input id="regenerationSeed" name="seed" value="${escapeHtml(clip.provenance.seed ?? '')}" /></div><div><label for="regenerationQuality">Quality tier</label><select id="regenerationQuality" name="qualityTier"><option value="draft" ${normalizeQualityTier(clip.provenance.qualityTier) === 'draft' ? 'selected' : ''}>Draft · 720p / 24fps</option><option value="final" ${normalizeQualityTier(clip.provenance.qualityTier) === 'final' ? 'selected' : ''}>Final · 1080p / 30fps</option></select></div></div>
+          <label for="regenerationParams">Parameters (JSON)</label>
+          <textarea id="regenerationParams" name="params" rows="2">${escapeHtml(JSON.stringify(clip.provenance.params || {}))}</textarea>
+          <label for="regenerationQualitySettings">Quality settings (JSON)</label>
+          <textarea id="regenerationQualitySettings" name="qualitySettings" rows="2">${escapeHtml(JSON.stringify(clip.provenance.qualitySettings || qualitySettingsFor(clip.provenance.qualityTier), null, 2))}</textarea>
           <div class="regeneration-form-actions"><button class="button ghost" data-action="cancel-regeneration" type="button">Cancel</button><button class="button primary" type="submit">Generate candidate</button></div>
         </form>
       ` : ''}
@@ -959,11 +967,20 @@ const parseRegenerationForm = () => {
     throw new Error('Parameters must be valid JSON.');
   }
   if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('Parameters must be a JSON object.');
+  let qualitySettings;
+  try {
+    qualitySettings = JSON.parse(String(data.get('qualitySettings') || '{}'));
+  } catch {
+    throw new Error('Quality settings must be valid JSON.');
+  }
+  if (!qualitySettings || typeof qualitySettings !== 'object' || Array.isArray(qualitySettings)) throw new Error('Quality settings must be a JSON object.');
   return {
     prompt: String(data.get('prompt') || ''),
     modelId: String(data.get('modelId') || ''),
     seed: seedText === '' ? null : Number.isFinite(numericSeed) ? numericSeed : seedText,
     params,
+    qualityTier: normalizeQualityTier(String(data.get('qualityTier') || 'draft')),
+    qualitySettings,
   };
 };
 

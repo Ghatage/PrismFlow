@@ -176,6 +176,9 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 .fal-chip-label { color: #e6e0ff; font-weight: 600; }
 .fal-status-chip #falStatus { color: var(--dim); }
 .fal-status-chip .connection-indicator { flex: 0 0 auto; }
+.usage-chip { align-items: baseline; border: 1px solid var(--line); border-radius: 7px; display: inline-flex; gap: 6px; padding: 7px 9px; }
+.usage-chip span { color: var(--teal); font-family: var(--mono); font-size: 8px; }
+.usage-chip small { color: var(--dim); font-family: var(--mono); font-size: 8px; }
 
 .button { align-items: center; border-radius: 8px; display: inline-flex; font-size: 12px; font-weight: 500; gap: 7px; height: 31px; padding: 0 13px; transition: background .16s, box-shadow .16s, border-color .16s; }
 .button.ghost {

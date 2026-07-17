@@ -56,9 +56,8 @@ export const buildGenerationRequest = ({clip, project}) => {
     provenance: {
       ...(clip.provenance || {}),
       characterVersionIds,
-      styleVersionIds,
       resolvedCharacterVersions,
-      resolvedStyleVersions,
+      ...(styleVersionIds.length ? {styleVersionIds, resolvedStyleVersions} : {}),
     },
   };
 };
