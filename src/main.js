@@ -1,11 +1,16 @@
+import {createProjectStore} from './project-store.js';
+
+const projectStore = createProjectStore();
+let project = projectStore.getProject();
+
 const state = {
-  media: [],
-  clips: [],
+  get media() { return project.mediaAssets; },
+  get clips() { return project.timeline.clips; },
+  get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
   currentTime: 0,
   isPlaying: false,
   zoom: 1,
-  timelineDuration: 12,
   activeTab: 'media',
   previewSourceId: null,
   previewClipId: null,
@@ -13,6 +18,12 @@ const state = {
   playbackStartedAt: 0,
   playbackOrigin: 0,
   dragPayload: null,
+};
+
+const updateProject = (command) => {
+  const result = projectStore.dispatch(command);
+  project = result.project;
+  return result;
 };
 
 const app = document.querySelector('#app');
@@ -68,7 +79,15 @@ const mediaKind = (file) => {
 const kindIcon = (kind) => icons[kind] || icons.film;
 const clipById = (id) => state.clips.find((clip) => clip.id === id);
 const mediaById = (id) => state.media.find((item) => item.id === id);
+const activeScene = () => project.scenes.find((scene) => scene.id === project.timeline.activeSceneId) || project.scenes[0];
 const scale = () => 88 * state.zoom;
+
+const renderMediaVisual = (item) => {
+  if (item.url && item.kind === 'image') return `<img src="${item.url}" alt="" />`;
+  if (item.url && item.kind === 'video') return `<video src="${item.url}" muted preload="metadata"></video>`;
+  if (item.kind === 'audio') return `<div class="audio-thumb">${icons.audio}</div>`;
+  return `<div class="offline-thumb">${kindIcon(item.kind)}<span>offline</span></div>`;
+};
 
 const renderApp = () => {
   app.innerHTML = `
@@ -78,7 +97,7 @@ const renderApp = () => {
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <span class="brand-name">PrismFlow</span>
           <span class="brand-divider"></span>
-          <button class="project-switcher" type="button">Untitled story ${icons.chevron}</button>
+          <button class="project-switcher" type="button">${escapeHtml(project.project.name)} ${icons.chevron}</button>
           <span class="save-state"><i></i> Local draft</span>
         </div>
         <div class="top-actions">
@@ -100,7 +119,7 @@ const renderApp = () => {
 
         <section class="stage">
           <div class="stage-toolbar">
-            <div class="breadcrumb"><span class="eyebrow">STORYBOARD</span><span class="slash">/</span><span>Untitled story</span></div>
+            <div class="breadcrumb"><span class="eyebrow">STORYBOARD</span><span class="slash">/</span><span>${escapeHtml(project.project.name)}</span></div>
             <div class="stage-tools"><button class="toolbar-button" type="button">${icons.grid} Fit</button><button class="toolbar-button" type="button">100%</button><button class="toolbar-button" type="button">${icons.more}</button></div>
           </div>
           <div class="preview-wrap">
@@ -146,24 +165,24 @@ const renderMediaPanel = () => `
 
 const renderMediaCard = (item) => `
   <div class="media-card" draggable="true" data-media-id="${item.id}">
-    <div class="media-thumb ${item.kind}">${item.kind === 'image' ? `<img src="${item.url}" alt="" />` : item.kind === 'video' ? `<video src="${item.url}" muted preload="metadata"></video>` : `<div class="audio-thumb">${icons.audio}</div>`}<span class="type-badge">${kindIcon(item.kind)}</span></div>
-    <div class="media-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span>${item.kind} · ${item.kind === 'image' ? 'still' : formatTime(item.duration)}</span></div>
+    <div class="media-thumb ${item.kind}">${renderMediaVisual(item)}<span class="type-badge">${kindIcon(item.kind)}</span></div>
+    <div class="media-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span>${item.url ? `${item.kind} · ${item.kind === 'image' ? 'still' : formatTime(item.duration)}` : `${item.kind} · re-import to preview`}</span></div>
     <button class="card-more" data-action="remove-media" data-media-id="${item.id}" type="button">${icons.more}</button>
   </div>
 `;
 
 const renderScenesPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">PROJECT MAP</span><h2>Scenes</h2></div><button class="small-icon-button" type="button">${icons.plus}</button></div>
-  <div class="scene-list"><div class="scene-item active"><span class="scene-number">01</span><div><strong>Opening scene</strong><span>Untitled · ${formatTime(state.timelineDuration)}</span></div><span class="scene-status"></span></div></div>
+  <div class="scene-list">${project.scenes.map((scene, index) => `<div class="scene-item ${scene.id === project.timeline.activeSceneId ? 'active' : ''}"><span class="scene-number">${String(index + 1).padStart(2, '0')}</span><div><strong>${escapeHtml(scene.name)}</strong><span>${escapeHtml(project.project.name)} · ${formatTime(scene.duration)}</span></div><span class="scene-status"></span></div>`).join('')}</div>
   <div class="scene-empty"><div class="scene-line"></div><span>Scenes will group timeline beats as your story grows.</span></div>
 `;
 
 const renderInspector = () => {
   const selected = clipById(state.selectedClipId);
-  const media = selected ? mediaById(selected.mediaId) : null;
+  const media = selected ? mediaById(selected.assetId) : null;
   return `
     <div class="inspector-head"><div><span class="eyebrow">INSPECTOR</span><h2>${selected ? 'Clip properties' : 'Workspace'}</h2></div><button class="small-icon-button" type="button">${icons.more}</button></div>
-    ${selected && media ? `<div class="selected-preview ${media.kind}">${media.kind === 'image' ? `<img src="${media.url}" alt="" />` : media.kind === 'video' ? `<video src="${media.url}" muted preload="metadata"></video>` : `<div class="audio-orb">${icons.audio}</div>`}<span class="selected-type">${media.kind.toUpperCase()}</span></div><div class="inspector-title"><strong>${escapeHtml(media.name)}</strong><span>${selected.trackId === 'V1' ? 'Video track' : 'Audio track'} · ${formatTime(selected.duration)}</span></div><div class="property-group"><label>Timing</label><div class="property-grid"><div><span>Start</span><strong>${formatTime(selected.start)}</strong></div><div><span>Duration</span><strong>${formatTime(selected.duration)}</strong></div></div></div><div class="property-group"><label>Source</label><div class="source-line"><span class="source-icon">${kindIcon(media.kind)}</span><span>${escapeHtml(media.name)}</span></div></div><button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>` : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip to inspect timing, provenance, and future generation settings.</span></div>`}
+    ${selected && media ? `<div class="selected-preview ${media.kind}">${media.url ? media.kind === 'audio' ? `<div class="audio-orb">${icons.audio}</div>` : renderMediaVisual(media) : `<div class="offline-thumb">${kindIcon(media.kind)}<span>re-import source</span></div>`}<span class="selected-type">${media.kind.toUpperCase()}</span></div><div class="inspector-title"><strong>${escapeHtml(media.name)}</strong><span>${selected.trackId === 'V1' ? 'Video track' : 'Audio track'} · ${formatTime(selected.duration)}</span></div><div class="property-group"><label>Timing</label><div class="property-grid"><div><span>Start</span><strong>${formatTime(selected.start)}</strong></div><div><span>Duration</span><strong>${formatTime(selected.duration)}</strong></div></div></div><div class="property-group"><label>Source</label><div class="source-line"><span class="source-icon">${kindIcon(media.kind)}</span><span>${escapeHtml(media.name)}</span></div></div><button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>` : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip to inspect timing, provenance, and future generation settings.</span></div>`}
     <div class="fal-card"><div class="fal-card-top"><div class="fal-logo">f/</div><div><strong>FAL connection</strong><span>Generation adapter</span></div><span class="connection-indicator" id="falIndicator"></span></div><div class="fal-status" id="falStatus">Checking local adapter…</div><button class="fal-button" type="button" disabled>${icons.magic} Add a generation later</button></div>
   `;
 };
@@ -174,7 +193,7 @@ const renderTimeline = () => {
   const videoClips = state.clips.filter((clip) => clip.trackId === 'V1');
   const audioClips = state.clips.filter((clip) => clip.trackId === 'A1');
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><h2>Timeline</h2><span class="sequence-chip">Scene 01</span></div><div class="timeline-actions"><button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span></div><div class="timeline-actions"><button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button">+</button></div></div>
     <div class="timeline-body">
       <div class="track-labels"><div class="ruler-spacer"></div><div class="track-label video-label"><span class="track-color video"></span><div><strong>Video</strong><span>V1</span></div></div><div class="track-label audio-label"><span class="track-color audio"></span><div><strong>Audio</strong><span>A1</span></div></div></div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="width:${timelineWidth}px">
@@ -188,10 +207,10 @@ const renderTimeline = () => {
 };
 
 const renderClip = (clip) => {
-  const media = mediaById(clip.mediaId);
+  const media = mediaById(clip.assetId);
   if (!media) return '';
   const width = Math.max(clip.duration * scale(), 66);
-  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px"><div class="clip-thumb">${media.kind === 'image' ? `<img src="${media.url}" alt="" />` : media.kind === 'video' ? `<video src="${media.url}" muted preload="metadata"></video>` : `<span>${icons.audio}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(clip.duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div></div>`;
+  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px"><div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(clip.duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div></div>`;
 };
 
 const bindEvents = () => {
@@ -267,17 +286,18 @@ const placeOnTimeline = ({mediaId, clipId, clientX, trackId}) => {
   if (mediaId) {
     const media = mediaById(mediaId);
     if (!media) return;
-    const clip = {id: `clip-${crypto.randomUUID()}`, mediaId, trackId: media.kind === 'audio' ? 'A1' : trackId === 'A1' ? 'V1' : trackId, start, duration: media.kind === 'image' ? 5 : Math.max(0.1, media.duration || 5)};
-    state.clips.push(clip);
-    state.selectedClipId = clip.id;
-    state.timelineDuration = Math.max(state.timelineDuration, clip.start + clip.duration + 2);
+    const result = updateProject({
+      type: 'clip/add',
+      assetId: mediaId,
+      trackId,
+      start,
+    });
+    state.selectedClipId = result.affectedId;
   } else if (clipId) {
     const clip = clipById(clipId);
     if (!clip) return;
-    clip.start = start;
-    clip.trackId = trackId;
-    state.selectedClipId = clip.id;
-    state.timelineDuration = Math.max(state.timelineDuration, clip.start + clip.duration + 2);
+    const result = updateProject({type: 'clip/move', clipId, trackId, start});
+    state.selectedClipId = result.affectedId;
   }
   renderApp();
 };
@@ -299,15 +319,27 @@ const seekFromTimeline = (event) => seekTo(timeFromPointer(event));
 const addFiles = (files) => {
   files.filter((file) => file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')).forEach((file) => {
     const kind = mediaKind(file);
-    const item = {id: `media-${crypto.randomUUID()}`, name: file.name, kind, type: file.type, size: file.size, url: URL.createObjectURL(file), duration: kind === 'image' ? 5 : 0};
-    state.media.push(item);
+    const result = updateProject({
+      type: 'asset/import',
+      asset: {
+        name: file.name,
+        kind,
+        mimeType: file.type,
+        size: file.size,
+        duration: kind === 'image' ? 5 : 0,
+        url: URL.createObjectURL(file),
+        source: {type: 'local-file', fileName: file.name, lastModified: file.lastModified},
+        metadata: {},
+      },
+    });
+    const item = mediaById(result.affectedId);
     if (kind === 'image') renderApp();
     else {
       const probe = document.createElement(kind === 'audio' ? 'audio' : 'video');
       probe.preload = 'metadata';
       probe.src = item.url;
-      probe.onloadedmetadata = () => { item.duration = Number.isFinite(probe.duration) ? probe.duration : 5; renderApp(); };
-      probe.onerror = () => { item.duration = 5; renderApp(); };
+      probe.onloadedmetadata = () => { updateProject({type: 'asset/update', assetId: item.id, patch: {duration: Number.isFinite(probe.duration) ? probe.duration : 5}}); renderApp(); };
+      probe.onerror = () => { updateProject({type: 'asset/update', assetId: item.id, patch: {duration: 5}}); renderApp(); };
     }
   });
   if (files.length) showToast(`${files.length} media ${files.length === 1 ? 'file' : 'files'} imported.`);
@@ -319,17 +351,16 @@ const addSampleMedia = () => {
 };
 
 const removeMedia = (mediaId) => {
-  const clips = state.clips.filter((clip) => clip.mediaId === mediaId);
+  const clips = state.clips.filter((clip) => clip.assetId === mediaId);
   clips.forEach((clip) => { if (clip.id === state.selectedClipId) state.selectedClipId = null; });
-  state.clips = state.clips.filter((clip) => clip.mediaId !== mediaId);
   const item = mediaById(mediaId);
-  if (item) URL.revokeObjectURL(item.url);
-  state.media = state.media.filter((media) => media.id !== mediaId);
+  if (item?.url) URL.revokeObjectURL(item.url);
+  updateProject({type: 'asset/remove', assetId: mediaId});
   renderApp();
 };
 
 const deleteSelectedClip = () => {
-  state.clips = state.clips.filter((clip) => clip.id !== state.selectedClipId);
+  updateProject({type: 'clip/remove', clipId: state.selectedClipId});
   state.selectedClipId = null;
   renderApp();
 };
@@ -343,13 +374,20 @@ const syncPreview = (forceSeek = false) => {
   const empty = app.querySelector('#emptyPreview');
   if (!video || !image || !audio || !empty) return;
   const clip = activeClipAt(state.currentTime);
-  const media = clip ? mediaById(clip.mediaId) : null;
+  const media = clip ? mediaById(clip.assetId) : null;
+  const hasSource = Boolean(media?.url);
   const shouldShow = (element, show) => element.classList.toggle('visible', Boolean(show));
-  shouldShow(empty, !media);
-  shouldShow(video, media?.kind === 'video');
-  shouldShow(image, media?.kind === 'image');
-  shouldShow(audio, media?.kind === 'audio');
-  if (!media || !clip) {
+  shouldShow(empty, !hasSource);
+  shouldShow(video, hasSource && media?.kind === 'video');
+  shouldShow(image, hasSource && media?.kind === 'image');
+  shouldShow(audio, hasSource && media?.kind === 'audio');
+  const emptyTitle = empty.querySelector('strong');
+  const emptyCopy = empty.querySelector('span');
+  if (media && !hasSource) {
+    if (emptyTitle) emptyTitle.textContent = 'Source needs re-import';
+    if (emptyCopy) emptyCopy.textContent = `${media.name} metadata and timeline placement are still saved.`;
+  }
+  if (!media || !clip || !hasSource) {
     video.pause();
     audio.querySelector('audio')?.pause();
     state.previewSourceId = null;
@@ -385,7 +423,7 @@ const updatePlaybackFrame = () => {
   const current = app.querySelector('#playerCurrent');
   if (current) current.textContent = formatTime(state.currentTime);
   const clip = activeClipAt(state.currentTime);
-  if (clip && (clip.id !== state.previewClipId || mediaById(clip.mediaId)?.id !== state.previewSourceId)) syncPreview(true);
+  if (clip && (clip.id !== state.previewClipId || mediaById(clip.assetId)?.id !== state.previewSourceId)) syncPreview(true);
   if (state.currentTime >= state.timelineDuration) {
     state.isPlaying = false;
     state.currentTime = 0;
