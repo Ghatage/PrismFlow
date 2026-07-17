@@ -141,6 +141,14 @@ export const buildProjectContextIndex = (project, {now = () => new Date().toISOS
   ],
 });
 
+const sourceFingerprint = (project) => JSON.stringify({
+  revision: project?.timeline?.revision || 0,
+  scenes: (project?.scenes || []).map((scene) => ({id: scene.id, name: scene.name, duration: scene.duration, metadata: scene.metadata})),
+  clips: (project?.timeline?.clips || []).map((clip) => ({id: clip.id, assetId: clip.assetId, sceneId: clip.sceneId, trackId: clip.trackId, start: clip.start, duration: clip.duration, provenance: clip.provenance})),
+  characters: (project?.characters || []).map((character) => ({id: character.id, name: character.name, lockedVersionId: character.lockedVersionId, activeVersionId: character.activeVersionId, versions: character.versions})),
+  styles: (project?.styles || []).map((style) => ({id: style.id, name: style.name, lockedVersionId: style.lockedVersionId, activeVersionId: style.activeVersionId, versions: style.versions})),
+});
+
 const scoreEntry = (queryTokens, entry) => {
   const textTokens = tokenSet(entry.text);
   if (!queryTokens.length || !textTokens.size) return 0;
@@ -164,10 +172,13 @@ export const searchProjectContext = (index, query, {limit = DEFAULT_LIMIT, type 
 export const createProjectContextService = ({getProject, dispatch, now = () => new Date().toISOString()} = {}) => {
   if (typeof getProject !== 'function') throw new TypeError('Project context requires a project reader.');
   let index = null;
+  let indexedSourceFingerprint = null;
 
   const rebuild = () => {
-    const next = buildProjectContextIndex(getProject(), {now});
+    const project = getProject();
+    const next = buildProjectContextIndex(project, {now});
     index = clone(next);
+    indexedSourceFingerprint = sourceFingerprint(project);
     if (typeof dispatch === 'function') dispatch({type: 'context/index', index: next});
     return clone(next);
   };
@@ -175,7 +186,7 @@ export const createProjectContextService = ({getProject, dispatch, now = () => n
   const current = () => {
     const project = getProject();
     const persisted = project.contextIndex;
-    if (!index || !persisted || persisted.sourceRevision !== project.timeline.revision) return rebuild();
+    if (!index || !persisted || persisted.sourceRevision !== project.timeline.revision || indexedSourceFingerprint !== sourceFingerprint(project)) return rebuild();
     return clone(index);
   };
 

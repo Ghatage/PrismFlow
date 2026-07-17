@@ -84,3 +84,24 @@ test('context index survives project reload', () => {
   const reloaded = createProjectStore({storage, now: () => '2026-07-17T10:02:00.000Z'});
   assert.ok(reloaded.getProject().contextIndex.entries.some((entry) => entry.type === 'clip'));
 });
+
+test('refreshes in-memory context when metadata changes without a timeline revision', () => {
+  const {store} = createFixture();
+  let currentProject = store.getProject();
+  const context = createProjectContextService({
+    getProject: () => currentProject,
+    dispatch: (command) => {
+      const result = store.dispatch(command);
+      currentProject = result.project;
+      return result;
+    },
+    now: () => '2026-07-17T10:01:00.000Z',
+  });
+  context.rebuild();
+  const sceneId = currentProject.scenes[0].id;
+  const revision = currentProject.timeline.revision;
+  store.dispatch({type: 'scene/update', sceneId, patch: {name: 'Rainy forest'}});
+  currentProject = store.getProject();
+  assert.equal(currentProject.timeline.revision, revision);
+  assert.equal(context.search('Rainy forest', {type: 'scene'})[0].sceneId, sceneId);
+});
