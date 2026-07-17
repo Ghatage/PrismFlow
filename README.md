@@ -58,6 +58,24 @@ It returns model metadata, pricing, the derived API documentation URL, and ranki
 
 The editor now persists character versions and generation provenance while keeping final rendering as a separate future layer.
 
+## Local video frame annotations and semantic search
+
+Video imports are sampled from the first frame and then every five seconds. The JPEG snapshots and their annotation manifests live in the persistent IndexedDB `videoFrames` and `videoFrameManifests` stores, tagged with the source video asset ID and source time. Incomplete indexing resumes after a refresh.
+
+The server annotates each snapshot with the local Transformers.js `Xenova/moondream2` model, downloaded once with:
+
+```bash
+npm run video:model
+```
+
+The default model can be changed with `PRISMFLOW_VIDEO_VLM_MODEL`. Annotated frame records are embedded with the existing TinyLM embedder and stored in a TinkerBird HNSW index at the ignored `video-search-index.json` file. Search is available at:
+
+```text
+GET /api/search/video?q=fox%20near%20water&limit=10
+```
+
+The editor’s top search bar and Agent pane query this endpoint alongside project context. Clicking a frame hit selects the source asset, seeks to the matching timeline position when that asset is on the timeline, and highlights the matching media card and clip.
+
 ## Ghost timeline review contract
 
 - Accepted clips remain the playback source until `Preview proposal` is explicitly entered; `Exit preview` or Escape returns to accepted playback.

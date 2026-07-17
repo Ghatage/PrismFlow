@@ -7,12 +7,14 @@
     "dev": "node --env-file=.env server.mjs",
     "start": "node --env-file=.env server.mjs",
     "search:index": "node --env-file=.env scripts/index-model-search.mjs",
+    "video:model": "node --env-file=.env scripts/download-video-vlm.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "tinylm": "^0.0.6",
     "tinkerbird": "^0.0.7"
   },

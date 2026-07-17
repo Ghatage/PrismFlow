@@ -31,3 +31,4 @@ coverage/
 
 # Generated local semantic-search index
 model-search-index.json
+video-search-index.json

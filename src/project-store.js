@@ -63,6 +63,7 @@ const normalizeAgentWorkspace = (value, {now, createId}) => {
       role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'assistant',
       text: asString(message.text),
       resultIds: normalizeStringIds(message.resultIds),
+      frameIds: normalizeStringIds(message.frameIds),
       createdAt: asTimestamp(message.createdAt, now()),
     }))
     .filter((message) => message.text);
@@ -1122,6 +1123,7 @@ export const createProjectStore = ({
         role,
         text,
         resultIds: normalizeStringIds(command.message?.resultIds ?? command.resultIds),
+        frameIds: normalizeStringIds(command.message?.frameIds ?? command.frameIds),
         createdAt: asTimestamp(command.message?.createdAt, now()),
       };
       project.agentWorkspace.messages.push(message);

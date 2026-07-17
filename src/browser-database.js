@@ -1,8 +1,10 @@
 export const PROJECT_DATABASE_NAME = 'prismflow.project';
-export const PROJECT_DATABASE_VERSION = 2;
+export const PROJECT_DATABASE_VERSION = 3;
 export const PROJECT_STORE_NAME = 'projects';
 export const ASSET_STORE_NAME = 'assets';
 export const MODEL_PRICING_STORE_NAME = 'modelPricing';
+export const VIDEO_FRAME_STORE_NAME = 'videoFrames';
+export const VIDEO_FRAME_MANIFEST_STORE_NAME = 'videoFrameManifests';
 
 const CURRENT_PROJECT_ID = 'current';
 
@@ -30,6 +32,16 @@ export const createBrowserDatabase = ({
           }
           if (!database.objectStoreNames.contains(MODEL_PRICING_STORE_NAME)) {
             database.createObjectStore(MODEL_PRICING_STORE_NAME, {keyPath: 'id'});
+          }
+          if (!database.objectStoreNames.contains(VIDEO_FRAME_STORE_NAME)) {
+            const store = database.createObjectStore(VIDEO_FRAME_STORE_NAME, {keyPath: 'id'});
+            store.createIndex('videoAssetId', 'videoAssetId', {unique: false});
+          } else {
+            const store = request.transaction.objectStore(VIDEO_FRAME_STORE_NAME);
+            if (!store.indexNames.contains('videoAssetId')) store.createIndex('videoAssetId', 'videoAssetId', {unique: false});
+          }
+          if (!database.objectStoreNames.contains(VIDEO_FRAME_MANIFEST_STORE_NAME)) {
+            database.createObjectStore(VIDEO_FRAME_MANIFEST_STORE_NAME, {keyPath: 'id'});
           }
         };
         request.onsuccess = () => resolve(request.result);
@@ -91,6 +103,46 @@ export const createBrowserDatabase = ({
     async removeAsset(assetId) {
       if (!assetId) return;
       await run(ASSET_STORE_NAME, 'readwrite', (store) => store.delete(assetId));
+    },
+
+    async putVideoFrame(frame) {
+      if (!frame?.id || !frame.videoAssetId) return;
+      await run(VIDEO_FRAME_STORE_NAME, 'readwrite', (store) => store.put(frame));
+    },
+
+    async getVideoFrames(videoAssetId) {
+      if (!videoAssetId) return [];
+      const frames = await run(VIDEO_FRAME_STORE_NAME, 'readonly', (store) => {
+        if (store.indexNames?.contains?.('videoAssetId')) return store.index('videoAssetId').getAll(videoAssetId);
+        return store.getAll();
+      });
+      return (Array.isArray(frames) ? frames : []).filter((frame) => frame.videoAssetId === videoAssetId);
+    },
+
+    async removeVideoFrames(videoAssetId) {
+      if (!videoAssetId) return;
+      const frames = await this.getVideoFrames(videoAssetId);
+      if (frames.length) {
+        await run(VIDEO_FRAME_STORE_NAME, 'readwrite', (store) => {
+          frames.forEach((frame) => store.delete(frame.id));
+        });
+      }
+      await run(VIDEO_FRAME_MANIFEST_STORE_NAME, 'readwrite', (store) => store.delete(videoAssetId));
+    },
+
+    async putVideoFrameManifest(manifest) {
+      if (!manifest?.id) return;
+      await run(VIDEO_FRAME_MANIFEST_STORE_NAME, 'readwrite', (store) => store.put(manifest));
+    },
+
+    async getVideoFrameManifest(videoAssetId) {
+      if (!videoAssetId) return null;
+      return run(VIDEO_FRAME_MANIFEST_STORE_NAME, 'readonly', (store) => store.get(videoAssetId));
+    },
+
+    async listVideoFrameManifests() {
+      const manifests = await run(VIDEO_FRAME_MANIFEST_STORE_NAME, 'readonly', (store) => store.getAll());
+      return Array.isArray(manifests) ? manifests : [];
     },
 
     async replaceModelPricing(records) {

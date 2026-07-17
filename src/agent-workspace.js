@@ -13,9 +13,9 @@ export const createAgentWorkspace = ({getProject, dispatch}) => {
   }
 
   const load = () => clone(getProject().agentWorkspace || {messages: [], script: {title: '', beats: []}});
-  const addMessage = ({role = 'user', text, resultIds = []} = {}) => dispatch({
+  const addMessage = ({role = 'user', text, resultIds = [], frameIds = []} = {}) => dispatch({
     type: 'agent/message-add',
-    message: {role, text: requiredText(text, 'Agent message'), resultIds},
+    message: {role, text: requiredText(text, 'Agent message'), resultIds, frameIds},
   });
   const updateScript = (patch) => dispatch({type: 'script/update', patch: clone(patch || {})});
   const addBeat = ({text, sceneId = null, clipIds = [], notes = '', status = 'draft'} = {}) => dispatch({

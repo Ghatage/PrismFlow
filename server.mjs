@@ -8,6 +8,8 @@ import {createFalCharacterSheetAdapter} from './server/character-sheet-adapter.m
 import {createFalTimelineGenerationAdapter} from './server/timeline-generation-adapter.mjs';
 import {createFalModelPricingAdapter, writeModelPricingCsv} from './server/model-pricing.mjs';
 import {createModelSearchAdapter} from './server/model-search.mjs';
+import {createLocalVideoVlmAdapter} from './server/video-vlm.mjs';
+import {createVideoSearchAdapter} from './server/video-search.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -18,6 +20,10 @@ const modelPricing = createFalModelPricingAdapter();
 const modelSearch = createModelSearchAdapter({
   catalogPath: join(rootDir, 'fal-model-pricing.json'),
   indexPath: join(rootDir, 'model-search-index.json'),
+});
+const videoVlm = createLocalVideoVlmAdapter({modelId: process.env.PRISMFLOW_VIDEO_VLM_MODEL || undefined});
+const videoSearch = createVideoSearchAdapter({
+  indexPath: join(rootDir, 'video-search-index.json'),
 });
 
 const contentTypes = {
@@ -37,12 +43,12 @@ const sendJson = (response, status, payload) => {
   response.end(JSON.stringify(payload));
 };
 
-const readJson = async (request) => {
+const readJson = async (request, maxBytes = 1_000_000) => {
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1_000_000) {
+    if (size > maxBytes) {
       throw new Error('Request body is too large.');
     }
     chunks.push(chunk);
@@ -128,6 +134,55 @@ const server = createServer(async (request, response) => {
   if (url.pathname === '/api/search/models/status' && request.method === 'GET') {
     try {
       sendJson(response, 200, await modelSearch.status());
+    } catch (error) {
+      sendJson(response, 500, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/video/vlm/status' && request.method === 'GET') {
+    sendJson(response, 200, videoVlm.status());
+    return;
+  }
+
+  if (url.pathname === '/api/video/annotate' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 8_000_000);
+      const result = await videoVlm.annotateFrame(body);
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/video/index' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 2_000_000);
+      const result = await videoSearch.upsert(body.records);
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/search/video' && request.method === 'GET') {
+    try {
+      const result = await videoSearch.search(url.searchParams.get('q') || '', {
+        limit: url.searchParams.get('limit'),
+        projectId: url.searchParams.get('projectId') || null,
+      });
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, error.statusCode || 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/search/video/status' && request.method === 'GET') {
+    try {
+      sendJson(response, 200, await videoSearch.status());
     } catch (error) {
       sendJson(response, 500, {error: error instanceof Error ? error.message : String(error)});
     }
