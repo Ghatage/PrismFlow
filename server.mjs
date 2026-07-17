@@ -1,0 +1,96 @@
+import {createReadStream} from 'node:fs';
+import {stat, readFile} from 'node:fs/promises';
+import {createServer} from 'node:http';
+import {extname, join, normalize, relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createFalAdapter} from './server/fal-adapter.mjs';
+
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
+const port = Number(process.env.PORT || 4173);
+const fal = createFalAdapter();
+
+const contentTypes = {
+  '.css': 'text/css; charset=utf-8',
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+};
+
+const sendJson = (response, status, payload) => {
+  response.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  response.end(JSON.stringify(payload));
+};
+
+const readJson = async (request) => {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > 1_000_000) {
+      throw new Error('Request body is too large.');
+    }
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+};
+
+const serveStatic = async (requestPath, response) => {
+  const requestedPath = requestPath === '/' ? '/index.html' : requestPath;
+  const filePath = normalize(join(rootDir, requestedPath));
+  const relativePath = relative(rootDir, filePath);
+
+  if (relativePath.startsWith('..') || relativePath.includes('..' + '\\')) {
+    response.writeHead(404);
+    response.end('Not found');
+    return;
+  }
+
+  try {
+    const fileStat = await stat(filePath);
+    if (!fileStat.isFile()) throw new Error('Not a file');
+
+    response.writeHead(200, {
+      'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream',
+      'Cache-Control': 'no-cache',
+    });
+    createReadStream(filePath).pipe(response);
+  } catch {
+    response.writeHead(404, {'Content-Type': 'text/plain; charset=utf-8'});
+    response.end('Not found');
+  }
+};
+
+const server = createServer(async (request, response) => {
+  const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
+
+  if (url.pathname === '/api/fal/status' && request.method === 'GET') {
+    sendJson(response, 200, {
+      provider: 'fal',
+      adapter: 'ready',
+      configured: fal.configured,
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/fal/run' && request.method === 'POST') {
+    try {
+      const body = await readJson(request);
+      const result = await fal.run(body.modelId, body.input);
+      sendJson(response, 200, {result});
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  await serveStatic(url.pathname, response);
+});
+
+server.listen(port, () => {
+  console.log(`PrismFlow editor: http://localhost:${port}`);
+  console.log(`FAL adapter: ${fal.configured ? 'configured' : 'not configured'}`);
+});
