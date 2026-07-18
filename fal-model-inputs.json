@@ -1,0 +1,6953 @@
+{
+ "models": {
+  "openai/gpt-image-2/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana-pro/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana-2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana-2/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/schnell": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/dev": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openai/gpt-image-2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana-pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/pro/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/kontext": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1.1": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/birefnet/v2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bytedance/seedream/v4.5/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "bytedance/seedream/v5/pro/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/nano-banana": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.5-turbo/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/standard/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-pro/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-image/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/seedvr/upscale/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-pro/v1.1-ultra": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedream/v5/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/background/remove": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2.6/pro/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/fast/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-3-pro-image-preview/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/topaz/upscale/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seedream/v4.5/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/z-image/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seedream/v4/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/tts/eleven-v3": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "xai/grok-imagine-video/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/clarity-upscaler": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/birefnet": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/veo3.1/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/fast/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seedance/v1.5/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/openai/v1/chat/completions": null,
+  "fal-ai/bytedance/seedream/v4/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.1/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/esrgan": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "openrouter/router": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/topaz/upscale/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "google/nano-banana-2-lite": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/vision": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/fast/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-25-flash-image/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "google/nano-banana-lite/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/gpt-image-1.5/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "google/gemini-omni-flash/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/tts/multilingual-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bytedance/seedance/v1/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "krea/v2/large/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/dev/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/imageutils/rembg": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "xai/grok-imagine-video/v1.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/fast/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/lite/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wizper": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o3/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/speech-02-hd": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-pro/kontext/max": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.6/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "google/gemini-omni-flash/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/gpt-image-1.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/aura-sr": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v3/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1/fill": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/tts/turbo-v2.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o3/pro/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v3/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.5-turbo/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora-fast-training": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fast-sdxl": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "bytedance/seed-audio-1.0": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "google/gemini-omni-flash/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "reve/2.1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/sound-effects/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bytedance/seedance-2.0/mini/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-02/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "cassetteai/music-generator": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-video/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/merge-videos": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o3/pro/video-to-video/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/turbo/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "pixelcut/background-removal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.1/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.6/standard/motion-control": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/pro/motion-control": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/upscale/crisp": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2511-multiple-angles": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2.5-turbo/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-3-pro-image-preview": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/remove-background": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-3d/v3.1/pro/image-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/sync-lipsync/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.7/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/ai-avatar/v2/standard": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-max/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/omnihuman/v1.5": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "reve/2.1/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "google/gemini-omni-flash": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-kontext/dev": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-25/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedance-2.0/mini/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/fabric-1.0": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v6/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sync-lipsync/v3": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "alibaba/happy-horse/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/flash": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/music": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-3.1-flash-image-preview/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/expand": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-25-flash-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/standard/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pulid": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/kontext/max/multi": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/speech-to-text/scribe-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bytedance/seedance/v1/pro/fast/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/compose": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-1/schnell": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedream/v5/lite/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/vectorize": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-25-preview/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-video/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-max": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fashn/tryon/v1.6": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/veo3.1/first-last-frame-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/ai-avatar/v2/pro": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax-music/v2.6": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/eraser": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2511": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/standard/motion-control": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax-music/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/extract-frame": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2.6/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-2/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seedance/v1.5/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/fast/first-last-frame-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/trellis-2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/flash/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/lipsync/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "clarityai/crystal-upscaler": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1.6/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/merge-audio-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-pro/kontext/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.6/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-3.1-flash-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-2/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/trellis": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v3/4k/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/avatar4/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/speech-2.8-hd": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gpt-image-1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/seedvr/upscale/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/lyria2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-2/pro/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "veed/lipsync": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.6/pro/motion-control": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/lite": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/lipsync/audio-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "alibaba/happy-horse/v1.1/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam2/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/mmaudio-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "alibaba/happy-horse/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/image-to-video/turbo": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-flex": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/image-to-video/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/imageutils/nsfw": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bytedance-upscaler/upscale/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-image/o3/image-to-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/sync-lipsync": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/turbo/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "google/nano-banana-lite": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "wan/v2.6/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sync-lipsync/v2/pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "reve/2.1/remix": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/seedream/v5/lite/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/metadata": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2.1/master/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-flex/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/latentsync": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/gpt-image-1/edit-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/video-to-video/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/kontext/multi": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seedance/v1/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gemini-3.1-flash-image-preview": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/voice-clone": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.7/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kokoro/american-english": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/depth-anything/v2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bytedance/seedance-2.0/mini/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-layered": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "alibaba/happy-horse/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-2-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/subtitles": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-25-preview/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-i2v": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/omnihuman": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.7/pro/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/z-image/turbo/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/demucs": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/recraft/v4/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v6/image-to-3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "xai/grok-imagine-video/edit-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-02/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/pro/video-to-video/reference": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "tripo3d/h3.1/image-to-3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v3/turbo/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora-portrait-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/x-ailab/nsfw": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "alibaba/happy-horse/v1.1/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "ideogram/v4/instant": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3-1/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.7/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-2/turbo/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-kontext-lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/evf-sam": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-2.3-fast/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/standard/video-to-video/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d-v3/image-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax/hailuo-2.3/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/3d-objects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v6/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hyper3d/rodin": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ace-step": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v3/turbo/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-2.3/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/lyria3/pro": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-02/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-general": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-14b/animate/replace": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.7/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/text-to-vector": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/creatify/aurora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "luma/agent/ray/v3.2/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.7/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/auto-subtitle": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2/master/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-image/v3/instruct/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "alibaba/happy-horse/video-edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/tripo/v2.5/image-to-3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-2512": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-2/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-lightning-sdxl": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-pro/outpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "krea/v2/medium/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/codeformer": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/veo3.1/lite/first-last-frame-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1/standard/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/text-to-video/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/speech-to-text": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-2/turbo/style": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hyper3d/rodin/v2.5": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-image/o1": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/kontext/max/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/lipsync": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "alibaba/happy-horse/v1.1/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "wan/v2.6/image-to-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.7/edit-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4/text-to-vector": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/speech-02-turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling/v1-5/kolors-virtual-try-on": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "cassetteai/sound-effects-generator": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/character": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q3/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/video-background-removal": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/lora/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-image/v3/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v2.1/master/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/trim-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-2/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/base/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-image/v3/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1/erase": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "wan/v2.6/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/outpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-3-tts/text-to-speech/1.7b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/patina": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o1/standard/image-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/seedvr/upscale/image/seamless": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bytedance/seedance/v1/pro/fast/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/4k/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-2.3/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2511/lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/iclight-v2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit/inpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-image/o3/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/speech-2.8-turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/swap": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/sam2/auto-segment": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "microsoft/mai-image-2.5/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/dreamactor/v2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/f5-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-video/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3/reframe": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "bria/product-dimensions": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/chatterbox/text-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-general/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.2/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/4k/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-14b/animate/move": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/base": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/photo-restoration": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/klein/9b/base/edit/lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "xai/tts/v1": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/recraft/upscale/creative": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/recraft/v3/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sadtalker": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/video-understanding": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/patina/material": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/imageutils/depth": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/florence-2-large/more-detailed-caption": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/smart-resize": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/krea": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-02-fast/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/medium/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/4k/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream3-preview/query": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sync-lipsync/v3/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bria/background/replace": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/finegrain-eraser/mask": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/meshy/v6/multi-image-to-3d": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "bria/video/background-removal/v3": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/gemini-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/birefnet/v2/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/gpt-image-1-mini": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ace-step/prompt-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o3/standard/video-to-video/reference": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "microsoft/mai-image-2.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "sonilo/v1.1/text-to-music": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v3/turbo/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.2/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/scale-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-image/v3/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v6-preview/image-to-3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-1/dev": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/video-background-removal/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/v3/generate-transparent": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/inworld-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v5.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2/image-to-video/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v6/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sana": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora-fill": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/c1/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/image-rle": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/product-shot": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v2/master/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/voice-changer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-general/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video-13b-distilled/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-diffusion-v35-large": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/infinitalk": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-2.3-fast/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-sdxl/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/index-tts-2/text-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/image-01": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "bria/video/background-removal": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "tripo3d/triposplat": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hyper3d/rodin/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/phota/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-video/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/text-to-dialogue/eleven-v3": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.2-a14b/text-to-video/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/gpt-image-1-mini/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/virtual-try-on": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "luma/agent/uni-1/v1/max/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/h3.1/multiview-to-3d": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1.6/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/elevenlabs/audio-isolation": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/q3/image-to-video/turbo": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-3-tts/clone-voice/1.7b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-3d/v3.1/pro/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-5b/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/base": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/ocr-with-region": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fashn/tryon/v1.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/florence-2-large/object-detection": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax/speech-2.6-hd": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "smoretalk-ai/rembg-enhance": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltxv-13b-098-distilled/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/veo3.1/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream3-preview/detect": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/video-upscaler": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "luma/agent/uni-1/v1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ddcolor": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-t2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/mmaudio-v2/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chatterbox/speech-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.7/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2/text-to-video/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/openai/v1/embeddings": null,
+  "wan/v2.6/image-to-video/flash": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-i1-fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-flf2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/trellis/multi": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/create-voice": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v5.5/effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flashvsr/upscale/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-3d/v3.1/rapid/image-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/meshy/rigging/multi-animation": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v4.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ernie-image/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-kontext-lora/inpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/instant-character": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b/base/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-audio/separate": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/edit/lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "krea/v2/medium/turbo/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/rigging": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1/pro/ai-avatar": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-motion": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/depth-anything-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "luma/agent/uni-1/v1/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3/remix": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-diffusion-v3-medium": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/voice-design": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-control-lora-depth": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixal3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax-music": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/character/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/multiple-angles": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/heygen/v2/translate/precision": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/veo3.1/fast/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/musetalk": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hidream-o1-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/reframe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/retoucher": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream2/object-detection": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-2512/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-2.3/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/caption-to-phrase-grounding": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2-19b/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/standard/video-to-video/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/drct-super-resolution": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1/standard/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ben/v2/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/recraft/v4/pro/text-to-vector": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hy-wu-edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/rife/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/sam-3/3d-body": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "wan/v2.6/text-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/v3/lipsync/precision": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-pro/v1.1-ultra/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/fabric-1.0/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "luma/agent/ray/v3.2/reframe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/merge-audios": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/creative-upscaler": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/tripo/v2.5/multiview-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/firered-image-edit-v1.1": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/pro/text-to-vector": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/hailuo-02/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-control-lora-canny": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/h3.1/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/open-vocabulary-detection": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/video-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pulid": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/extract-object": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/c1/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/dreamina/v3.1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/realism": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/text-removal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o1/video-to-video/reference": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "luma/agent/ray/v3.2/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v6/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v6/extend": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/apartment-staging": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/image2svg": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2-19b/distilled/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q3/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-5b/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ffmpeg-api/images-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/phota": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-25-preview/image-to-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-i1-full": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/p1/image-to-3d": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/luma-photon/flash/reframe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seed-speech/tts/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/phota/enhance": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "imagineart/imagineart-2.0-preview/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax-music/v2.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx-v1.5/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "rundiffusion-fal/juggernaut-flux/lightning": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/krea": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/object-removal/mask": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan3d/v2/multi-view": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-editing/object-removal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/lora/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ip-adapter-face-id": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01-live": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream2/visual-query": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-vace-14b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.5/pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vibevoice/7b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-apps-v2/photo-restoration": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/elevenlabs/dubbing": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ffmpeg-api/loudnorm": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/o3/4k/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "luma/agent/ray/v3.2/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2-flash/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/base/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-photon": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream3-preview/caption": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-krea-lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2/modify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "luma/agent/uni-1/v1/max": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/z-image-turbo-trainer-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "imagineart/imagineart-1.5-pro-preview/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/render-to-real": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/triposr": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/florence-2-large/detailed-caption": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/tiling": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hyper3d/rodin/v2.5/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/deepfilternet3": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-image/v3/instruct/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/hair-change": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/heygen/avatar5/digital-twin": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01-live/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/dwpose": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan_world": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kokoro/british-english": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/music/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "resemble-ai/chatterboxhd/text-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/klein/realtime": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "sonilo/v1.1/video-to-music": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kolors": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-video-image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1/standard/ai-avatar": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/enterprise": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-o1-image/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/openai/v1/responses": null,
+  "fal-ai/fooocus/inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx1.6/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-3-tts/voice-design/1.7b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3/replace-background": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/patina/material/extract": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "resemble-ai/chatterboxhd/speech-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ace-step/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-pro/v1/vto": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v3/layerize-text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-3d/v3.1/smart-topology": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/inpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/imageutils/marigold-depth": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/heygen/v3/video-agent": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/speech-2.6-turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "nvidia/nemotron-3-nano-omni/vision": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/inpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-trainer-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/cat-vton": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/multiple-angles": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/ernie-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo/generate": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/zonos2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/moondream2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax/image-01/subject-reference": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b/base/edit/lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-3d/v3.1/rapid/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video-13b-distilled": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/standard/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-25-preview/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-video-v1.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/remove-element": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4.5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/glm-image/image-to-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5.5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora-depth": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "clarityai/crystal-video-upscaler": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-max/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/relighting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/luma-dream-machine/ray-2/reframe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bytedance/seed/v2/mini": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/ocr": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-25/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v5/retexture": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/live-portrait": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/realistic-vision": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ccsr": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/meshy/v5/multi-image-to-3d": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/image-to-image/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/orpheus-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/workflow-utilities/extract-nth-frame": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-krea-lora/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4.5/effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-video-foley": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/recraft-20b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "pixelcut/video-background-removal": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/photomaker": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream-next": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v6-preview/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4.5/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/virtual-tryon": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-o1-image/dev/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-single-avatar/image-audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-vision-upscaler": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-motion": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/v2/translate/speed": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fast-lightning-sdxl/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/playground-v25": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/maya": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/c1/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q3/text-to-video/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/dia-tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-diffusion-v35-medium": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/video-rle": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/leffa/virtual-tryon": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/controlnet": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/preview/speech-2.5-hd": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v5.5/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3-1/video-rle": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream-next/detection": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/q1/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/srpo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bria/genfill": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/lineart": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-5b/text-to-video/fast-wan": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax-music/v1.5": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/hair-change": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chatterbox/text-to-speech/multilingual": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/nafnet/deblur": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "nvidia/cosmos-3-super/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/boogu-image/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ben/v2/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v5.6/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/video-prompt-generator": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan_world/image-to-world": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kokoro/brazilian-portuguese": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/schnell/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/ingredient": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d/v2/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/upscale": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/llava-next": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cohere-transcribe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-control-lora-depth/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nucleus-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream3-preview/segment": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/void-video-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-i1-dev": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/utility/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2-flash/reframe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "decart/lucy-restyle": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kandinsky5-pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/caption": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/upscale/creative": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/cogvideox-5b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/realism": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kokoro/spanish": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-pro/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sync-lipsync/react-1": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/thinksound": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ovi/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q3/reference-to-video/mix": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vibevoice": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/boogu-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ghiblify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "rundiffusion-fal/juggernaut-flux-lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/krea/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/aura-flow": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sdxl-controlnet-union": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d-v3/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/background-change": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/omnigen-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/glm-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx1.6/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/controlfoley": null,
+  "fal-ai/sam-3-1/image-rle": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.2-a14b/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora-canny": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sana/sprint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hidream-o1-image/dev": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-control-lora-canny/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/dev/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/o1/standard/video-to-video/reference": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3-1/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "nvidia/nemotron-3-nano-omni/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1.1/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b/base": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vecglypher/image-to-svg": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/meshy/v5/remesh": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "perceptron/isaac-01": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-vace-14b/inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-klein-9b-base-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/speech-to-text": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-diffusion-v15": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q2/image-to-video/turbo": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2-flash": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/firered-image-edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v3/create-style": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fast-svd-lcm": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-video-v1.5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/headshot-photo": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-video-v095": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/object-removal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5/effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image2pixel": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/framepack": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-kontext-lora/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/live-portrait/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/audio-understanding": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-diffusion-v3-medium/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/recraft/v4.1/utility/pro/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chrono-edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx-v1.5/video-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-cascade": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "decart/lucy-edit/pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.2/pikaframes": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2a/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/cartoonify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/film/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/silero-vad": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/longcat-image/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-kontext-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "imagineart/imagineart-2.0-edit-preview/image-to-image": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1/tts": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bagel": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5.6/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q2/reference-to-video/pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltxv-13b-098-distilled": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-a14b/text-to-image/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/film": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/csm-1b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/q1/start-end-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-photon/flash": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/tiling": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/got-ocr/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.2-14b/speech-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/9b/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/lumina-image/v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sdxl-controlnet-union/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-vace-apps/long-reframe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.5/pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/style-transfer": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/turbo-flux-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/replace-background": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/reference-video-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.6/standard/elements": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/character/remix": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.6/pro/elements": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-2512-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2509": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/dreamshaper": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "nvidia/nemotron-3-nano-omni/audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q1/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/reverse-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bagel/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q1/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-krea-lora/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-sdxl/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam2/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/relight": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/restore": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kolors/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/makeup-application": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fooocus": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/retake-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kokoro/italian": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "nvidia/cosmos-3-super/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/control-light": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/genfill/v2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/scail-2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixart-sigma": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/illusion-diffusion": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kokoro/french": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/video-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cogview4": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ai-avatar/single-text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/uso": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-image/v2.1/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "sonilo/v1.1/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/start-end-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hyper3d/rodin/v2.5/fast": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q2/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/image-to-video/720p": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-layered/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "openrouter/router/video/enterprise": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-motion/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/age-modify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kokoro/mandarin-chinese": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pony-v7": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-lcm-diffusion/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/auto-caption": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "rundiffusion-fal/juggernaut-flux/pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/amt-interpolation": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/omnigen-v1": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/v3/lipsync/speed": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2-lora-gallery/face-to-full-portrait": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/retouch": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1.6/pro/effects": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ffmpeg-api/waveform": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/medium/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-dream-machine/ray-2-flash/modify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/c1/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "wan/v2.6/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/diffrhythm": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bernini-r/edit-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q2/image-to-video/pro": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nafnet/denoise": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/personaplex": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/janus": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "wan/v2.6/reference-to-video/flash": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kokoro/japanese": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/joyai-image-edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-3-tts/text-to-speech/0.6b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/dwpose/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/sam-audio/span-separate": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/avatars/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kandinsky5/text-to-video/distill": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing/sharpen": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/klein/4b/edit/lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-audio/visual-separate": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "veed/video-background-removal/green-screen": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/q2/reference-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bernini-r/edit-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bernini-r/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/sound-effects": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/professional-photo": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/add-background": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/omni-zero": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/thinksound/audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "tripo3d/p1/text-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/color-correction": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/medium/base/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-vace-14b/reframe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/lora/inpaint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/editto": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-vace-apps/video-edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/kandinsky5-pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/video/erase/mask": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ovis-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-animatediff/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/dense-region-caption": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/kling-video/v1.6/standard/effects": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/florence-2-large/referring-expression-segmentation": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bagel/understand": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01-director": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-3-tts/clone-voice/0.6b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "veed/fabric-1.0/text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/group-photo": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/lcm-sd15-i2i": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-max/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kandinsky5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/srpo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/distilled/image-to-video/720p": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2/retake-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-video/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "cassetteai/video-sound-effects-generator": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux/dev/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "imagineart/imagineart-1.5-preview/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kokoro/hindi": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/integrate-product": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/extend-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/distilled/text-to-video/720p": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/add-background": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/framepack/flf2v": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-photon/reframe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/telestyle-v2": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-subject": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/reference-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-wan-14b/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream/batched": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax/preview/speech-2.5-turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/workflow-utilities/pick-image-by-index": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/finegrain-eraser/bbox": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-apps-v2/style-transfer": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/base/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/digital-comic-art": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/schnell/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hidream-i1-full/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/text-to-video/720p": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo/generate/structured_prompt": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/multiple-angles": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/fast-sdxl-controlnet-canny": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/luma-photon/modify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/dreamomni2/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "rundiffusion-fal/juggernaut-flux/base": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/moondream3-preview/point": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video-13b-distilled/multiconditioning": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/echomimic-v3": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cogvideox-5b/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/finegrain-eraser": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-lcm-diffusion": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/extend": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ovi": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan-3d/v3.1/part": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/sfx/base/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/image/embed": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2/klein/4b/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2/klein/4b/base/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/product-holding": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-vace-14b/outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/product-photography": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/audio-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/template-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pasd": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/plushie-style": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bernini-r/reference-edit-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/face-enhancement": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/reconviagen-0.5": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/object-removal/bbox": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/t2v-turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stepx-edit2": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ace-step/audio-outpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/playground-v25/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/infinitalk/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/colorize": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bitdance": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hyper3d/rodin/v2.5/text-to-3d/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4/effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-apps-v2/expression-change": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "rundiffusion-fal/juggernaut-flux/pro/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/phota/create-profile": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vibevoice/0.5b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vecglypher": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/krea/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fooocus/image-prompt": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v3.5/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4.5/text-to-video/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-svd-lcm/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sensenova-u1-infographic": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/lighting-restoration": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/image-editing/baby-version": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "veed/avatars/audio-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-video-v095/extend": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/colorization": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/leffa/pose-transfer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/maya/batch": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/lightx/relight": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/emu-3.5-image/edit-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/ballpoint-pen-sketch": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/portrait-enhance": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2-lora-gallery/sepia-vintage": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-animatediff/turbo/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sa2va/8b/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "nvidia/nemotron-asr-multilingual/asr": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/outpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/one-to-all-animation/14b": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/minimax/video-01-subject-reference": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/perspective": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ace-step/audio-inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/longcat-video/distilled/image-to-video/480p": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/zonos": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/tada/3b/text-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/face-to-full-portrait": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-klein-9b-base-trainer/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/music/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chrono-edit-lora-gallery/upscaler": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cartoonify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2-lora-gallery/satellite-view-style": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-lora-gallery/hdr-style": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/uno": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/srpo/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sa2va/4b/image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/hdr": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/krea/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/q2/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sdxl-controlnet-union/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/distilled/text-to-video/480p": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/davinci-magihuman": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/amt-interpolation/frame-interpolation": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/minimax/video-01-director/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1.1-ultra-finetuned": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/lipsync/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/fast-svd/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/vidu/q2/video-extension/pro": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sana/v1.5/4.8b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/srpo/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "moonvalley/marey/i2v": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-sdxl-controlnet-canny/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cosmos-predict-2.5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/z-image/turbo/controlnet/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v3.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/next-scene": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-i2v-lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-animatediff/turbo/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d/v2/mini/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/distilled/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/youtube-thumbnails": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v5.6/transition": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan/v2.2-5b/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/v2/video-agent": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cogvideox-5b/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1/standard/effects": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/music/base/text-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/lightx/recamera": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/infinitalk/single-text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ernie-image/lora/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltxv-13b-098-distilled/multiconditioning": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-general/differential-diffusion": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/text-to-image/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/krea-wan-14b/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2a": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/one-to-all-animation/1.3b": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video-v095/multiconditioning": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-pro/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/object-removal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/speech-to-text/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-editing/broccoli-haircut": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-preprocessors/sam": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan3d/v2/mini": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-vace-14b/depth": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/remove-lighting": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/emu-3.5-image/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-video-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.2-a14b/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/framepack/f1": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-cascade/sote-diffusion": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-vace-fun-a14b/depth": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-25/inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2/remix": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-animatediff/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-t2v-lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-vace-fun-a14b/inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/bria_video_eraser/erase/prompt": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cosmos-predict-2.5/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-image-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/distilled/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cosmos-predict-2.5/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/trellis-2-lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/magi-distilled/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-single-avatar/audio-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/mlsd": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2-19b/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chrono-edit-lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sana/v1.5/1.6b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/scene-finder": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fooocus/upscale-or-vary": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-vace-fun-a14b/outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx-v1/video-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/omnilottie/image-to-lottie": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/remove-element": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/marlin": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-1/dev/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/omnilottie": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-video-13b-distilled/extend": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-2-trainer/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-lite/generate/structured_prompt": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/avatar3/digital-twin": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v4.5/image-to-video/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/reimagine": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v3.5/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/magi-distilled": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/video/erase/prompt": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/wojak-style": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/erase_by_text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ernie-image/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/extend/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-trainer/i2v-a14b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-editing/scene-composition": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/nemotron-diffusion-vlm": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/age-progression": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/tada/1b/text-to-speech": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-lite/generate": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "rundiffusion-fal/juggernaut-flux-lora/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/omnilottie/video-to-lottie": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/image-to-image/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/playground-v25/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-lcm-diffusion/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flowedit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/bria/text-to-image/base": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/cosmos-predict-2.5/distilled/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sa2va/8b/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/replace_object_by_text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "perceptron/isaac-01/openai/v1/chat/completions": null,
+  "fal-ai/ltxv-13b-098-distilled/extend": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/chrono-edit-lora-gallery/paintbrush": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/smart-turn": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/docres/dewarp": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/longcat-video/text-to-video/480p": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sa2va/4b/video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/day-to-night": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/expression-change": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v4/image-to-video/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/region-proposal": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/trellis-2/retexture": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "mirelo-ai/sfx-v1/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/interleave-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/vidu/reference-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/zoe": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/rife": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/audio-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v3.5/image-to-video/fast": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-trainer/t2v-a14b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/magi-distilled/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-sdxl-controlnet-canny/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-general/rf-inversion": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/video/background-removal/realtime": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/z-image/turbo/tiling/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pixverse/v3.5/effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v3.5/text-to-video/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/lighting-restoration": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/pixverse/v4/text-to-video/fast": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-apps-v2/city-teleport": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-apps-v2/photography-effects": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/v2a/remix": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ernie-image-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-apps-v2/texture-transform": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/color-correction": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/trellis-2-lora-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/medium/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/longcat-video/image-to-video/480p": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/teed": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/moondream2/point-object-detection": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/t2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/embed-product": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan/v2.2-5b/text-to-video/distill": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/text-to-audio/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/hed": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-2-trainer-v2/edit": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/marlin/find": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/z-image/turbo/inpaint/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-trainer-v2/i2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/music/base/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bria/text-to-image/hd": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing/grain": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.2/pikascenes": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/music/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ai-avatar/multi": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/image-preprocessors/midas": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/medium/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-lightning-sdxl/inpainting": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/medium/base/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/audio-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/hunyuan3d-v3/sketch-to-3d": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/audio-compressor": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/medium/base/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/bria_video_eraser/erase/mask": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan3d/v2/multi-view/turbo": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "rundiffusion-fal/rundiffusion-photo-flux": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "rundiffusion-fal/juggernaut-flux/base/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "moonvalley/marey/motion-transfer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "async/tts-pro/v1.0": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/sfx/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/scribble": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/add_object_by_text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/reference-video-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux/krea/redux": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/video/increase-resolution": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-edit/restyle": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/docres": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-vace-14b/pose": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "ideogram/v4/tiling/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/bernini-r/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/dia-tts/voice-clone": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/stable-audio-3/small/music/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/base/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/base/audio-to-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/base/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/medium/base/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/music/base/audio-inpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/outpaint/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-quality/cross-eyed": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2a/turbo/remix": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/music/base/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3/small/sfx/audio-outpainting": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-22-vace-fun-a14b/reframe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/sketch_to_colored_image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/instant-shave": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2/turbo/remix": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-trainer-v2/t2a": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/v2/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-trainer/t2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/moondream-next/batch": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-preprocessors/pidi": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/fibo-bbq-preview/generate": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/blend": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/blur": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-v2v-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/decompression": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "moonvalley/marey/t2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/workflow-utilities/blend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2509-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/water-simulation": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sam-3/3d-align": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/inpaint/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/audio-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/reference-video-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/video-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/audio-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-pro/v1/fill-finetuned": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/remove-lighting": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/deblur": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/time-of-day": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/rewrite_text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/reference-video-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/stable-audio-3-trainer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2-19b/extend-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "moonvalley/marey/pose-transfer": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/reseason": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/wan-trainer/t2v-14b": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/invisible-watermark": null,
+  "fal-ai/ltx-2.3-quality/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2/turbo/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-plus-lora-gallery/shirt-design": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/image-editing/weather-effect": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.1/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2/audio-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-trainer-v2/audio-extend-suffix": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/pika/v2/turbo/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing/vignette": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/next-scene": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/video-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/maya/stream": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing/dissolve": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2-19b/distilled/video-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/heygen/avatar4/digital-twin": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/distilled/reference-video-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/bria_video_eraser/erase/keypoints": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/ic-lora/av2av": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/luma-photon/flash/modify": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/text-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/image-to-video/lora": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/kling-video/v1.5/pro/effects": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/face-to-full-portrait": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/pika/v2.1/image-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/reference-video-to-video": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ai-avatar/multi-text": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/region-to-description": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "bria/video/erase/keypoints": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "argil/avatars/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/florence-2-large/region-to-category": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "nvidia/nemotron-3-nano-omni": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bria/fibo-edit/edit/structured_instruction": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/infinity-star/text-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/florence-2-large/region-to-segmentation": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/custom-models/generate": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/integrate-product": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "mirelo-ai/sfx1.6/extend-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/group-photo": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/extend-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/sadtalker/reference": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "mirelo-ai/sfx1.6/inpaint-audio": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/solarize": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "argil/avatars/audio-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/ic-lora/v2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-quality/hdr/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/distilled/video-to-video": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "bytedance/lynx": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/video-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3-22b/extend-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/shirt-design": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/qwen-image-edit-2509-lora-gallery/add-background": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "fal-ai/ideogram/v2/turbo/edit": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/post-processing/parabolize": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/hunyuan-video-img2vid-lora": null,
+  "fal-ai/post-processing/dodge-burn": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx-2.3-22b/distilled/video-to-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2-19b/distilled/extend-video/lora": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-trainer-v2/inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/decart/lucy-5b/image-to-video": null,
+  "decart/lucy-2-5/realtime": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/fast-fooocus-sdxl/image-to-image": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/wan-trainer/i2v-720p": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flux-krea-lora/stream": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flux-lora/stream": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx-2.3/reframe": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/a2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/a2a": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ideogram/custom-models": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/audio-extend-prefix": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/audio-inpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/av2av-masked": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/av2av": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/extend-prefix": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/extend-suffix": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/ic-lora/a2a": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/ic-lora/av2av-masked": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/interpolate": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/ic-lora/v2v-masked": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/outpaint": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/v2a": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/personaplex/realtime": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/ltx23-trainer-v2/v2v": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/ltx23-trainer-v2/v2v-masked": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/color-tint": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/desaturate": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/post-processing/chromatic-aberration": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/speech-to-text/stream": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/speech-to-text/turbo/stream": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/workflow-utilities/impulse-response": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/veo3.1/fast/reference-to-video": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-image/quality/edit": {
+   "imageKey": "image_urls",
+   "imageKeyIsArray": true,
+   "hasPrompt": true
+  },
+  "xai/grok-imagine-image/quality/text-to-image": {
+   "imageKey": null,
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "decart/lucy2-vton/realtime": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  },
+  "fal-ai/flashhead": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/flashtalk": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": false
+  },
+  "fal-ai/lyria3": {
+   "imageKey": "image_url",
+   "imageKeyIsArray": false,
+   "hasPrompt": true
+  }
+ },
+ "syncedAt": "2026-07-18T01:27:01.760Z"
+}

@@ -4,6 +4,10 @@ const FAL_QUEUE_ORIGIN = 'https://queue.fal.run';
 const isSafeModelId = (modelId) =>
   typeof modelId === 'string' && /^[a-zA-Z0-9._/-]+$/.test(modelId);
 
+// Queue submits accept the full endpoint path (owner/app/subpath), but status and
+// result URLs only route on the root app id — polling with the subpath returns 405.
+const queueAppId = (modelId) => modelId.split('/').slice(0, 2).join('/');
+
 export const createFalAdapter = ({
   apiKey = process.env.FAL_API_KEY || process.env.FAL_KEY,
   fetchImpl = globalThis.fetch,
@@ -65,11 +69,11 @@ export const createFalAdapter = ({
     },
 
     async status(modelId, requestId) {
-      return requestJson(`${queueOrigin}/${requireModelId(modelId)}/requests/${requireRequestId(requestId)}/status`);
+      return requestJson(`${queueOrigin}/${queueAppId(requireModelId(modelId))}/requests/${requireRequestId(requestId)}/status`);
     },
 
     async result(modelId, requestId) {
-      return requestJson(`${queueOrigin}/${requireModelId(modelId)}/requests/${requireRequestId(requestId)}`);
+      return requestJson(`${queueOrigin}/${queueAppId(requireModelId(modelId))}/requests/${requireRequestId(requestId)}`);
     },
   };
 };

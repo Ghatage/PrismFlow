@@ -235,6 +235,63 @@ const hasModelPricingStore = (page) => page.evaluate(() => new Promise((resolve,
   };
 }));
 
+test('keeps the agent rail visible and toggles a run pane from its icon', {timeout: 30_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
+  await page.route(`${origin}/api/agent/status`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({provider: 'openai-compatible', configured: true, model: 'test-model'}),
+  }));
+  await page.route(`${origin}/api/agent/llm`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({choices: [{message: {role: 'assistant', content: 'Reviewed the timeline.'}}]}),
+  }));
+  await page.addInitScript((project) => {
+    localStorage.setItem('prismflow.project', JSON.stringify(project));
+  }, regenerationFixture);
+
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  await waitForHydration(page);
+  const rail = page.locator('.agent-rail');
+  assert.equal(await rail.isVisible(), true);
+  assert.equal(await rail.evaluate((element) => Math.round(element.getBoundingClientRect().width)), 44);
+  assert.equal(await page.locator('[data-action="toggle-agent-rail"]').count(), 0);
+
+  await page.getByRole('button', {name: 'Launch AI editing agent'}).click();
+  const prompt = page.locator('#agentPromptInput');
+  await prompt.fill('Review the current cut.');
+  await prompt.press('Enter');
+
+  const runIcon = page.locator('[data-agent-run-id]');
+  await runIcon.waitFor();
+  await page.locator('.agent-run-card').waitFor();
+  await runIcon.click();
+  await page.locator('.agent-run-card').waitFor({state: 'detached'});
+  assert.equal(await rail.isVisible(), true);
+  assert.equal(await rail.evaluate((element) => Math.round(element.getBoundingClientRect().width)), 44);
+  await runIcon.click();
+  await page.locator('.agent-run-card').waitFor();
+  assert.deepEqual(browserErrors, []);
+});
+
 test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30_000}, async (context) => {
   const port = await reservePort();
   const origin = `http://127.0.0.1:${port}`;

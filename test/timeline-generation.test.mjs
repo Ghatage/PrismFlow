@@ -10,6 +10,7 @@ import {
   createTimelineGenerationController,
   landGenerationResult,
   normalizeGenerationResult,
+  normalizeTimelineGenerationInput,
 } from '../src/timeline-generation.js';
 
 class MemoryStorage {
@@ -231,4 +232,57 @@ test('maps generic FAL queue output and browser routes without remote calls', as
   assert.equal(requests[0].url, '/api/timeline/generate');
   assert.equal(requests[1].url, '/api/timeline/jobs/browser-shot');
   assert.equal(JSON.stringify(requests).includes('FAL_API_KEY'), false);
+});
+
+test('forwards reference image urls using each model input schema', async () => {
+  const calls = [];
+  const fal = {
+    async submit(modelId, payload) { calls.push({modelId, payload}); return {request_id: `fal-ref-${calls.length}`}; },
+    async status() { return {status: 'IN_QUEUE'}; },
+    async result() { return {}; },
+  };
+  const modelInputs = {
+    'fal-ai/single-image-video': {imageKey: 'image_url', imageKeyIsArray: false, hasPrompt: true},
+    'fal-ai/multi-image-edit': {imageKey: 'image_urls', imageKeyIsArray: true, hasPrompt: true},
+    'fal-ai/text-only-video': {imageKey: null, imageKeyIsArray: false, hasPrompt: true},
+  };
+  const adapter = createFalTimelineGenerationAdapter({fal, modelInputs});
+  const urls = ['https://assets.example.test/fox-sheet.png', 'data:image/png;base64,AAAA'];
+  const base = {operation: 'add', prompt: 'A fox by the pier', referenceImageUrls: urls};
+
+  await adapter.submitTimelineGeneration({...base, modelId: 'fal-ai/single-image-video'});
+  assert.equal(calls[0].payload.image_url, urls[0]);
+  assert.equal('image_urls' in calls[0].payload, false);
+
+  await adapter.submitTimelineGeneration({...base, modelId: 'fal-ai/multi-image-edit'});
+  assert.deepEqual(calls[1].payload.image_urls, urls);
+  assert.equal('image_url' in calls[1].payload, false);
+
+  await adapter.submitTimelineGeneration({...base, modelId: 'fal-ai/text-only-video'});
+  assert.equal('image_url' in calls[2].payload, false);
+  assert.equal('image_urls' in calls[2].payload, false);
+
+  await adapter.submitTimelineGeneration({...base, modelId: 'fal-ai/unknown-model'});
+  assert.equal('image_url' in calls[3].payload, false);
+});
+
+test('normalizes reference image urls and drops unsendable schemes', () => {
+  const normalized = normalizeTimelineGenerationInput({
+    operation: 'add',
+    prompt: 'A fox by the pier',
+    modelId: 'fal-ai/example',
+    referenceImageUrls: [
+      'https://assets.example.test/sheet.png',
+      'https://assets.example.test/sheet.png',
+      'blob:http://localhost/abc',
+      'http://insecure.example/sheet.png',
+      'data:image/png;base64,AAAA',
+      '',
+      42,
+    ],
+  });
+  assert.deepEqual(normalized.referenceImageUrls, [
+    'https://assets.example.test/sheet.png',
+    'data:image/png;base64,AAAA',
+  ]);
 });

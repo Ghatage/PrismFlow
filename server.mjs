@@ -10,12 +10,16 @@ import {createFalModelPricingAdapter, writeModelPricingCsv} from './server/model
 import {createModelSearchAdapter} from './server/model-search.mjs';
 import {createLocalVideoVlmAdapter} from './server/video-vlm.mjs';
 import {createVideoSearchAdapter} from './server/video-search.mjs';
+import {createLlmAdapter} from './server/llm-adapter.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
 const fal = createFalAdapter();
 const characterSheets = createFalCharacterSheetAdapter({fal});
-const timelineGenerations = createFalTimelineGenerationAdapter({fal});
+const modelInputs = await readFile(join(rootDir, 'fal-model-inputs.json'), 'utf8')
+  .then((text) => JSON.parse(text).models || {})
+  .catch(() => ({}));
+const timelineGenerations = createFalTimelineGenerationAdapter({fal, modelInputs});
 const modelPricing = createFalModelPricingAdapter();
 const modelSearch = createModelSearchAdapter({
   catalogPath: join(rootDir, 'fal-model-pricing.json'),
@@ -25,6 +29,7 @@ const videoVlm = createLocalVideoVlmAdapter({modelId: process.env.PRISMFLOW_VIDE
 const videoSearch = createVideoSearchAdapter({
   indexPath: join(rootDir, 'video-search-index.json'),
 });
+const llm = createLlmAdapter();
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -191,7 +196,7 @@ const server = createServer(async (request, response) => {
 
   if (url.pathname === '/api/characters/generate' && request.method === 'POST') {
     try {
-      const body = await readJson(request);
+      const body = await readJson(request, 16_000_000);
       const result = await characterSheets.submitCharacterSheet(body);
       sendJson(response, 202, result);
     } catch (error) {
@@ -209,7 +214,7 @@ const server = createServer(async (request, response) => {
 
   if (url.pathname === '/api/timeline/generate' && request.method === 'POST') {
     try {
-      const body = await readJson(request);
+      const body = await readJson(request, 16_000_000);
       const result = await timelineGenerations.submitTimelineGeneration(body);
       sendJson(response, 202, result);
     } catch (error) {
@@ -222,6 +227,31 @@ const server = createServer(async (request, response) => {
   if (timelineJobMatch && request.method === 'GET') {
     const result = await timelineGenerations.getTimelineGenerationJob(decodeURIComponent(timelineJobMatch[1]));
     sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === '/api/agent/status' && request.method === 'GET') {
+    sendJson(response, 200, {
+      provider: 'openai-compatible',
+      configured: llm.configured,
+      model: llm.model,
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/agent/llm' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      if (!Array.isArray(body.messages)) throw new Error('messages must be an array.');
+      const result = await llm.chat({
+        messages: body.messages,
+        tools: body.tools,
+        temperature: body.temperature,
+      });
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
     return;
   }
 

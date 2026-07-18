@@ -80,6 +80,7 @@ export const createFakeCharacterGenerationAdapter = ({
 export const createServerCharacterGenerationAdapter = ({
   fetchImpl = globalThis.fetch,
   resolveReferenceUrl = () => null,
+  toUploadableUrl = async (url) => url,
 } = {}) => {
   const requestJson = async (url, options = {}) => {
     const response = await fetchImpl(url, options);
@@ -99,8 +100,10 @@ export const createServerCharacterGenerationAdapter = ({
 
     async generateCharacterSheet(input) {
       const normalized = normalizeCharacterGenerationInput(input);
-      const referenceUrls = normalized.referenceAssetIds
+      const resolvedUrls = await Promise.all(normalized.referenceAssetIds
         .map((assetId) => resolveReferenceUrl(assetId))
+        .map((url) => Promise.resolve(toUploadableUrl(url)).catch(() => null)));
+      const referenceUrls = resolvedUrls
         .filter((url) => typeof url === 'string' && /^(https:\/\/|data:image\/)/i.test(url));
       return requestJson('/api/characters/generate', {
         method: 'POST',

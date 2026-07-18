@@ -17,6 +17,11 @@ const stringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
 
 const sameIds = (left, right) => left.length === right.length && left.every((id, index) => id === right[index]);
 
+const UPLOADABLE_URL_PATTERN = /^(https:\/\/|data:image\/)/i;
+
+const referenceUrls = (value) => [...new Set((Array.isArray(value) ? value : [])
+  .filter((entry) => typeof entry === 'string' && UPLOADABLE_URL_PATTERN.test(entry)))];
+
 const safeIdPart = (value) => requiredText(value, 'Generation job id').replace(/[^a-zA-Z0-9_-]+/g, '-');
 
 const stableSeed = (value) => {
@@ -56,6 +61,7 @@ export const normalizeTimelineGenerationInput = (input = {}) => {
     qualityTier,
     qualitySettings: qualitySettingsFor(qualityTier, input.qualitySettings),
     ...(unitPrice !== null ? {unitPrice, costUnit: cost?.unit || 'generation', costQuantity: cost?.quantity || 1} : {}),
+    referenceImageUrls: referenceUrls(input.referenceImageUrls),
     characterVersionIds: stringIds(input.characterVersionIds),
     styleVersionIds: stringIds(input.styleVersionIds),
     parentAssetIds: stringIds(input.parentAssetIds),

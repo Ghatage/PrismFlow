@@ -45,6 +45,33 @@ test('keeps the FAL key in server-side queue request headers', async () => {
   assert.equal(requests[0].options.body.includes('server-secret-key'), false);
 });
 
+test('polls queue status and result at the root app id for nested endpoints', async () => {
+  const requests = [];
+  const responses = [
+    {request_id: 'queue-job-2'},
+    {status: 'COMPLETED'},
+    {video: {url: 'https://fal.media/clip.mp4', content_type: 'video/mp4'}},
+  ];
+  const fal = createFalAdapter({
+    apiKey: 'server-secret-key',
+    queueOrigin: 'https://queue.example.test',
+    fetchImpl: async (url) => {
+      requests.push(url);
+      return jsonResponse(responses.shift());
+    },
+  });
+
+  await fal.submit('fal-ai/veo3.1/fast', {prompt: 'clip'});
+  await fal.status('fal-ai/veo3.1/fast', 'queue-job-2');
+  await fal.result('fal-ai/veo3.1/fast', 'queue-job-2');
+
+  assert.deepEqual(requests, [
+    'https://queue.example.test/fal-ai/veo3.1/fast',
+    'https://queue.example.test/fal-ai/veo3.1/requests/queue-job-2/status',
+    'https://queue.example.test/fal-ai/veo3.1/requests/queue-job-2',
+  ]);
+});
+
 test('normalizes Nano Banana 2 text and reference requests server-side', () => {
   const textRequest = buildNanoBananaCharacterRequest({
     name: 'Marlow',
@@ -164,4 +191,33 @@ test('browser adapter sends only stable character input to local routes', async 
   assert.equal(body.modelId, undefined);
   assert.equal(requests[0].options.headers.Authorization, undefined);
   assert.equal(JSON.stringify(requests).includes('FAL_API_KEY'), false);
+});
+
+test('browser adapter converts blob references to uploadable data uris', async () => {
+  const requests = [];
+  const responses = [jsonResponse({jobId: 'browser-job-2'}, 202)];
+  const adapter = createServerCharacterGenerationAdapter({
+    resolveReferenceUrl: (assetId) => ({
+      'blob-ref': 'blob:http://localhost/sheet',
+      'huge-ref': 'blob:http://localhost/huge',
+      'remote-ref': 'https://assets.example.test/ref.png',
+    })[assetId] || null,
+    toUploadableUrl: async (url) => {
+      if (url === 'blob:http://localhost/sheet') return 'data:image/png;base64,AAAA';
+      if (url === 'blob:http://localhost/huge') throw new Error('Image is too large to send inline.');
+      return url;
+    },
+    fetchImpl: async (url, options = {}) => {
+      requests.push({url, options});
+      return responses.shift();
+    },
+  });
+
+  await adapter.generateCharacterSheet({
+    name: 'Marlow',
+    prompt: 'Friendly fox',
+    referenceAssetIds: ['blob-ref', 'huge-ref', 'remote-ref'],
+  });
+  const body = JSON.parse(requests[0].options.body);
+  assert.deepEqual(body.referenceUrls, ['data:image/png;base64,AAAA', 'https://assets.example.test/ref.png']);
 });

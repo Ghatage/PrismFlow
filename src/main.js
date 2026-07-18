@@ -25,13 +25,21 @@ import {
 import {
   createFakeTimelineGenerationAdapter,
   createServerTimelineGenerationAdapter,
+  createTimelineGenerationController,
+  landGenerationResult,
 } from './timeline-generation.js';
 import {createClipRegenerationService} from './clip-regeneration.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
 import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
+import {expandMentionPrompt, imageInputFor, resolveMentionedVersions} from './prompt-mentions.js';
+import {attachMentionAutocomplete} from './mention-autocomplete.js';
+import {toUploadableUrl} from './asset-data-url.js';
 import {createAgentWorkspace} from './agent-workspace.js';
 import {createProjectContextService} from './project-context.js';
 import {createVideoFrameIndexer} from './video-indexing.js';
+import {createAgentRunStore} from './agent-runs.js';
+import {createAgentTools} from './agent-tools.js';
+import {AgentCancelledError, runEditorAgent} from './editor-agent.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -63,9 +71,16 @@ const state = {
   regenerationEditorMode: 'prompt',
   currentTime: 0,
   isPlaying: false,
+  playerVolume: 1,
+  lastAudibleVolume: 1,
   zoom: 1,
   activeTab: 'media',
   agentPaneOpen: false,
+  expandedAgentRunId: null,
+  agentPromptModalOpen: false,
+  agentPromptDraft: '',
+  agentLlmStatus: null,
+  agentStepperScrollTop: 0,
   videoSearchQuery: '',
   videoSearchLoading: false,
   videoSearchError: '',
@@ -78,7 +93,9 @@ const state = {
   characterModalMode: 'detail',
   selectedStyleId: null,
   isStyleModalOpen: false,
+  generateVideoModal: null,
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
+  promptMentionMap: {},
   rebaseConflicts: {},
   mediaPanelOpen: true,
   mediaHydrated: false,
@@ -133,6 +150,33 @@ const videoIndexer = createVideoFrameIndexer({
     });
   },
 });
+const agentRuns = createAgentRunStore();
+const agentTools = createAgentTools({
+  getProject: () => project,
+  dispatch: updateProject,
+  getState: () => state,
+  setState: (patch) => Object.assign(state, patch),
+  projectContext,
+  videoIndexer,
+  database: projectDatabase,
+});
+const callLlm = async ({messages, tools, signal}) => {
+  const response = await fetch('/api/agent/llm', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({messages, tools}),
+    signal,
+  });
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  if (!response.ok) throw new Error(data?.error || `Agent LLM request failed (${response.status}).`);
+  return data;
+};
 const timelineCharacterAttachments = createTimelineCharacterAttachments({
   getProject: () => project,
   dispatch: updateProject,
@@ -140,7 +184,9 @@ const timelineCharacterAttachments = createTimelineCharacterAttachments({
 const timelineDiffs = createTimelineDiffs({getProject: () => project, dispatch: updateProject});
 const useFakeTimelineAdapter = new URLSearchParams(globalThis.location.search).get('timelineAdapter') === 'fake';
 const timelineGenerationAdapter = useFakeTimelineAdapter
-  ? createFakeTimelineGenerationAdapter()
+  ? createFakeTimelineGenerationAdapter({
+    createId: (() => { let jobNumber = 0; const sessionKey = Math.random().toString(36).slice(2, 7); return () => `fake-timeline-job-${sessionKey}-${++jobNumber}`; })(),
+  })
   : createServerTimelineGenerationAdapter();
 const clipRegeneration = createClipRegenerationService({
   store: {getProject: () => project, dispatch: updateProject},
@@ -148,12 +194,30 @@ const clipRegeneration = createClipRegenerationService({
   adapter: timelineGenerationAdapter,
 });
 let regenerationPollTimer = null;
+const timelineAddGeneration = createTimelineGenerationController({
+  adapter: timelineGenerationAdapter,
+  onCompleted: async (output, job) => {
+    const landed = landGenerationResult({
+      store: {getProject: () => project, dispatch: updateProject},
+      diffs: timelineDiffs,
+      job: {jobId: job.jobId, input: job.input},
+      output,
+    });
+    if (landed.diffId) timelineDiffs.accept(landed.diffId);
+    await persistGeneratedAsset(landed.assetId);
+  },
+});
+let generateVideoPollTimer = null;
+let modelCatalogPromise = null;
+const autoApplyRegenerationJobIds = new Set();
 const useFakeCharacterAdapter = new URLSearchParams(globalThis.location.search).get('characterAdapter') === 'fake';
 const characterGenerationAdapter = useFakeCharacterAdapter
   ? createFakeCharacterGenerationAdapter()
   : createServerCharacterGenerationAdapter({
     resolveReferenceUrl: (assetId) => project.mediaAssets.find((asset) => asset.id === assetId)?.url || null,
+    toUploadableUrl,
   });
+let modelInputsPromise = null;
 let characterGenerationController = null;
 let characterPollTimer = null;
 
@@ -180,7 +244,13 @@ const icons = {
   audio: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 3.5v7.2M9.5 3.5 13 2v7.2M9.5 10.7a2.2 2.2 0 1 1-2.2-2.2 2.2 2.2 0 0 1 2.2 2.2Zm3.5-1.5a2.2 2.2 0 1 1-2.2-2.2 2.2 2.2 0 0 1 2.2 2.2Z"/></svg>',
   magic: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m9.6 2.2.6 2.2 2.2.6-2.2.6-.6 2.2L9 5.6l-2.2-.6L9 4.4l.6-2.2ZM4.2 7.5l.8 2.7 2.7.8-2.7.8-.8 2.7-.8-2.7-2.7-.8 2.7-.8.8-2.7ZM12.5 10l.4 1.4 1.4.4-1.4.4-.4 1.4-.4-1.4-1.4-.4 1.4-.4.4-1.4Z"/></svg>',
   close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  robot: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="5.5" width="10" height="7" rx="1.5"/><path d="M8 5.5V3m0 0h2M5.5 12.5V14m5-1.5V14"/><circle cx="6" cy="8.5" r=".9"/><circle cx="10" cy="8.5" r=".9"/><path d="M6.5 10.8h3"/></svg>',
+  stop: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="4.5" y="4.5" width="7" height="7" rx="1"/></svg>',
   more: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12.5" cy="8" r="1"/></svg>',
+  volume: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2v3.6h2.3L8.2 12.6V3.4L4.8 6.2H2.5Z"/><path d="M10.5 5.6a3.4 3.4 0 0 1 0 4.8M12.4 4a6 6 0 0 1 0 8"/></svg>',
+  volumeMuted: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6.2v3.6h2.3L8.2 12.6V3.4L4.8 6.2H2.5Z"/><path d="m10.5 6.2 3.4 3.6m0-3.6-3.4 3.6"/></svg>',
+  fullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10"/></svg>',
+  exitFullscreen: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6H6V2.5M13.5 6H10V2.5M2.5 10H6v3.5M13.5 10H10v3.5"/></svg>',
 };
 
 const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({
@@ -269,6 +339,8 @@ const renderApp = () => {
       </header>
 
       <main class="workspace ${state.mediaPanelOpen ? '' : 'media-panel-hidden'} ${state.agentPaneOpen ? 'agent-pane-open' : ''}">
+        ${renderAgentRail()}
+        ${renderAgentRunCard()}
         <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'}">
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
@@ -296,7 +368,7 @@ const renderApp = () => {
             <div class="player-controls">
               <div class="player-time"><span id="playerCurrent">${formatTime(state.currentTime)}</span><span class="muted"> / </span><span id="playerDuration">${formatTime(playbackDuration())}</span></div>
               <div class="player-buttons"><button class="round-control" data-action="step-back" title="Previous frame" type="button">${icons.skipBack}</button><button class="play-control" data-action="toggle-play" title="${state.isPlaying ? 'Pause' : 'Play'}" type="button">${state.isPlaying ? icons.pause : icons.play}</button><button class="round-control" data-action="step-forward" title="Next frame" type="button">${icons.skipForward}</button></div>
-              <div class="player-right" aria-live="polite"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span data-player-status>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button" aria-label="Player options">${icons.more}</button></div>
+              <div class="player-right" aria-live="polite"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span data-player-status>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><div class="volume-control"><button class="toolbar-button" data-action="toggle-mute" title="${state.playerVolume === 0 ? 'Unmute' : 'Mute'}" aria-label="${state.playerVolume === 0 ? 'Unmute' : 'Mute'}" type="button">${state.playerVolume === 0 ? icons.volumeMuted : icons.volume}</button><input id="playerVolume" type="range" min="0" max="1" step="0.01" value="${state.playerVolume}" aria-label="Volume" /></div><button class="toolbar-button" data-action="toggle-fullscreen" title="${document.fullscreenElement ? 'Exit full screen' : 'Full screen'}" aria-label="${document.fullscreenElement ? 'Exit full screen' : 'Full screen'}" type="button">${document.fullscreenElement ? icons.exitFullscreen : icons.fullscreen}</button><button class="toolbar-button" type="button" aria-label="Player options">${icons.more}</button></div>
             </div>
           </div>
           ${renderContextPanel()}
@@ -309,12 +381,17 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
-    ${state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : ''}
+    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : ''}
   `;
 
   bindEvents();
   state.previewPlaybackSignature = null;
   syncPreview(true);
+  // Re-rendering replaces the fullscreen element; re-enter fullscreen on the
+  // fresh preview while the triggering user gesture is still active.
+  if (document.fullscreenElement && !app.contains(document.fullscreenElement)) {
+    app.querySelector('.preview-wrap')?.requestFullscreen?.().catch(() => {});
+  }
 };
 
 const renderMediaPanel = () => `
@@ -542,6 +619,124 @@ const renderAgentPane = () => {
       : `<span class="agent-result-missing">Frame ${escapeHtml(id)} is indexed in the local video catalog.</span>`;
   }).join('');
   return `<aside class="agent-pane ${state.agentPaneOpen ? '' : 'is-hidden'}" aria-label="Agent workspace"><div class="agent-pane-head"><div><span class="eyebrow">PROJECT AGENT</span><h2>Agent</h2></div><button class="small-icon-button" data-action="toggle-agent-pane" aria-label="Close agent" type="button">${icons.close}</button></div><div class="agent-messages">${workspace.messages.length ? workspace.messages.map((message) => `<article class="agent-message ${message.role}"><span>${escapeHtml(message.role)}</span><p>${escapeHtml(message.text)}</p>${message.resultIds.length || message.frameIds?.length ? `<div class="agent-results">${message.resultIds.map((id) => { const entry = entryById.get(id); return entry ? `<button type="button" class="agent-result" data-agent-result-id="${escapeHtml(id)}"><strong>${escapeHtml(entry.description || entry.text)}</strong><small>${escapeHtml(entry.type)}${entry.start !== undefined ? ` · ${formatTime(entry.start)}` : ''}</small></button>` : ''; }).join('')}${renderFrameResults(message.frameIds)}</div>` : ''}</article>`).join('') : '<div class="agent-empty"><span>${icons.magic}</span><p>Ask about shots, characters, scenes, or provenance.</p><small>Search is grounded in this project’s accepted timeline and local video-frame annotations.</small></div>'}</div><form class="agent-form" data-agent-form><textarea name="query" rows="3" placeholder="Find the shot where the fox jumps…" required></textarea><button class="button primary" type="submit">Search project</button></form></aside>`;
+};
+
+const RUN_STATUS_LABELS = {running: 'Running', completed: 'Done', failed: 'Failed', cancelled: 'Stopped'};
+
+const renderAgentPromptModal = () => {
+  const status = state.agentLlmStatus;
+  const unconfigured = status && !status.configured;
+  return `
+    <div class="modal-backdrop" data-action="close-agent-prompt">
+      <section class="agent-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="agentPromptTitle">
+        <div class="modal-head"><div><span class="eyebrow">TIMELINE AGENT</span><h2 id="agentPromptTitle">What should the agent do?</h2></div><button class="small-icon-button" data-action="close-agent-prompt" aria-label="Close" type="button">${icons.close}</button></div>
+        <form class="agent-prompt-form" data-agent-prompt-form>
+          <textarea id="agentPromptInput" name="prompt" rows="3" placeholder="Trim the dead air at the start, then tighten the middle section…" required ${unconfigured ? 'disabled' : ''}>${escapeHtml(state.agentPromptDraft)}</textarea>
+          ${unconfigured ? '<p class="agent-prompt-note error">Set LLM_BASE_URL (and LLM_API_KEY) in .env, then restart the server.</p>' : '<p class="agent-prompt-note">Enter to launch · Shift+Enter for a new line</p>'}
+        </form>
+      </section>
+    </div>
+  `;
+};
+
+const renderAgentStep = (step, index, steps) => {
+  const isLast = index === steps.length - 1;
+  const label = step.type === 'tool' ? step.name : step.type === 'thought' ? 'Thought' : 'Summary';
+  const detail = step.type === 'tool'
+    ? `${step.args && Object.keys(step.args).length ? `<code>${escapeHtml(JSON.stringify(step.args))}</code>` : ''}${step.result !== undefined ? `<details><summary>${step.status === 'error' ? 'Error' : 'Result'}</summary><code>${escapeHtml(JSON.stringify(step.result).slice(0, 400))}</code></details>` : ''}`
+    : `<p>${escapeHtml(step.text || '')}</p>`;
+  return `<li class="agent-step ${step.status}"><span class="agent-step-marker"><span class="agent-step-dot"></span>${isLast ? '' : '<span class="agent-step-line"></span>'}</span><div class="agent-step-body"><strong>${escapeHtml(label)}</strong>${detail}</div></li>`;
+};
+
+const renderAgentRunCard = () => {
+  const run = agentRuns.get(state.expandedAgentRunId);
+  if (!run) return '';
+  return `
+    <section class="agent-run-card" aria-label="Agent run detail">
+      <div class="agent-run-head">
+        <div><span class="eyebrow">AGENT RUN · ${escapeHtml(RUN_STATUS_LABELS[run.status] || run.status)}</span><h2>${escapeHtml(run.prompt)}</h2></div>
+        <div class="agent-run-head-actions">
+          ${run.status === 'running' ? `<button class="toolbar-button danger" data-action="stop-agent-run" type="button">${icons.stop} Stop</button>` : ''}
+          <button class="small-icon-button" data-action="close-agent-run-card" aria-label="Close run detail" type="button">${icons.close}</button>
+        </div>
+      </div>
+      <ol class="agent-stepper" data-agent-stepper>
+        ${run.steps.length ? run.steps.map((step, index) => renderAgentStep(step, index, run.steps)).join('') : `<li class="agent-step running"><span class="agent-step-marker"><span class="agent-step-dot"></span></span><div class="agent-step-body"><strong>Starting…</strong></div></li>`}
+        ${run.status === 'failed' && run.error ? `<li class="agent-step error"><span class="agent-step-marker"><span class="agent-step-dot"></span></span><div class="agent-step-body"><strong>Failed</strong><p>${escapeHtml(run.error)}</p></div></li>` : ''}
+        ${run.status === 'cancelled' ? '<li class="agent-step error"><span class="agent-step-marker"><span class="agent-step-dot"></span></span><div class="agent-step-body"><strong>Stopped by you</strong></div></li>' : ''}
+      </ol>
+    </section>
+  `;
+};
+
+const renderAgentRail = () => {
+  const runs = agentRuns.list();
+  return `
+    <aside class="agent-rail" aria-label="Editing agents">
+      ${runs.length
+        ? runs.map((run) => `<button class="agent-rail-item ${run.id === state.expandedAgentRunId ? 'active' : ''}" data-agent-run-id="${escapeHtml(run.id)}" title="${escapeHtml(run.prompt)}" aria-label="Agent: ${escapeHtml(run.prompt)}" type="button">${icons.robot}<span class="agent-status-dot ${run.status}"></span></button>`).join('')
+        : '<div class="agent-rail-empty">no active agents</div>'}
+    </aside>
+  `;
+};
+
+const openAgentPrompt = () => {
+  state.agentPromptModalOpen = true;
+  renderApp();
+  if (!state.agentLlmStatus) {
+    fetch('/api/agent/status')
+      .then((response) => response.json())
+      .then((status) => { state.agentLlmStatus = status; renderApp(); })
+      .catch(() => { state.agentLlmStatus = {configured: false}; renderApp(); });
+  }
+};
+
+const closeAgentPrompt = () => {
+  state.agentPromptModalOpen = false;
+  renderApp();
+};
+
+const startEditorAgent = (prompt) => {
+  const run = agentRuns.create({prompt});
+  const controller = new AbortController();
+  agentRuns.registerAbort(run.id, controller);
+  state.expandedAgentRunId = run.id;
+  state.agentStepperScrollTop = 0;
+  renderApp();
+  runEditorAgent({
+    prompt,
+    tools: agentTools,
+    callLlm,
+    signal: controller.signal,
+    onStep: (step, existing) => {
+      const record = existing
+        ? agentRuns.updateStep(run.id, existing.id, step)
+        : agentRuns.appendStep(run.id, step);
+      renderApp();
+      return record;
+    },
+  })
+    .then((result) => {
+      agentRuns.setStatus(run.id, 'completed', {summary: result.summary});
+      if (result.summary) agentWorkspace.addMessage({role: 'assistant', text: `Editing agent: ${result.summary}`});
+    })
+    .catch((error) => {
+      agentRuns.setStatus(
+        run.id,
+        error instanceof AgentCancelledError ? 'cancelled' : 'failed',
+        {error: error instanceof Error ? error.message : String(error)},
+      );
+    })
+    .finally(() => renderApp());
+};
+
+const submitAgentPrompt = (event) => {
+  event.preventDefault();
+  const prompt = state.agentPromptDraft.trim();
+  if (!prompt || (state.agentLlmStatus && !state.agentLlmStatus.configured)) return;
+  state.agentPromptModalOpen = false;
+  state.agentPromptDraft = '';
+  startEditorAgent(prompt);
 };
 
 const renderInspectorCharacters = (clip) => {
@@ -776,7 +971,7 @@ const renderTimeline = () => {
     <button class="toolbar-button review-nav" data-action="next-diff" type="button" aria-label="Next proposal" ${reviewPosition >= pendingCount ? 'disabled' : ''}>›</button>` : '';
   const trackMenu = state.trackMenuOpen ? `<div class="track-menu" role="menu"><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="video"><span class="track-color video"></span>Video</button><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="audio"><span class="track-color audio"></span>Audio</button></div>` : '';
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><button class="toolbar-button agent-launch" data-action="open-agent-prompt" title="AI editing agent" aria-label="Launch AI editing agent" type="button">${icons.robot} Agent</button><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
     <div class="timeline-body">
       <div class="track-labels"><div class="ruler-spacer"></div>${state.tracks.map((track) => `<div class="track-label ${track.kind}-label"><span class="track-color ${track.kind}"></span><div><strong>${escapeHtml(track.name)}</strong><span>${escapeHtml(track.id)}</span></div></div>`).join('')}</div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="height:${contentHeight}px;width:${timelineWidth}px">
@@ -784,7 +979,8 @@ const renderTimeline = () => {
         ${state.tracks.map((track) => {
           const clips = state.clips.filter((clip) => clip.trackId === track.id);
           const trackGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === track.id);
-          const content = `${clips.map(renderClip).join('')}${trackGhosts.map(renderGhostClip).join('')}`;
+          const generating = pendingAddGeneration();
+          const content = `${clips.map(renderClip).join('')}${trackGhosts.map(renderGhostClip).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating) : ''}`;
           return `<div class="track-lane ${track.kind}-lane" data-track-id="${escapeHtml(track.id)}">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
         }).join('')}
         <div class="timeline-drag-guide" id="timelineDragGuide" hidden></div>
@@ -801,10 +997,17 @@ const renderClip = (clip) => {
   const frame = state.selectedFrameResult;
   const sourceStart = clip.sourceStart || 0;
   const frameSelected = frame?.videoAssetId === clip.assetId && frame.time >= sourceStart && frame.time <= sourceStart + clip.duration;
-  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px">${renderClipContents(media, clip.duration)}</div>`;
+  const regenerating = clipRegeneration.listJobs(clip.id).some((job) => job.status === 'queued' || job.status === 'running');
+  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px">${renderClipContents(media, clip.duration)}</div>`;
 };
 
 const renderClipContents = (media, duration) => `<div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div>`;
+
+const renderGenerationPendingClip = (input) => {
+  const duration = input.duration || 5;
+  const width = Math.max(duration * scale(), 66);
+  return `<div class="timeline-clip video generation-pending" style="left:${(input.start || 0) * scale()}px;width:${width}px" aria-label="Generating video"><div class="clip-copy"><strong>Generating…</strong><span>${escapeHtml(input.prompt.slice(0, 48))}</span></div></div>`;
+};
 
 const renderGhostClip = (ghost) => {
   const clip = ghost.clip;
@@ -816,6 +1019,35 @@ const renderGhostClip = (ghost) => {
   const label = `${statusLabel} ${ghost.type} ${roleLabel}: ${ghost.summary}`;
   const draggable = ghost.role !== 'origin' && ghost.type !== 'remove';
   return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" data-ghost-status="${escapeHtml(ghost.status)}" data-ghost-role="${escapeHtml(ghost.role)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}" aria-pressed="${ghost.key === state.selectedGhostKey}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${statusLabel} · ${formatTime(clip.duration)}</small></button>`;
+};
+
+const renderGenerateVideoModal = () => {
+  const modal = state.generateVideoModal;
+  if (!modal) return '';
+  const model = modalModel(modal);
+  const busy = modal.status === 'submitting' || modal.status === 'generating';
+  return `
+    <div class="modal-backdrop" data-action="close-generate-modal">
+      <section class="generate-modal" role="dialog" aria-modal="true" aria-labelledby="generateVideoTitle">
+        <div class="modal-head"><div><span class="eyebrow">TIMELINE</span><h2 id="generateVideoTitle">${modal.mode === 'regenerate' ? 'Regenerate clip' : 'Generate video'}</h2></div><button class="small-icon-button" data-action="close-generate-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <form class="generate-form" data-generate-video-form>
+          <label for="generateVideoPrompt">Prompt</label>
+          <textarea id="generateVideoPrompt" rows="3" placeholder="Describe the shot…" required ${busy ? 'disabled' : ''}>${escapeHtml(modal.prompt)}</textarea>
+          <label for="generateVideoModel">Model</label>
+          ${modal.status === 'loading-models'
+            ? '<p class="generate-note">Loading model catalog…</p>'
+            : `<select id="generateVideoModel" ${busy ? 'disabled' : ''}>${modal.models.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === modal.modelId ? 'selected' : ''}>${escapeHtml(modelOptionLabel(entry))}</option>`).join('')}</select>`}
+          ${model?.category.includes('video') ? `
+          <label for="generateVideoDuration">Duration</label>
+          <select id="generateVideoDuration" ${busy ? 'disabled' : ''}><option value="">Model default</option>${GENERATION_DURATIONS.map((seconds) => `<option value="${seconds}" ${modal.duration === seconds ? 'selected' : ''}>${seconds}s</option>`).join('')}</select>` : ''}
+          ${model ? `<p class="generate-note">${escapeHtml(generateCostLine(model, modal.duration))}</p>` : ''}
+          <p class="generate-note">${modal.mode === 'regenerate' ? 'Replaces the clip' : 'Insert'} on ${escapeHtml(modal.trackId)} at ${formatTime(modal.start)}</p>
+          ${modal.error ? `<p class="generate-error">${escapeHtml(modal.error)}</p>` : ''}
+          <div class="generate-actions"><button class="button ghost" data-action="close-generate-modal" type="button">Cancel</button><button class="button primary" type="submit" ${busy || modal.status === 'loading-models' ? 'disabled' : ''}>${busy ? 'Generating…' : modal.mode === 'regenerate' ? 'Regenerate' : 'Generate'}</button></div>
+        </form>
+      </section>
+    </div>
+  `;
 };
 
 const bindEvents = () => {
@@ -836,6 +1068,33 @@ const bindEvents = () => {
   app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
   app.querySelectorAll('[data-action="toggle-agent-pane"]').forEach((button) => button.addEventListener('click', () => { state.agentPaneOpen = !state.agentPaneOpen; renderApp(); }));
   app.querySelector('[data-agent-form]')?.addEventListener('submit', submitAgentQuery);
+  app.querySelectorAll('[data-action="open-agent-prompt"]').forEach((button) => button.addEventListener('click', openAgentPrompt));
+  app.querySelectorAll('[data-action="close-agent-prompt"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeAgentPrompt(); }));
+  app.querySelector('[data-agent-prompt-form]')?.addEventListener('submit', submitAgentPrompt);
+  app.querySelector('#agentPromptInput')?.addEventListener('input', (event) => { state.agentPromptDraft = event.target.value; });
+  app.querySelector('#agentPromptInput')?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      event.target.closest('form')?.requestSubmit();
+    }
+  });
+  if (state.agentPromptModalOpen) app.querySelector('#agentPromptInput')?.focus();
+  app.querySelectorAll('[data-agent-run-id]').forEach((button) => button.addEventListener('click', () => {
+    const runId = button.dataset.agentRunId;
+    state.expandedAgentRunId = state.expandedAgentRunId === runId ? null : runId;
+    state.agentStepperScrollTop = 0;
+    renderApp();
+  }));
+  app.querySelector('[data-action="close-agent-run-card"]')?.addEventListener('click', () => { state.expandedAgentRunId = null; renderApp(); });
+  app.querySelector('[data-action="stop-agent-run"]')?.addEventListener('click', () => { if (state.expandedAgentRunId) agentRuns.cancel(state.expandedAgentRunId); });
+  const agentStepper = app.querySelector('[data-agent-stepper]');
+  if (agentStepper) {
+    const run = agentRuns.get(state.expandedAgentRunId);
+    const nearBottom = state.agentStepperScrollTop >= agentStepper.scrollHeight - agentStepper.clientHeight - 40;
+    agentStepper.scrollTop = run?.status === 'running' && nearBottom ? agentStepper.scrollHeight : state.agentStepperScrollTop;
+    state.agentStepperScrollTop = agentStepper.scrollTop;
+    agentStepper.addEventListener('scroll', () => { state.agentStepperScrollTop = agentStepper.scrollTop; }, {passive: true});
+  }
   app.querySelector('[data-video-search-form]')?.addEventListener('submit', submitVideoSearch);
   app.querySelector('[data-script-title-form]')?.addEventListener('submit', saveScriptTitle);
   app.querySelector('[data-script-add-form]')?.addEventListener('submit', addScriptBeat);
@@ -849,6 +1108,14 @@ const bindEvents = () => {
   app.querySelectorAll('[data-style-id]').forEach((button) => button.addEventListener('click', () => openStyle(button.dataset.styleId)));
   app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
   app.querySelectorAll('[data-action="close-style-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleModal(); }));
+  app.querySelectorAll('[data-action="close-generate-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeGenerateVideoModal(); }));
+  app.querySelector('[data-generate-video-form]')?.addEventListener('submit', submitGenerateVideoForm);
+  attachPromptMentions('#generateVideoPrompt');
+  attachPromptMentions('#regenerationPrompt');
+  attachPromptMentions('#composerPrompt');
+  app.querySelector('#generateVideoPrompt')?.addEventListener('input', (event) => { if (state.generateVideoModal) state.generateVideoModal.prompt = event.target.value; });
+  app.querySelector('#generateVideoModel')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.modelId = event.target.value; renderApp(); } });
+  app.querySelector('#generateVideoDuration')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.duration = event.target.value ? Number(event.target.value) : null; renderApp(); } });
   app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
   app.querySelector('[data-style-name-form]')?.addEventListener('submit', renameStyle);
   app.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
@@ -865,6 +1132,37 @@ const bindEvents = () => {
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragover', (event) => { event.preventDefault(); event.currentTarget.classList.add('dragging'); });
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragleave', (event) => event.currentTarget.classList.remove('dragging'));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('drop', (event) => { event.preventDefault(); event.currentTarget.classList.remove('dragging'); addFiles([...event.dataTransfer.files]); });
+  app.querySelector('[data-dropzone="media"]')?.closest('.sidebar')?.addEventListener('contextmenu', (event) => {
+    if (event.target.closest('input, textarea, select')) return;
+    const card = event.target.closest('[data-media-id]');
+    if (card) {
+      showContextMenu(event, [{label: 'Remove', danger: true, onSelect: () => removeMedia(card.dataset.mediaId)}]);
+    } else {
+      showContextMenu(event, [{label: 'Import media…', onSelect: () => fileInput.click()}]);
+    }
+  });
+  app.querySelector('#timelineContent')?.addEventListener('contextmenu', (event) => {
+    const clipElement = event.target.closest('[data-clip-id]');
+    if (clipElement) {
+      const clipId = clipElement.dataset.clipId;
+      const clip = clipById(clipId);
+      const generated = Boolean(clip?.provenance?.prompt && clip?.provenance?.modelId);
+      showContextMenu(event, [
+        ...(generated ? [
+          {label: 'Regenerate clip', onSelect: () => regenerateClipFromMenu(clipId)},
+          {label: 'Modify prompt + regen', onSelect: () => openGenerateVideoModal({mode: 'regenerate', clipId})},
+        ] : []),
+        {label: generated ? 'Delete' : 'Remove', danger: true, onSelect: () => removeClip(clipId)},
+      ]);
+      return;
+    }
+    if (event.target.closest('.timeline-ghost, .generation-pending')) return;
+    const lane = event.target.closest('.track-lane');
+    if (!lane?.classList.contains('video-lane')) return;
+    const trackId = lane.dataset.trackId;
+    const start = timeFromClientX(event.clientX);
+    showContextMenu(event, [{label: 'Generate video', onSelect: () => openGenerateVideoModal({trackId, start})}]);
+  });
   app.querySelectorAll('[data-media-id]').forEach((element) => {
     if (element.draggable) {
       element.addEventListener('dragstart', (event) => {
@@ -926,6 +1224,19 @@ const bindEvents = () => {
     button.addEventListener('click', () => addTrack(button.dataset.trackKind));
   });
   app.querySelector('[data-action="toggle-play"]')?.addEventListener('click', togglePlay);
+  app.querySelector('[data-action="toggle-mute"]')?.addEventListener('click', togglePlayerMute);
+  app.querySelector('[data-action="toggle-fullscreen"]')?.addEventListener('click', togglePreviewFullscreen);
+  app.querySelector('#playerVolume')?.addEventListener('input', (event) => {
+    state.playerVolume = Number(event.target.value);
+    if (state.playerVolume > 0) state.lastAudibleVolume = state.playerVolume;
+    applyPlayerVolume();
+    const muteButton = app.querySelector('[data-action="toggle-mute"]');
+    if (muteButton) {
+      muteButton.innerHTML = state.playerVolume === 0 ? icons.volumeMuted : icons.volume;
+      muteButton.title = state.playerVolume === 0 ? 'Unmute' : 'Mute';
+      muteButton.setAttribute('aria-label', muteButton.title);
+    }
+  });
   app.querySelector('[data-action="step-back"]')?.addEventListener('click', () => seekTo(state.currentTime - 1 / 30));
   app.querySelector('[data-action="step-forward"]')?.addEventListener('click', () => seekTo(state.currentTime + 1 / 30));
   app.querySelector('[data-action="zoom-in"]')?.addEventListener('click', () => { state.zoom = Math.min(2, state.zoom + 0.1); renderApp(); });
@@ -952,12 +1263,42 @@ const bindEvents = () => {
   app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
   app.querySelector('[data-action="export"]')?.addEventListener('click', () => showToast('Export will be connected after the composition pipeline is defined.'));
+  if (!bindEvents.fullscreenHandlerBound) {
+    document.addEventListener('fullscreenchange', () => {
+      const button = app.querySelector('[data-action="toggle-fullscreen"]');
+      if (!button) return;
+      const active = Boolean(document.fullscreenElement);
+      button.innerHTML = active ? icons.exitFullscreen : icons.fullscreen;
+      button.title = active ? 'Exit full screen' : 'Full screen';
+      button.setAttribute('aria-label', button.title);
+    });
+    bindEvents.fullscreenHandlerBound = true;
+  }
   if (!bindEvents.escapeReviewHandlerBound) {
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && state.previewDiffId) {
+      if (event.key !== 'Escape') return;
+      if (state.previewDiffId) {
         event.preventDefault();
         event.stopPropagation();
         exitProposalPreview();
+        return;
+      }
+      if (state.agentPromptModalOpen) {
+        event.preventDefault();
+        closeAgentPrompt();
+      } else if (state.generateVideoModal) {
+        event.preventDefault();
+        closeGenerateVideoModal();
+      } else if (state.isCharacterModalOpen) {
+        event.preventDefault();
+        closeCharacterModal();
+      } else if (state.isStyleModalOpen) {
+        event.preventDefault();
+        closeStyleModal();
+      } else if (state.expandedAgentRunId) {
+        event.preventDefault();
+        state.expandedAgentRunId = null;
+        renderApp();
       }
     });
     bindEvents.escapeReviewHandlerBound = true;
@@ -1113,11 +1454,20 @@ const composerInputFromForm = () => {
   const form = app.querySelector('[data-character-composer-form]');
   if (!form) throw new Error('Character composer is unavailable.');
   const data = new FormData(form);
+  const prompt = data.get('prompt');
+  const {resolved} = resolveMentionedVersions({
+    text: typeof prompt === 'string' ? prompt : '',
+    mentionMap: state.promptMentionMap,
+    project,
+  });
+  const mentionedSheetAssetIds = resolved
+    .filter((entry) => entry.characterId !== state.selectedCharacterId && entry.sheetAssetId)
+    .map((entry) => entry.sheetAssetId);
   return normalizeCharacterGenerationInput({
     name: data.get('name'),
-    prompt: data.get('prompt'),
+    prompt,
     styleNotes: data.get('styleNotes'),
-    referenceAssetIds: data.getAll('referenceAssetIds'),
+    referenceAssetIds: [...data.getAll('referenceAssetIds'), ...mentionedSheetAssetIds],
   });
 };
 
@@ -1233,9 +1583,13 @@ const submitClipRegeneration = async (event) => {
   const clip = clipById(state.selectedClipId);
   if (!clip) return;
   try {
+    const parsed = parseRegenerationForm();
+    const mention = await buildMentionPayload({prompt: parsed.prompt, modelId: parsed.modelId});
     await clipRegeneration.regenerateClip({
       clipId: clip.id,
-      ...parseRegenerationForm(),
+      ...parsed,
+      prompt: mention.prompt,
+      referenceImageUrls: mention.referenceImageUrls,
       characterVersionIds: clip.provenance.characterVersionIds,
     });
     state.regenerationEditorClipId = null;
@@ -1276,6 +1630,23 @@ const scheduleRegenerationPoll = () => {
 const pollRegenerationJobs = async () => {
   const activeJobs = clipRegeneration.listJobs().filter((job) => job.status === 'queued' || job.status === 'running');
   await Promise.all(activeJobs.map((job) => clipRegeneration.poll(job.jobId)));
+  for (const job of clipRegeneration.listJobs()) {
+    if (!autoApplyRegenerationJobIds.has(job.jobId)) continue;
+    if (job.status === 'completed' && !job.used) {
+      autoApplyRegenerationJobIds.delete(job.jobId);
+      try {
+        const landed = clipRegeneration.useCandidate(job.jobId);
+        if (landed.diffId) timelineDiffs.accept(landed.diffId);
+        await persistGeneratedAsset(landed.assetId);
+        showToast('Clip regenerated.');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error));
+      }
+    } else if (job.status === 'failed') {
+      autoApplyRegenerationJobIds.delete(job.jobId);
+      showToast(job.error || 'Clip regeneration failed.');
+    }
+  }
   renderApp();
   if (clipRegeneration.listJobs().some((job) => job.status === 'queued' || job.status === 'running')) {
     scheduleRegenerationPoll();
@@ -1757,15 +2128,276 @@ const removeMedia = (mediaId) => {
   renderApp();
 };
 
-const deleteSelectedClip = () => {
-  const clipId = state.selectedClipId;
+const removeClip = (clipId) => {
   if (!clipId || !clipById(clipId)) return false;
   const result = updateProject({type: 'clip/remove', clipId});
   if (!result.changed) return false;
-  state.selectedClipId = null;
+  if (state.selectedClipId === clipId) state.selectedClipId = null;
   if (state.regenerationEditorClipId === clipId) state.regenerationEditorClipId = null;
   renderApp();
   return true;
+};
+
+const deleteSelectedClip = () => removeClip(state.selectedClipId);
+
+const GENERATION_DURATIONS = [4, 5, 6, 8, 10, 12];
+
+const loadModelCatalog = () => {
+  modelCatalogPromise ||= (async () => {
+    let records = [];
+    try { records = await projectDatabase.loadModelPricing(); } catch {}
+    if (!records.length) {
+      const response = await fetch('/fal-model-pricing.json');
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || 'Model catalog is unavailable.');
+      records = payload.records || [];
+      void projectDatabase.replaceModelPricing(records).catch(() => {});
+    }
+    const rank = (model) => model.category === 'text-to-video' ? 0 : model.category === 'image-to-video' ? 1 : model.category.includes('video') ? 2 : 3;
+    return records.map((record) => {
+      const metadata = record.model?.metadata || {};
+      const price = (Array.isArray(record.prices) ? record.prices : [])[0] || {};
+      return {
+        id: record.endpointId || record.id,
+        name: metadata.display_name || record.endpointId || record.id,
+        category: metadata.category || 'unknown',
+        tags: Array.isArray(metadata.tags) ? metadata.tags.map(String) : [],
+        unitPrice: Number.isFinite(price.unit_price) ? price.unit_price : null,
+        unit: price.unit || null,
+      };
+    }).sort((a, b) => rank(a) - rank(b) || a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+  })();
+  return modelCatalogPromise;
+};
+
+const modalModel = (modal) => modal?.models.find((entry) => entry.id === modal.modelId) || null;
+
+const loadModelInputs = () => {
+  modelInputsPromise ||= fetch('/fal-model-inputs.json')
+    .then((response) => response.ok ? response.json() : {})
+    .then((payload) => payload.models || {})
+    .catch(() => { modelInputsPromise = null; return {}; });
+  return modelInputsPromise;
+};
+
+const attachPromptMentions = (selector) => {
+  const textarea = app.querySelector(selector);
+  if (!textarea) return;
+  attachMentionAutocomplete(textarea, {
+    getCharacters: () => project.characters,
+    onInsert: ({characterId, name}) => { state.promptMentionMap[name] = characterId; },
+  });
+};
+
+const buildMentionPayload = async ({prompt, modelId}) => {
+  const {resolved, unresolved} = resolveMentionedVersions({
+    text: prompt,
+    mentionMap: state.promptMentionMap,
+    project,
+  });
+  if (unresolved.length) {
+    showToast(`No sheet versions yet for ${unresolved.map((entry) => entry.name).join(', ')} — mention kept as plain text.`);
+  }
+  if (!resolved.length) return {prompt, referenceImageUrls: [], characterVersionIds: []};
+  const expandedPrompt = expandMentionPrompt({text: prompt, resolved});
+  const imageInput = imageInputFor(modelId, await loadModelInputs());
+  let referenceImageUrls = [];
+  if (imageInput) {
+    const urls = await Promise.all(resolved.map(async (entry) => {
+      const url = project.mediaAssets.find((asset) => asset.id === entry.sheetAssetId)?.url || null;
+      try {
+        return await toUploadableUrl(url);
+      } catch (error) {
+        showToast(`${entry.characterName}: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    }));
+    referenceImageUrls = urls.filter(Boolean);
+    if (!imageInput.isArray) referenceImageUrls = referenceImageUrls.slice(0, 1);
+  } else {
+    showToast('This model is text-only — using character descriptions without the sprite sheet.');
+  }
+  return {
+    prompt: expandedPrompt,
+    referenceImageUrls,
+    characterVersionIds: resolved.map((entry) => entry.versionId),
+  };
+};
+
+const persistGeneratedAsset = async (assetId) => {
+  const asset = project.mediaAssets.find((entry) => entry.id === assetId);
+  if (!asset?.url || asset.url.startsWith('blob:') || asset.url.startsWith('data:')) return;
+  try {
+    const response = await fetch(asset.url);
+    if (!response.ok) throw new Error(`Asset download failed (${response.status}).`);
+    const blob = await response.blob();
+    await projectDatabase.putAsset(assetId, blob);
+    updateProject({type: 'asset/update', assetId, patch: {url: URL.createObjectURL(blob), size: blob.size}});
+  } catch {
+    // Keep the remote URL when the download fails; playback still works while online.
+  }
+};
+
+const pendingAddGeneration = () => {
+  const job = timelineAddGeneration.snapshot();
+  return ['queued', 'running', 'retrying'].includes(job.status) && job.input ? job.input : null;
+};
+
+const modelOptionLabel = (model) => {
+  const tags = model.tags.length ? ` · ${model.tags.slice(0, 3).join(', ')}` : '';
+  const price = model.unitPrice !== null ? ` — $${model.unitPrice}/${model.unit || 'run'}` : '';
+  return `${model.name} · ${model.category}${tags}${price}`;
+};
+
+const generateCostLine = (model, duration) => {
+  if (model.unitPrice === null) return `${model.category} · pricing unavailable`;
+  const base = `$${model.unitPrice} per ${model.unit || 'run'}`;
+  if (model.unit === 'seconds' && duration) return `${base} · ≈ $${(model.unitPrice * duration).toFixed(2)} for ${duration}s`;
+  return base;
+};
+
+const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', clipId = null}) => {
+  const sourceClip = mode === 'regenerate' ? clipById(clipId) : null;
+  if (mode === 'regenerate' && !sourceClip?.provenance?.prompt) { showToast('Only generated clips can be regenerated.'); return; }
+  const provenance = sourceClip?.provenance || null;
+  state.generateVideoModal = {
+    mode,
+    clipId,
+    trackId: sourceClip?.trackId || trackId,
+    start: sourceClip?.start ?? start,
+    prompt: provenance?.prompt || '',
+    modelId: null,
+    models: [],
+    duration: provenance?.params?.duration ? Number(provenance.params.duration) || null : null,
+    status: 'loading-models',
+    error: null,
+  };
+  renderApp();
+  try {
+    const models = await loadModelCatalog();
+    const modal = state.generateVideoModal;
+    if (!modal) return;
+    modal.models = models;
+    if (provenance?.modelId) {
+      if (!models.some((entry) => entry.id === provenance.modelId)) {
+        modal.models = [{id: provenance.modelId, name: provenance.modelId, category: 'video (uncataloged)', tags: [], unitPrice: null, unit: null}, ...models];
+      }
+      modal.modelId = provenance.modelId;
+    } else {
+      modal.modelId = (models.find((entry) => entry.category === 'text-to-video') || models[0])?.id || null;
+    }
+    modal.status = 'idle';
+    renderApp();
+  } catch (error) {
+    modelCatalogPromise = null;
+    const modal = state.generateVideoModal;
+    if (!modal) return;
+    modal.status = 'idle';
+    modal.error = error instanceof Error ? error.message : String(error);
+    renderApp();
+  }
+};
+
+const closeGenerateVideoModal = () => {
+  state.generateVideoModal = null;
+  renderApp();
+};
+
+const regenerateClipFromMenu = async (clipId) => {
+  try {
+    const {jobId} = await clipRegeneration.rerollSeed(clipId);
+    autoApplyRegenerationJobIds.add(jobId);
+    showToast('Regenerating clip…');
+    renderApp();
+    scheduleRegenerationPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const submitGenerateVideoForm = async (event) => {
+  event.preventDefault();
+  const modal = state.generateVideoModal;
+  if (!modal || modal.status === 'submitting' || modal.status === 'generating') return;
+  const prompt = app.querySelector('#generateVideoPrompt')?.value.trim() || '';
+  if (!prompt || !modal.modelId) { showToast('A prompt and a model are required.'); return; }
+  const model = modalModel(modal);
+  modal.prompt = prompt;
+  modal.status = 'submitting';
+  modal.error = null;
+  renderApp();
+  if (modal.mode === 'regenerate') {
+    try {
+      const sourceClip = clipById(modal.clipId);
+      if (!sourceClip) throw new Error('The clip to regenerate no longer exists.');
+      const mention = await buildMentionPayload({prompt, modelId: modal.modelId});
+      const {jobId} = await clipRegeneration.regenerateClip({
+        clipId: modal.clipId,
+        prompt: mention.prompt,
+        referenceImageUrls: mention.referenceImageUrls,
+        modelId: modal.modelId,
+        ...(modal.duration ? {params: {...(sourceClip.provenance?.params || {}), duration: String(modal.duration)}} : {}),
+      });
+      autoApplyRegenerationJobIds.add(jobId);
+      state.generateVideoModal = null;
+      showToast('Regenerating clip…');
+      renderApp();
+      scheduleRegenerationPoll();
+    } catch (error) {
+      const openModal = state.generateVideoModal;
+      const message = error instanceof Error ? error.message : String(error);
+      if (openModal) { openModal.status = 'idle'; openModal.error = message; } else showToast(message);
+      renderApp();
+    }
+    return;
+  }
+  try {
+    const mention = await buildMentionPayload({prompt, modelId: modal.modelId});
+    const job = await timelineAddGeneration.submit({
+      operation: 'add',
+      prompt: mention.prompt,
+      referenceImageUrls: mention.referenceImageUrls,
+      characterVersionIds: mention.characterVersionIds,
+      modelId: modal.modelId,
+      trackId: modal.trackId,
+      start: modal.start,
+      sceneId: activeScene()?.id || null,
+      ...(modal.duration ? {duration: modal.duration, params: {duration: String(modal.duration)}} : {}),
+      ...(model?.unitPrice !== null && model ? {
+        unitPrice: model.unitPrice,
+        costUnit: model.unit || 'units',
+        costQuantity: model.unit === 'seconds' ? modal.duration || 5 : 1,
+      } : {}),
+    });
+    if (job.status === 'failed') throw new Error(job.error || 'Timeline generation failed.');
+    state.generateVideoModal = null;
+    showToast('Generating video… a ghost clip marks the spot.');
+    renderApp();
+    scheduleGenerateVideoPoll();
+  } catch (error) {
+    const openModal = state.generateVideoModal;
+    const message = error instanceof Error ? error.message : String(error);
+    if (openModal) { openModal.status = 'idle'; openModal.error = message; } else showToast(message);
+    renderApp();
+  }
+};
+
+const scheduleGenerateVideoPoll = () => {
+  clearTimeout(generateVideoPollTimer);
+  generateVideoPollTimer = setTimeout(pollGenerateVideoJob, 700);
+};
+
+const pollGenerateVideoJob = async () => {
+  const job = await timelineAddGeneration.poll();
+  if (job.status === 'completed') {
+    showToast('Generated clip added to the timeline and media bin.');
+    renderApp();
+  } else if (job.status === 'failed') {
+    showToast(job.error || 'Timeline generation failed.');
+    renderApp();
+  } else {
+    scheduleGenerateVideoPoll();
+  }
 };
 
 const attachCharacterToSelectedClip = () => {
@@ -1842,6 +2474,7 @@ const syncPreview = (forceSeek = false) => {
   shouldShow(image, visual?.media.kind === 'image');
   shouldShow(audioPreview, !visual && activeAudio.length > 0);
 
+  video.volume = state.playerVolume;
   if (visual?.media.kind === 'video') {
     const sourceChanged = video.dataset.clipId !== visual.clip.id || video.dataset.mediaId !== visual.media.id;
     if (sourceChanged) {
@@ -1883,6 +2516,7 @@ const syncPreview = (forceSeek = false) => {
       audioMix.append(element);
     }
     existingAudio.delete(clip.id);
+    element.volume = state.playerVolume;
     if (sourceChanged) {
       element.pause();
       element.src = media.url;
@@ -1921,6 +2555,31 @@ const updatePlaybackFrame = () => {
     return;
   }
   state.rafId = requestAnimationFrame(updatePlaybackFrame);
+};
+
+const applyPlayerVolume = () => {
+  app.querySelectorAll('#previewVideo, #previewAudioMix audio').forEach((element) => {
+    element.volume = state.playerVolume;
+  });
+};
+
+const togglePlayerMute = () => {
+  if (state.playerVolume === 0) {
+    state.playerVolume = state.lastAudibleVolume || 1;
+  } else {
+    state.lastAudibleVolume = state.playerVolume;
+    state.playerVolume = 0;
+  }
+  applyPlayerVolume();
+  renderApp();
+};
+
+const togglePreviewFullscreen = () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen?.().catch(() => {});
+  } else {
+    app.querySelector('.preview-wrap')?.requestFullscreen?.().catch(() => {});
+  }
 };
 
 const togglePlay = () => {
@@ -1982,11 +2641,41 @@ const showToast = (message) => {
   setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 220); }, 2600);
 };
 
+const closeContextMenu = () => document.querySelector('.context-menu')?.remove();
+
+const showContextMenu = (event, items) => {
+  event.preventDefault();
+  event.stopPropagation();
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'context-menu';
+  menu.setAttribute('role', 'menu');
+  items.forEach((item) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.setAttribute('role', 'menuitem');
+    if (item.danger) button.classList.add('danger');
+    button.textContent = item.label;
+    button.addEventListener('click', () => { closeContextMenu(); item.onSelect(); });
+    menu.append(button);
+  });
+  document.body.append(menu);
+  const rect = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(8, Math.min(event.clientX, window.innerWidth - rect.width - 8))}px`;
+  menu.style.top = `${Math.max(8, Math.min(event.clientY, window.innerHeight - rect.height - 8))}px`;
+};
+
+document.addEventListener('pointerdown', (event) => { if (!(event.target instanceof Element && event.target.closest('.context-menu'))) closeContextMenu(); });
+document.addEventListener('scroll', closeContextMenu, {capture: true, passive: true});
+window.addEventListener('resize', closeContextMenu);
+window.addEventListener('blur', closeContextMenu);
+
 fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
 const isKeyboardEditingTarget = (target) => target instanceof Element && Boolean(target.closest(
   'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
 ));
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') closeContextMenu();
   if (
     event.key === 'Backspace'
     && !event.defaultPrevented

@@ -76,6 +76,7 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
       params: overrides.params ?? clip.provenance.params,
       qualityTier: overrides.qualityTier ?? clip.provenance.qualityTier,
       qualitySettings: overrides.qualitySettings ?? clip.provenance.qualitySettings,
+      referenceImageUrls: overrides.referenceImageUrls,
       characterVersionIds,
       styleVersionIds,
       parentAssetIds: [clip.assetId, ...(clip.provenance.parentAssetIds || [])],

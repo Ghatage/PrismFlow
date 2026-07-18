@@ -1,4 +1,5 @@
 import {normalizeTimelineGenerationInput} from '../src/timeline-generation.js';
+import {imageInputFor} from '../src/prompt-mentions.js';
 
 const providerStatus = (value) => String(value?.status || value || '').toUpperCase();
 
@@ -18,7 +19,7 @@ const extractAsset = (result) => {
   };
 };
 
-export const createFalTimelineGenerationAdapter = ({fal}) => {
+export const createFalTimelineGenerationAdapter = ({fal, modelInputs = {}}) => {
   if (!fal || typeof fal.submit !== 'function' || typeof fal.status !== 'function' || typeof fal.result !== 'function') {
     throw new TypeError('Timeline generation requires the queued FAL adapter.');
   }
@@ -29,6 +30,12 @@ export const createFalTimelineGenerationAdapter = ({fal}) => {
       const normalized = normalizeTimelineGenerationInput(input);
       const payload = {...normalized.params, prompt: normalized.prompt};
       if (normalized.seed !== null) payload.seed = normalized.seed;
+      const imageInput = imageInputFor(normalized.modelId, modelInputs);
+      if (normalized.referenceImageUrls.length && imageInput) {
+        payload[imageInput.key] = imageInput.isArray
+          ? normalized.referenceImageUrls
+          : normalized.referenceImageUrls[0];
+      }
       const submitted = await fal.submit(normalized.modelId, payload);
       const jobId = submitted?.request_id || submitted?.requestId;
       if (!jobId) throw new Error('FAL did not return a timeline generation job id.');
