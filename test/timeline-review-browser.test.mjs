@@ -115,6 +115,12 @@ const fixture = {
   },
 };
 
+const regenerationFixture = {
+  ...structuredClone(fixture),
+  project: {...fixture.project, name: 'Regeneration smoke'},
+  timelineDiffs: {schemaVersion: 1, items: []},
+};
+
 test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30_000}, async (context) => {
   const port = await reservePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -155,5 +161,61 @@ test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('prismflow.project')));
   assert.equal(saved.timeline.revision, 1);
   assert.deepEqual(saved.timelineDiffs.items.map((diff) => diff.status), ['rejected', 'accepted']);
+  assert.deepEqual(browserErrors, []);
+});
+
+test('compares fake variants and selects one through a replacement diff', {timeout: 30_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`);
+  });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => {
+    if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`);
+  });
+  await page.addInitScript((project) => {
+    localStorage.setItem('prismflow.project', JSON.stringify(project));
+  }, regenerationFixture);
+
+  await page.goto(`${origin}/?timelineAdapter=fake`, {waitUntil: 'networkidle'});
+  await page.locator('[data-clip-id="clip-browser"]').click();
+  await page.locator('[data-action="compare-clip-variants"]').click();
+  await page.locator('.variant-card').nth(1).waitFor({timeout: 5000});
+  assert.equal(await page.locator('.variant-card').count(), 2);
+  let saved = await page.evaluate(() => JSON.parse(localStorage.getItem('prismflow.project')));
+  assert.equal(saved.mediaAssets.length, 1);
+  assert.equal(saved.timelineDiffs.items.length, 0);
+
+  await page.getByRole('button', {name: 'Use this version'}).first().click();
+  await page.locator('[data-ghost-key]').first().click();
+  await page.locator('[data-action="reject-diff"]').click();
+  saved = await page.evaluate(() => JSON.parse(localStorage.getItem('prismflow.project')));
+  assert.equal(saved.timeline.clips[0].assetId, 'asset-browser');
+  assert.equal(saved.timeline.clips[0].provenance.prompt, provenance.prompt);
+
+  await page.locator('[data-clip-id="clip-browser"]').click();
+  await page.getByRole('button', {name: 'Use this version'}).first().click();
+  await page.locator('[data-ghost-key]').first().click();
+  await page.locator('[data-action="accept-diff"]').click();
+  saved = await page.evaluate(() => JSON.parse(localStorage.getItem('prismflow.project')));
+  assert.notEqual(saved.timeline.clips[0].assetId, 'asset-browser');
+  assert.equal(saved.timeline.clips[0].provenance.prompt, provenance.prompt);
+  assert.deepEqual(saved.timeline.clips[0].provenance.parentAssetIds, ['asset-browser', 'asset-parent']);
+  assert.deepEqual(saved.timeline.clips[0].provenance.characterVersionIds, ['fox-v1']);
+  assert.equal(saved.mediaAssets.length, 3);
   assert.deepEqual(browserErrors, []);
 });

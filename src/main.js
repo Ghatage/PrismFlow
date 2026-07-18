@@ -15,6 +15,11 @@ import {
   previewTimelineForDiff,
   reviseGhostProposal,
 } from './timeline-diff-review.js';
+import {
+  createFakeTimelineGenerationAdapter,
+  createServerTimelineGenerationAdapter,
+} from './timeline-generation.js';
+import {createClipRegenerationService} from './clip-regeneration.js';
 
 const projectStore = createProjectStore();
 let project = projectStore.getProject();
@@ -28,6 +33,8 @@ const state = {
   selectedClipId: null,
   selectedGhostKey: null,
   previewDiffId: null,
+  regenerationEditorClipId: null,
+  regenerationEditorMode: 'prompt',
   currentTime: 0,
   isPlaying: false,
   zoom: 1,
@@ -59,6 +66,16 @@ const timelineCharacterAttachments = createTimelineCharacterAttachments({
   dispatch: updateProject,
 });
 const timelineDiffs = createTimelineDiffs({getProject: () => project, dispatch: updateProject});
+const useFakeTimelineAdapter = new URLSearchParams(globalThis.location.search).get('timelineAdapter') === 'fake';
+const timelineGenerationAdapter = useFakeTimelineAdapter
+  ? createFakeTimelineGenerationAdapter()
+  : createServerTimelineGenerationAdapter();
+const clipRegeneration = createClipRegenerationService({
+  store: {getProject: () => project, dispatch: updateProject},
+  diffs: timelineDiffs,
+  adapter: timelineGenerationAdapter,
+});
+let regenerationPollTimer = null;
 const useFakeCharacterAdapter = new URLSearchParams(globalThis.location.search).get('characterAdapter') === 'fake';
 const characterGenerationAdapter = useFakeCharacterAdapter
   ? createFakeCharacterGenerationAdapter()
@@ -321,11 +338,51 @@ const renderInspectorCharacters = (clip) => {
   `;
 };
 
+const renderRegenerationTools = (clip) => {
+  if (!clip.provenance?.prompt || !clip.provenance?.modelId) return '';
+  const isEditing = state.regenerationEditorClipId === clip.id;
+  const jobs = clipRegeneration.listJobs(clip.id);
+  const candidates = jobs.filter((job) => job.status === 'completed');
+  const activeJobs = jobs.filter((job) => job.status === 'queued' || job.status === 'running' || job.status === 'failed');
+  return `
+    <div class="property-group regeneration-tools">
+      <label>Prompt as source</label>
+      <div class="regeneration-source">
+        <div><span>Prompt</span><strong>${escapeHtml(clip.provenance.prompt)}</strong></div>
+        <div><span>Model</span><strong>${escapeHtml(clip.provenance.modelId)}</strong></div>
+        <div><span>Seed</span><strong>${escapeHtml(clip.provenance.seed ?? 'None')}</strong></div>
+        <div><span>Parameters</span><strong>${escapeHtml(JSON.stringify(clip.provenance.params || {}))}</strong></div>
+        <div><span>Parent assets</span><strong>${(clip.provenance.parentAssetIds || []).map(escapeHtml).join(', ') || 'None'}</strong></div>
+        <div><span>Characters</span><strong>${(clip.provenance.characterVersionIds || []).map(escapeHtml).join(', ') || 'None'}</strong></div>
+      </div>
+      <div class="regeneration-actions">
+        <button class="button ghost" data-action="edit-clip-prompt" type="button">Edit prompt</button>
+        <button class="button ghost" data-action="reroll-clip-seed" type="button">Reroll seed</button>
+        <button class="button ghost" data-action="change-clip-model" type="button">Same prompt, different model</button>
+        <button class="button primary" data-action="compare-clip-variants" type="button">Compare variants</button>
+      </div>
+      ${isEditing ? `
+        <form class="regeneration-form" data-regeneration-form>
+          <label for="regenerationPrompt">Prompt</label>
+          <textarea id="regenerationPrompt" name="prompt" rows="4" required>${escapeHtml(clip.provenance.prompt)}</textarea>
+          <label for="regenerationModel">Model ID</label>
+          <input id="regenerationModel" name="modelId" value="${escapeHtml(clip.provenance.modelId)}" required />
+          <div class="regeneration-form-row"><div><label for="regenerationSeed">Seed</label><input id="regenerationSeed" name="seed" value="${escapeHtml(clip.provenance.seed ?? '')}" /></div><div><label for="regenerationParams">Parameters (JSON)</label><textarea id="regenerationParams" name="params" rows="2">${escapeHtml(JSON.stringify(clip.provenance.params || {}))}</textarea></div></div>
+          <div class="regeneration-form-actions"><button class="button ghost" data-action="cancel-regeneration" type="button">Cancel</button><button class="button primary" type="submit">Generate candidate</button></div>
+        </form>
+      ` : ''}
+      ${activeJobs.length ? `<div class="regeneration-job-list">${activeJobs.map((job) => `<div class="regeneration-job ${job.status}"><span></span><div><strong>${job.status === 'failed' ? 'Generation failed' : `${job.status} candidate`}</strong><small>${job.status === 'failed' ? escapeHtml(job.error) : `${escapeHtml(job.input.modelId)} · seed ${escapeHtml(job.input.seed ?? 'auto')}`}</small></div></div>`).join('')}</div>` : ''}
+      ${candidates.length ? `<div class="variant-panel"><div class="variant-panel-head"><strong>Generated variants</strong><span>${candidates.length} candidates · accepted clip unchanged</span></div><div class="variant-grid">${candidates.map((job) => `<article class="variant-card"><div class="variant-visual">${job.output?.asset?.url ? `<img src="${escapeHtml(job.output.asset.url)}" alt="Generated variant" />` : icons.image}</div><div><strong>${escapeHtml(job.input.modelId)}</strong><span>Seed ${escapeHtml(job.output?.seed ?? job.input.seed ?? 'auto')}</span><small>${escapeHtml(Object.keys(job.changedFields).join(', ') || 'same source settings')}</small></div><button class="button ${job.used ? 'ghost' : 'primary'}" data-action="use-regeneration-candidate" data-job-id="${escapeHtml(job.jobId)}" type="button" ${job.used ? 'disabled' : ''}>${job.used ? 'Proposed' : 'Use this version'}</button></article>`).join('')}</div></div>` : ''}
+    </div>
+  `;
+};
+
 const renderSelectedClipInspector = (selected, media) => `
   <div class="selected-preview ${media.kind}">${media.url ? media.kind === 'audio' ? `<div class="audio-orb">${icons.audio}</div>` : renderMediaVisual(media) : `<div class="offline-thumb">${kindIcon(media.kind)}<span>re-import source</span></div>`}<span class="selected-type">${media.kind.toUpperCase()}</span></div>
   <div class="inspector-title"><strong>${escapeHtml(media.name)}</strong><span>${selected.trackId === 'V1' ? 'Video track' : 'Audio track'} · ${formatTime(selected.duration)}</span></div>
   <div class="property-group"><label>Timing</label><div class="property-grid"><div><span>Start</span><strong>${formatTime(selected.start)}</strong></div><div><span>Duration</span><strong>${formatTime(selected.duration)}</strong></div></div></div>
   <div class="property-group"><label>Source</label><div class="source-line"><span class="source-icon">${kindIcon(media.kind)}</span><span>${escapeHtml(media.name)}</span></div></div>
+  ${renderRegenerationTools(selected)}
   ${renderInspectorCharacters(selected)}
   <button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>
 `;
@@ -487,6 +544,13 @@ const bindEvents = () => {
   app.querySelector('[data-action="preview-diff"]')?.addEventListener('click', (event) => previewDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="accept-all-diffs"]')?.addEventListener('click', acceptAllDiffs);
   app.querySelector('[data-action="reject-all-diffs"]')?.addEventListener('click', rejectAllDiffs);
+  app.querySelector('[data-action="edit-clip-prompt"]')?.addEventListener('click', () => openRegenerationEditor('prompt'));
+  app.querySelector('[data-action="change-clip-model"]')?.addEventListener('click', () => openRegenerationEditor('model'));
+  app.querySelector('[data-action="reroll-clip-seed"]')?.addEventListener('click', rerollSelectedClip);
+  app.querySelector('[data-action="compare-clip-variants"]')?.addEventListener('click', compareSelectedClipVariants);
+  app.querySelector('[data-action="cancel-regeneration"]')?.addEventListener('click', closeRegenerationEditor);
+  app.querySelector('[data-regeneration-form]')?.addEventListener('submit', submitClipRegeneration);
+  app.querySelectorAll('[data-action="use-regeneration-candidate"]').forEach((button) => button.addEventListener('click', () => useRegenerationCandidate(button.dataset.jobId)));
   app.querySelector('[data-action="attach-clip-character"]')?.addEventListener('click', attachCharacterToSelectedClip);
   app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
@@ -630,6 +694,105 @@ const pollCharacterGeneration = async () => {
   if (job.status === 'ready') state.characterModalMode = 'detail';
   renderApp();
   if (job.status === 'generating' || job.status === 'retrying') scheduleCharacterPoll();
+};
+
+const openRegenerationEditor = (mode) => {
+  if (!state.selectedClipId) return;
+  state.regenerationEditorClipId = state.selectedClipId;
+  state.regenerationEditorMode = mode;
+  renderApp();
+  const field = app.querySelector(mode === 'model' ? '#regenerationModel' : '#regenerationPrompt');
+  field?.focus();
+  field?.select();
+};
+
+const closeRegenerationEditor = () => {
+  state.regenerationEditorClipId = null;
+  renderApp();
+};
+
+const parseRegenerationForm = () => {
+  const form = app.querySelector('[data-regeneration-form]');
+  if (!form) throw new Error('The regeneration form is unavailable.');
+  const data = new FormData(form);
+  const seedText = String(data.get('seed') || '').trim();
+  const numericSeed = Number(seedText);
+  let params;
+  try {
+    params = JSON.parse(String(data.get('params') || '{}'));
+  } catch {
+    throw new Error('Parameters must be valid JSON.');
+  }
+  if (!params || typeof params !== 'object' || Array.isArray(params)) throw new Error('Parameters must be a JSON object.');
+  return {
+    prompt: String(data.get('prompt') || ''),
+    modelId: String(data.get('modelId') || ''),
+    seed: seedText === '' ? null : Number.isFinite(numericSeed) ? numericSeed : seedText,
+    params,
+  };
+};
+
+const submitClipRegeneration = async (event) => {
+  event.preventDefault();
+  const clip = clipById(state.selectedClipId);
+  if (!clip) return;
+  try {
+    await clipRegeneration.regenerateClip({
+      clipId: clip.id,
+      ...parseRegenerationForm(),
+      characterVersionIds: clip.provenance.characterVersionIds,
+    });
+    state.regenerationEditorClipId = null;
+    renderApp();
+    scheduleRegenerationPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const rerollSelectedClip = async () => {
+  if (!state.selectedClipId) return;
+  try {
+    await clipRegeneration.rerollSeed(state.selectedClipId);
+    renderApp();
+    scheduleRegenerationPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const compareSelectedClipVariants = async () => {
+  if (!state.selectedClipId) return;
+  try {
+    await clipRegeneration.compareVariants(state.selectedClipId, {count: 2});
+    renderApp();
+    scheduleRegenerationPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const scheduleRegenerationPoll = () => {
+  clearTimeout(regenerationPollTimer);
+  regenerationPollTimer = setTimeout(pollRegenerationJobs, 220);
+};
+
+const pollRegenerationJobs = async () => {
+  const activeJobs = clipRegeneration.listJobs().filter((job) => job.status === 'queued' || job.status === 'running');
+  await Promise.all(activeJobs.map((job) => clipRegeneration.poll(job.jobId)));
+  renderApp();
+  if (clipRegeneration.listJobs().some((job) => job.status === 'queued' || job.status === 'running')) {
+    scheduleRegenerationPoll();
+  }
+};
+
+const useRegenerationCandidate = (jobId) => {
+  try {
+    clipRegeneration.useCandidate(jobId);
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
 };
 
 const selectFirstDiff = () => {

@@ -96,6 +96,7 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
       operation: input.operation,
       generationJobId: jobId,
       provider: output.source?.provider || 'unknown',
+      changedFields: job?.changedFields && typeof job.changedFields === 'object' ? clone(job.changedFields) : {},
     },
     characterVersionIds,
   };
@@ -139,6 +140,7 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
     asset,
     diff: {
       id: `generation-diff-${safeJobId}`,
+      ...(Number.isInteger(job?.baseRevision) ? {baseRevision: job.baseRevision} : {}),
       source: 'generation',
       summary: input.operation === 'replace' ? 'Review generated replacement' : 'Review generated clip',
       operations: [operation],

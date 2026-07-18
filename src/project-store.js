@@ -22,7 +22,7 @@ const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value 
   .filter(Boolean))];
 
 const sanitizeJson = (value, depth = 0, seen = new WeakSet()) => {
-  if (depth > 8 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
+  if (depth > 16 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
   if (value === null || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string') return /^(blob:|data:)/i.test(value) ? undefined : value;
