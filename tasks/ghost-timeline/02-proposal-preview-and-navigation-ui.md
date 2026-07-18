@@ -1,6 +1,6 @@
 # Ghost proposal preview and navigation UI
 
-Status: planned
+Status: complete
 
 ## Goal
 

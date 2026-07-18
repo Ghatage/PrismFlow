@@ -149,7 +149,18 @@ test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30
   }, fixture);
 
   await page.goto(origin, {waitUntil: 'networkidle'});
-  await page.locator('[data-ghost-key]').first().click();
+  await page.locator('[data-action="select-first-diff"]').click();
+  assert.equal(await page.locator('[data-review-position]').textContent(), '1 of 2');
+  await page.getByRole('button', {name: 'Next proposal'}).click();
+  assert.equal(await page.locator('[data-review-position]').textContent(), '2 of 2');
+  await page.getByRole('button', {name: 'Preview proposal'}).click();
+  assert.equal(await page.locator('[data-player-status]').textContent(), 'Proposal preview');
+  const acceptedBeforeExit = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('prismflow.project')).timeline.clips));
+  await page.getByRole('button', {name: 'Exit preview'}).click();
+  assert.equal(await page.locator('[data-player-status]').textContent(), 'Accepted preview');
+  assert.equal(await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('prismflow.project')).timeline.clips)), acceptedBeforeExit);
+  await page.getByRole('button', {name: 'Previous proposal'}).click();
+  assert.equal(await page.locator('[data-review-position]').textContent(), '1 of 2');
   await page.getByText('Before provenance').waitFor();
   await page.getByText('After provenance').waitFor();
   await page.locator('[data-action="reject-diff"]').click();

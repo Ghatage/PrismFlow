@@ -11,9 +11,14 @@ import {createTimelineCharacterAttachments} from './timeline-characters.js';
 import {createTimelineDiffs} from './timeline-diffs.js';
 import {
   buildGhostItems,
+  derivePreviewClips,
   findGhostItem,
-  previewTimelineForDiff,
+  listReviewableDiffs,
+  listReviewItems,
   reviseGhostProposal,
+  selectFirstReviewItem,
+  selectNextReviewItem,
+  selectPreviousReviewItem,
 } from './timeline-diff-review.js';
 import {
   createFakeTimelineGenerationAdapter,
@@ -28,7 +33,7 @@ const state = {
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get clips() { return project.timeline.clips; },
-  get pendingDiffs() { return project.timelineDiffs.items.filter((diff) => diff.status === 'pending' || diff.status === 'stale'); },
+  get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
   selectedGhostKey: null,
@@ -139,6 +144,13 @@ const kindIcon = (kind) => icons[kind] || icons.film;
 const clipById = (id) => state.clips.find((clip) => clip.id === id);
 const diffById = (id) => state.pendingDiffs.find((diff) => diff.id === id);
 const selectedGhost = () => findGhostItem(state.pendingDiffs, state.selectedGhostKey);
+const reviewItems = () => listReviewItems(state.pendingDiffs);
+const reviewItemForDiff = (diffId) => reviewItems().find((item) => item.diffId === diffId) || null;
+const selectReviewItem = (item) => {
+  state.selectedGhostKey = item?.ghostKey || item?.key || null;
+  state.selectedClipId = null;
+  return item;
+};
 const mediaById = (id) => state.media.find((item) => item.id === id);
 const characterById = (id) => state.characters.find((character) => character.id === id);
 const characterVersion = (character) => character?.versions.find((version) => version.id === (character.lockedVersionId || character.activeVersionId)) || null;
@@ -197,7 +209,7 @@ const renderApp = () => {
             <div class="player-controls">
               <div class="player-time"><span id="playerCurrent">00:00.00</span><span class="muted"> / </span><span id="playerDuration">00:12.00</span></div>
               <div class="player-buttons"><button class="round-control" data-action="step-back" title="Previous frame" type="button">${icons.skipBack}</button><button class="play-control" data-action="toggle-play" title="${state.isPlaying ? 'Pause' : 'Play'}" type="button">${state.isPlaying ? icons.pause : icons.play}</button><button class="round-control" data-action="step-forward" title="Next frame" type="button">${icons.skipForward}</button></div>
-              <div class="player-right"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button">${icons.more}</button></div>
+              <div class="player-right" aria-live="polite"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span data-player-status>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button" aria-label="Player options">${icons.more}</button></div>
             </div>
           </div>
           <div class="stage-footer"><div class="tip"><span class="tip-icon">${icons.magic}</span><span>FAL-ready workspace</span><span class="muted">Generation hooks are isolated until you are ready.</span></div><div class="keyboard-hint"><kbd>Space</kbd> play/pause <kbd>⌘K</kbd> command menu</div></div>
@@ -422,7 +434,8 @@ const renderGhostInspector = (ghost) => {
       ${renderProvenanceReview('After provenance', ghost.after)}
       ${diff.status === 'stale' ? '<p class="stale-warning">The accepted timeline changed. Reconcile this proposal before accepting it.</p>' : ''}
       <div class="diff-review-actions">
-        <button class="button ghost" data-action="preview-diff" data-diff-id="${diff.id}" type="button">Preview proposal</button>
+        <button class="button ghost" data-action="preview-diff" data-diff-id="${diff.id}" type="button" ${state.previewDiffId === diff.id ? 'disabled' : ''}>Preview proposal</button>
+        <button class="button ghost" data-action="exit-preview" data-diff-id="${diff.id}" type="button" ${state.previewDiffId !== diff.id ? 'disabled' : ''}>Exit preview</button>
         <button class="button ghost" data-action="reject-diff" data-diff-id="${diff.id}" type="button">Reject</button>
         <button class="button primary" data-action="accept-diff" data-diff-id="${diff.id}" type="button" ${diff.status === 'stale' ? 'disabled' : ''}>Accept</button>
       </div>
@@ -450,8 +463,15 @@ const renderTimeline = () => {
   const videoGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'V1');
   const audioGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'A1');
   const pendingCount = state.pendingDiffs.length;
+  const reviewQueue = reviewItems();
+  const selectedReviewIndex = reviewQueue.findIndex((item) => item.diffId === selectedGhost()?.diffId);
+  const reviewPosition = selectedReviewIndex >= 0 ? selectedReviewIndex + 1 : 1;
+  const reviewControls = pendingCount ? `
+    <span class="review-position" aria-live="polite" data-review-position>${reviewPosition} of ${pendingCount}</span>
+    <button class="toolbar-button review-nav" data-action="previous-diff" type="button" aria-label="Previous proposal" ${reviewPosition <= 1 ? 'disabled' : ''}>‹</button>
+    <button class="toolbar-button review-nav" data-action="next-diff" type="button" aria-label="Next proposal" ${reviewPosition >= pendingCount ? 'disabled' : ''}>›</button>` : '';
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
     <div class="timeline-body">
       <div class="track-labels"><div class="ruler-spacer"></div><div class="track-label video-label"><span class="track-color video"></span><div><strong>Video</strong><span>V1</span></div></div><div class="track-label audio-label"><span class="track-color audio"></span><div><strong>Audio</strong><span>A1</span></div></div></div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="width:${timelineWidth}px">
@@ -542,6 +562,9 @@ const bindEvents = () => {
   app.querySelector('[data-action="accept-diff"]')?.addEventListener('click', (event) => acceptDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="reject-diff"]')?.addEventListener('click', (event) => rejectDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="preview-diff"]')?.addEventListener('click', (event) => previewDiff(event.currentTarget.dataset.diffId));
+  app.querySelector('[data-action="exit-preview"]')?.addEventListener('click', exitProposalPreview);
+  app.querySelector('[data-action="previous-diff"]')?.addEventListener('click', previousDiff);
+  app.querySelector('[data-action="next-diff"]')?.addEventListener('click', nextDiff);
   app.querySelector('[data-action="accept-all-diffs"]')?.addEventListener('click', acceptAllDiffs);
   app.querySelector('[data-action="reject-all-diffs"]')?.addEventListener('click', rejectAllDiffs);
   app.querySelector('[data-action="edit-clip-prompt"]')?.addEventListener('click', () => openRegenerationEditor('prompt'));
@@ -555,8 +578,19 @@ const bindEvents = () => {
   app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
   app.querySelector('[data-action="export"]')?.addEventListener('click', () => showToast('Export will be connected after the composition pipeline is defined.'));
+  if (!bindEvents.escapeReviewHandlerBound) {
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && state.previewDiffId) {
+        event.preventDefault();
+        event.stopPropagation();
+        exitProposalPreview();
+      }
+    });
+    bindEvents.escapeReviewHandlerBound = true;
+  }
   checkFalStatus();
 };
+bindEvents.escapeReviewHandlerBound = false;
 
 const createCharacter = () => {
   state.selectedCharacterId = null;
@@ -796,15 +830,36 @@ const useRegenerationCandidate = (jobId) => {
 };
 
 const selectFirstDiff = () => {
-  state.selectedGhostKey = buildGhostItems(state.pendingDiffs)[0]?.key || null;
-  state.selectedClipId = null;
+  selectReviewItem(selectFirstReviewItem(state.pendingDiffs));
+  state.previewDiffId = null;
   renderApp();
 };
 
+const navigateDiff = (direction) => {
+  const current = selectedGhost();
+  const item = direction < 0
+    ? selectPreviousReviewItem(state.pendingDiffs, current?.key)
+    : selectNextReviewItem(state.pendingDiffs, current?.key);
+  if (!item) return;
+  selectReviewItem(item);
+  state.previewDiffId = null;
+  renderApp();
+};
+
+const previousDiff = () => navigateDiff(-1);
+const nextDiff = () => navigateDiff(1);
+
+const selectNextAvailableReviewItem = (diffId, previousItems) => {
+  const previousIndex = previousItems.findIndex((item) => item.diffId === diffId);
+  const remaining = reviewItems();
+  return remaining[previousIndex] || remaining[previousIndex - 1] || null;
+};
+
 const acceptDiff = (diffId) => {
+  const previousItems = reviewItems();
   try {
     timelineDiffs.accept(diffId);
-    state.selectedGhostKey = null;
+    selectReviewItem(selectNextAvailableReviewItem(diffId, previousItems));
     state.previewDiffId = null;
     renderApp();
   } catch (error) {
@@ -813,9 +868,10 @@ const acceptDiff = (diffId) => {
 };
 
 const rejectDiff = (diffId) => {
+  const previousItems = reviewItems();
   try {
     timelineDiffs.reject(diffId);
-    state.selectedGhostKey = null;
+    selectReviewItem(selectNextAvailableReviewItem(diffId, previousItems));
     if (state.previewDiffId === diffId) state.previewDiffId = null;
     renderApp();
   } catch (error) {
@@ -826,9 +882,19 @@ const rejectDiff = (diffId) => {
 const previewDiff = (diffId) => {
   const diff = diffById(diffId);
   if (!diff) return;
+  const item = reviewItemForDiff(diffId);
+  if (item) selectReviewItem(item);
   state.previewDiffId = diffId;
   const firstChangedClip = diff.operations.find((operation) => operation.after || operation.before);
   state.currentTime = firstChangedClip?.after?.start ?? firstChangedClip?.before?.start ?? state.currentTime;
+  renderApp();
+};
+
+const exitProposalPreview = () => {
+  if (!state.previewDiffId) return;
+  state.previewDiffId = null;
+  state.previewSourceId = null;
+  state.previewClipId = null;
   renderApp();
 };
 
@@ -910,9 +976,8 @@ const placeOnTimeline = ({mediaId, clipId, ghostKey, clientX, trackId}) => {
       const revised = reviseGhostProposal(diff, ghost.operationIndex, {start, trackId});
       const result = timelineDiffs.createProposal({...revised, baseRevision: project.timeline.revision});
       timelineDiffs.reject(diff.id);
-      state.selectedGhostKey = buildGhostItems(state.pendingDiffs)
-        .find((item) => item.diffId === result.affectedId && item.role !== 'origin')?.key || null;
-      state.selectedClipId = null;
+      selectReviewItem(reviewItemForDiff(result.affectedId));
+      state.previewDiffId = null;
     } catch (error) {
       showToast(error instanceof Error ? error.message : String(error));
     }
@@ -1002,7 +1067,7 @@ const removeCharacterFromSelectedClip = (versionId) => {
 
 const activeClipAt = (time) => {
   const previewDiff = state.previewDiffId ? diffById(state.previewDiffId) : null;
-  const clips = previewDiff ? previewTimelineForDiff(state.clips, previewDiff) : state.clips;
+  const clips = previewDiff ? derivePreviewClips(state.clips, previewDiff) : state.clips;
   return clips.find((clip) => time >= clip.start && time < clip.start + clip.duration);
 };
 
