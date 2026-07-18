@@ -6,18 +6,21 @@ import {fileURLToPath} from 'node:url';
 import {createFalAdapter} from './server/fal-adapter.mjs';
 import {createFalCharacterSheetAdapter} from './server/character-sheet-adapter.mjs';
 import {createFalTimelineGenerationAdapter} from './server/timeline-generation-adapter.mjs';
+import {createFalModelPricingAdapter, writeModelPricingCsv} from './server/model-pricing.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
 const fal = createFalAdapter();
 const characterSheets = createFalCharacterSheetAdapter({fal});
 const timelineGenerations = createFalTimelineGenerationAdapter({fal});
+const modelPricing = createFalModelPricingAdapter();
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
 };
 
@@ -78,6 +81,21 @@ const server = createServer(async (request, response) => {
       configured: fal.configured,
       characterModelId: characterSheets.modelId,
     });
+    return;
+  }
+
+  if (url.pathname === '/api/fal/model-pricing' && request.method === 'POST') {
+    try {
+      const status = url.searchParams.get('status') || undefined;
+      const result = await modelPricing.sync({status});
+      if (url.searchParams.get('export') === '1') {
+        result.csvRows = await writeModelPricingCsv(result.records, join(rootDir, 'fal-model-pricing.csv'));
+        result.csvPath = 'fal-model-pricing.csv';
+      }
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
     return;
   }
 

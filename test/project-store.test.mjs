@@ -128,3 +128,62 @@ test('recovers from malformed or unavailable browser storage', () => {
   assert.doesNotThrow(() => memoryOnlyStore.dispatch({type: 'clip/remove', clipId: added.affectedId}));
   assert.equal(memoryOnlyStore.getProject().timeline.clips.length, 0);
 });
+
+test('splits a clip at a timeline time and preserves source continuity', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const imported = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'scene.mp4', kind: 'video', mimeType: 'video/mp4', duration: 8},
+  });
+  const added = store.dispatch({type: 'clip/add', assetId: imported.affectedId, trackId: 'V1', start: 2, duration: 6});
+
+  const split = store.dispatch({type: 'clip/split', clipId: added.affectedId, time: 5});
+  assert.equal(split.changed, true);
+  assert.notEqual(split.affectedId, added.affectedId);
+  const clips = split.project.timeline.clips.toSorted((left, right) => left.start - right.start);
+  assert.equal(clips.length, 2);
+  assert.deepEqual(clips.map(({start, duration, sourceStart}) => ({start, duration, sourceStart})), [
+    {start: 2, duration: 3, sourceStart: 0},
+    {start: 5, duration: 3, sourceStart: 3},
+  ]);
+});
+
+test('adds video tracks above the video stack and audio tracks below the audio stack', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+
+  const addedVideo = store.dispatch({type: 'track/add', kind: 'video'});
+  assert.equal(addedVideo.affectedId, 'V2');
+  assert.deepEqual(addedVideo.project.timeline.tracks.map(({id, kind}) => ({id, kind})), [
+    {id: 'V2', kind: 'video'},
+    {id: 'V1', kind: 'video'},
+    {id: 'A1', kind: 'audio'},
+  ]);
+
+  const addedAudio = store.dispatch({type: 'track/add', kind: 'audio'});
+  assert.equal(addedAudio.affectedId, 'A2');
+  assert.deepEqual(addedAudio.project.timeline.tracks.map(({id, kind}) => ({id, kind})), [
+    {id: 'V2', kind: 'video'},
+    {id: 'V1', kind: 'video'},
+    {id: 'A1', kind: 'audio'},
+    {id: 'A2', kind: 'audio'},
+  ]);
+
+  const imported = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'still.png', kind: 'image', mimeType: 'image/png'},
+  });
+  const added = store.dispatch({type: 'clip/add', assetId: imported.affectedId, trackId: 'V2', start: 0});
+  assert.equal(added.project.timeline.clips[0].trackId, 'V2');
+
+  const moved = store.dispatch({type: 'clip/move', clipId: added.affectedId, trackId: 'V1', start: 1});
+  assert.equal(moved.project.timeline.clips[0].trackId, 'V1');
+
+  const hydrated = createProjectStore({storage, ...createDependencies()}).getProject();
+  assert.deepEqual(hydrated.timeline.tracks.map(({id, kind}) => ({id, kind})), [
+    {id: 'V2', kind: 'video'},
+    {id: 'V1', kind: 'video'},
+    {id: 'A1', kind: 'audio'},
+    {id: 'A2', kind: 'audio'},
+  ]);
+});

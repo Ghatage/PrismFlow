@@ -15,6 +15,7 @@ const TIMELINE_DIFF_SOURCES = new Set(['agent', 'generation', 'user']);
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const asString = (value, fallback = '') => typeof value === 'string' && value.trim() ? value : fallback;
 const asNullableString = (value) => typeof value === 'string' && value.trim() ? value : null;
+const asRemoteUrl = (value) => typeof value === 'string' && /^https?:\/\//i.test(value.trim()) ? value.trim() : null;
 const asNumber = (value, fallback = 0, minimum = 0) => Number.isFinite(value) ? Math.max(minimum, value) : fallback;
 const asTimestamp = (value, fallback) => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : fallback;
 const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
@@ -121,6 +122,7 @@ const normalizeAsset = (value, {now, createId}) => {
     mimeType: asString(asset.mimeType || asset.type, 'application/octet-stream'),
     size: asNumber(asset.size),
     duration: asNumber(asset.duration, kind === 'image' ? 5 : 0),
+    remoteUrl: asRemoteUrl(asset.remoteUrl || asset.url),
     createdAt: asTimestamp(asset.createdAt, now()),
     source: {
       type: asString(source.type, 'local-file'),
@@ -181,6 +183,7 @@ const normalizeClip = (value, {assetIds, sceneIds, trackIds, createId}) => {
     trackId,
     start: asNumber(value.start),
     duration: asNumber(value.duration, 5, 0.1),
+    sourceStart: asNumber(value.sourceStart),
     provenance: normalizeProvenance(value.provenance),
   };
 };
@@ -199,6 +202,8 @@ const normalizeProposedClip = (value, context, {clipId, currentClip = null} = {}
   if (!Number.isFinite(duration) || duration < 0.1) throw new Error('Timeline diff clip duration must be at least 0.1 seconds.');
   const start = value.start === undefined ? currentClip?.start ?? 0 : value.start;
   if (!Number.isFinite(start) || start < 0) throw new Error('Timeline diff clip start must be a non-negative number.');
+  const sourceStart = value.sourceStart === undefined ? currentClip?.sourceStart ?? 0 : value.sourceStart;
+  if (!Number.isFinite(sourceStart) || sourceStart < 0) throw new Error('Timeline diff clip source start must be a non-negative number.');
   return {
     id: asString(clipId || value.id, currentClip?.id),
     assetId,
@@ -206,6 +211,7 @@ const normalizeProposedClip = (value, context, {clipId, currentClip = null} = {}
     trackId,
     start,
     duration,
+    sourceStart,
     provenance: mergeProvenance(currentClip?.provenance, value.provenance),
   };
 };
@@ -431,6 +437,7 @@ const toPersistedProject = (project) => ({
     mimeType: asset.mimeType,
     size: asset.size,
     duration: asset.duration,
+    remoteUrl: asset.remoteUrl,
     createdAt: asset.createdAt,
     source: sanitizeJson(asset.source),
     metadata: sanitizeJson(asset.metadata),
@@ -447,6 +454,7 @@ const toPersistedProject = (project) => ({
       trackId: clip.trackId,
       start: clip.start,
       duration: clip.duration,
+      sourceStart: clip.sourceStart,
       provenance: normalizeProvenance(clip.provenance),
     })),
   },
@@ -456,7 +464,8 @@ const toPersistedProject = (project) => ({
   },
 });
 
-const loadProject = (storage, dependencies) => {
+const loadProject = (storage, dependencies, initialProject = null) => {
+  if (initialProject) return normalizeProject(initialProject, dependencies);
   try {
     const raw = storage?.getItem(PROJECT_STORAGE_KEY);
     return normalizeProject(raw ? JSON.parse(raw) : null, dependencies);
@@ -482,16 +491,18 @@ export const createProjectStore = ({
   storage = globalThis.localStorage,
   now = () => new Date().toISOString(),
   createId = defaultCreateId,
+  initialProject = null,
+  onCommit = null,
 } = {}) => {
   const dependencies = {now, createId};
   const assetUrls = new Map();
-  let project = loadProject(storage, dependencies);
+  let project = loadProject(storage, dependencies, initialProject);
 
   const getProject = () => {
     const snapshot = toPersistedProject(project);
     snapshot.mediaAssets = snapshot.mediaAssets.map((asset) => ({
       ...asset,
-      url: assetUrls.get(asset.id) || null,
+      url: assetUrls.get(asset.id) || asset.remoteUrl || null,
     }));
     return snapshot;
   };
@@ -499,6 +510,12 @@ export const createProjectStore = ({
   const commit = () => {
     project.updatedAt = now();
     saveProject(storage, project);
+    try {
+      const result = onCommit?.(toPersistedProject(project));
+      result?.catch?.(() => {});
+    } catch {
+      // Persistence can be unavailable in private or quota-constrained browser contexts.
+    }
   };
 
   const extendTimeline = (clip) => {
@@ -641,11 +658,38 @@ export const createProjectStore = ({
         changed = true;
         acceptedTimelineChanged = removedAcceptedClips;
       }
+    } else if (command.type === 'track/add') {
+      const kind = command.kind === 'audio' ? 'audio' : command.kind === 'video' ? 'video' : null;
+      if (kind) {
+        const prefix = kind === 'video' ? 'V' : 'A';
+        const numbers = project.timeline.tracks
+          .filter((track) => track.kind === kind)
+          .map((track) => Number.parseInt(track.id.slice(1), 10))
+          .filter(Number.isFinite);
+        const number = Math.max(0, ...numbers) + 1;
+        const track = {
+          id: `${prefix}${number}`,
+          name: `${kind[0].toUpperCase()}${kind.slice(1)} ${number}`,
+          kind,
+          order: 0,
+        };
+        const firstKindIndex = project.timeline.tracks.findIndex((candidate) => candidate.kind === kind);
+        const lastKindIndex = project.timeline.tracks.reduce((lastIndex, candidate, index) => candidate.kind === kind ? index : lastIndex, -1);
+        const insertionIndex = kind === 'video'
+          ? (firstKindIndex >= 0 ? firstKindIndex : 0)
+          : (lastKindIndex >= 0 ? lastKindIndex + 1 : project.timeline.tracks.length);
+        project.timeline.tracks.splice(insertionIndex, 0, track);
+        project.timeline.tracks.forEach((candidate, index) => { candidate.order = index; });
+        affectedId = track.id;
+        changed = true;
+      }
     } else if (command.type === 'clip/add') {
       const asset = project.mediaAssets.find((candidate) => candidate.id === command.assetId);
       if (asset) {
-        const requestedTrack = project.timeline.tracks.some((track) => track.id === command.trackId) ? command.trackId : 'V1';
-        const trackId = asset.kind === 'audio' ? 'A1' : requestedTrack === 'A1' ? 'V1' : requestedTrack;
+        const preferredKind = asset.kind === 'audio' ? 'audio' : 'video';
+        const requestedTrack = project.timeline.tracks.find((track) => track.id === command.trackId);
+        const fallbackTrack = project.timeline.tracks.find((track) => track.kind === preferredKind) || project.timeline.tracks[0];
+        const trackId = requestedTrack?.kind === preferredKind ? requestedTrack.id : fallbackTrack.id;
         const clip = {
           id: createId('clip'),
           assetId: asset.id,
@@ -653,6 +697,7 @@ export const createProjectStore = ({
           trackId,
           start: asNumber(command.start),
           duration: asNumber(command.duration, asset.kind === 'image' ? 5 : Math.max(0.1, asset.duration || 5), 0.1),
+          sourceStart: asNumber(command.sourceStart),
           provenance: normalizeProvenance(command.provenance),
         };
         project.timeline.clips.push(clip);
@@ -665,13 +710,57 @@ export const createProjectStore = ({
       const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
       if (clip) {
         const asset = project.mediaAssets.find((candidate) => candidate.id === clip.assetId);
-        const requestedTrack = project.timeline.tracks.some((track) => track.id === command.trackId) ? command.trackId : clip.trackId;
+        const requestedTrack = project.timeline.tracks.find((track) => track.id === command.trackId);
+        const fallbackTrack = project.timeline.tracks.find((track) => track.kind === (asset?.kind === 'audio' ? 'audio' : 'video'));
         clip.start = asNumber(command.start, clip.start);
-        clip.trackId = asset?.kind === 'audio' ? 'A1' : requestedTrack === 'A1' ? 'V1' : requestedTrack;
+        clip.trackId = requestedTrack?.kind === (asset?.kind === 'audio' ? 'audio' : 'video')
+          ? requestedTrack.id
+          : fallbackTrack?.id || clip.trackId;
         extendTimeline(clip);
         affectedId = clip.id;
         changed = true;
         acceptedTimelineChanged = true;
+      }
+    } else if (command.type === 'clip/trim') {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
+      if (clip && (command.edge === 'left' || command.edge === 'right')) {
+        const minimumDuration = 0.1;
+        const originalEnd = clip.start + clip.duration;
+        if (command.edge === 'left') {
+          const nextStart = Math.min(Math.max(0, asNumber(command.start, clip.start)), originalEnd - minimumDuration);
+          clip.sourceStart = Math.max(0, (clip.sourceStart || 0) + nextStart - clip.start);
+          clip.start = nextStart;
+          clip.duration = Math.max(minimumDuration, originalEnd - nextStart);
+        } else {
+          clip.duration = Math.max(minimumDuration, asNumber(command.duration, clip.duration, minimumDuration));
+        }
+        extendTimeline(clip);
+        affectedId = clip.id;
+        changed = true;
+        acceptedTimelineChanged = true;
+      }
+    } else if (command.type === 'clip/split') {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
+      if (clip) {
+        const minimumDuration = 0.1;
+        const splitTime = asNumber(command.time, clip.start);
+        const originalEnd = clip.start + clip.duration;
+        if (splitTime > clip.start + minimumDuration && splitTime < originalEnd - minimumDuration) {
+          const firstDuration = splitTime - clip.start;
+          const secondClip = {
+            ...clip,
+            id: createId('clip'),
+            start: splitTime,
+            duration: originalEnd - splitTime,
+            sourceStart: (clip.sourceStart || 0) + firstDuration,
+            provenance: normalizeProvenance(clip.provenance),
+          };
+          clip.duration = firstDuration;
+          project.timeline.clips.push(secondClip);
+          affectedId = secondClip.id;
+          changed = true;
+          acceptedTimelineChanged = true;
+        }
       }
     } else if (command.type === 'clip/remove') {
       if (project.timeline.clips.some((clip) => clip.id === command.clipId)) {
@@ -915,5 +1004,16 @@ export const createProjectStore = ({
   };
 
   saveProject(storage, project);
-  return {getProject, dispatch};
+  try {
+    const result = onCommit?.(toPersistedProject(project));
+    result?.catch?.(() => {});
+  } catch {
+    // Persistence can be unavailable in private or quota-constrained browser contexts.
+  }
+  const registerAssetUrl = (assetId, url) => {
+    if (!assetId) return;
+    if (typeof url === 'string' && url.trim()) assetUrls.set(assetId, url);
+    else assetUrls.delete(assetId);
+  };
+  return {getProject, dispatch, registerAssetUrl};
 };

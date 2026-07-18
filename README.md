@@ -19,6 +19,16 @@ The local server reads `.env` and keeps `FAL_API_KEY` server-side. Character gen
 }
 ```
 
+## Sync the FAL model directory and pricing
+
+With the app open at `http://localhost:4173`, run this in that page's browser console:
+
+```js
+await import('/scripts/sync-model-pricing.mjs');
+```
+
+The server uses `FAL_API_KEY` to paginate through the active FAL model directory and batch pricing requests. The browser script stores one record per active endpoint in the persistent `modelPricing` IndexedDB object store; the API key is never sent to or stored in the browser.
+
 ## Current prototype loop
 
 - Import video, audio, and image files through the asset bin or drop zone.

@@ -1,4 +1,5 @@
 import {createProjectStore} from './project-store.js';
+import {createBrowserDatabase} from './browser-database.js';
 import {createCharacterLibrary} from './character-library.js';
 import {
   createCharacterGenerationController,
@@ -26,13 +27,25 @@ import {
 } from './timeline-generation.js';
 import {createClipRegenerationService} from './clip-regeneration.js';
 
-const projectStore = createProjectStore();
+const legacyStorage = {
+  getItem: (key) => {
+    try {
+      return globalThis.localStorage?.getItem(key) || null;
+    } catch {
+      return null;
+    }
+  },
+  setItem: () => {},
+};
+const projectDatabase = createBrowserDatabase();
+let projectStore = createProjectStore({storage: legacyStorage});
 let project = projectStore.getProject();
 
 const state = {
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get clips() { return project.timeline.clips; },
+  get tracks() { return project.timeline.tracks; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
@@ -44,11 +57,14 @@ const state = {
   isPlaying: false,
   zoom: 1,
   activeTab: 'media',
+  trackMenuOpen: false,
   selectedCharacterId: null,
   isCharacterModalOpen: false,
   characterModalMode: 'detail',
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
   rebaseConflicts: {},
+  mediaPanelOpen: true,
+  mediaHydrated: false,
   previewSourceId: null,
   previewClipId: null,
   rafId: null,
@@ -102,7 +118,6 @@ document.body.append(fileInput);
 const icons = {
   chevron: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>',
   grid: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 2.5h4v4h-4zm7 0h4v4h-4zm-7 7h4v4h-4zm7 0h4v4h-4z"/></svg>',
-  upload: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 11V2m0 0L4.8 5.2M8 2l3.2 3.2M2.5 10.5v2A1.5 1.5 0 0 0 4 14h8a1.5 1.5 0 0 0 1.5-1.5v-2"/></svg>',
   play: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="m5 3 7 5-7 5z"/></svg>',
   pause: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9M11 3.5v9"/></svg>',
   skipBack: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 3v10m1 0 7-5-7-5z"/></svg>',
@@ -167,7 +182,7 @@ const renderMediaVisual = (item) => {
 
 const renderApp = () => {
   app.innerHTML = `
-    <div class="shell">
+    <div class="shell" data-media-hydrated="${state.mediaHydrated}">
       <header class="topbar">
         <div class="brand-lockup">
           <div class="brand-mark"><span></span><span></span><span></span></div>
@@ -178,14 +193,19 @@ const renderApp = () => {
         </div>
         <div class="top-actions">
           <button class="icon-button" title="Project settings" type="button">${icons.sliders}</button>
+          <div class="fal-status-chip" id="falConnection" aria-live="polite" title="Checking local FAL adapter">
+            <span class="connection-indicator" id="falIndicator"></span>
+            <span class="fal-chip-label">FAL</span>
+            <span id="falStatus">Checking…</span>
+          </div>
           <button class="button ghost" type="button" data-action="export">Export</button>
           <button class="button primary" type="button" data-action="render"><span class="button-spark">${icons.magic}</span> Render draft</button>
           <button class="avatar" type="button" aria-label="Account">PF</button>
         </div>
       </header>
 
-      <main class="workspace">
-        <aside class="sidebar left-panel">
+      <main class="workspace ${state.mediaPanelOpen ? '' : 'media-panel-hidden'}">
+        <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'}">
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
@@ -197,14 +217,13 @@ const renderApp = () => {
         <section class="stage">
           <div class="stage-toolbar">
             <div class="breadcrumb"><span class="eyebrow">STORYBOARD</span><span class="slash">/</span><span>${escapeHtml(project.project.name)}</span></div>
-            <div class="stage-tools"><button class="toolbar-button" type="button">${icons.grid} Fit</button><button class="toolbar-button" type="button">100%</button><button class="toolbar-button" type="button">${icons.more}</button></div>
+            <div class="stage-tools"><button class="toolbar-button media-toggle" data-action="toggle-media-panel" aria-pressed="${state.mediaPanelOpen}" type="button">${icons.grid} ${state.mediaPanelOpen ? 'Hide media' : 'Show media'}</button><button class="toolbar-button" type="button">${icons.grid} Fit</button><button class="toolbar-button" type="button">100%</button><button class="toolbar-button" type="button">${icons.more}</button></div>
           </div>
           <div class="preview-wrap">
             <div class="preview-frame" id="previewFrame">
               <video id="previewVideo" playsinline preload="metadata"></video>
               <img id="previewImage" alt="Selected timeline image" />
               <div class="audio-preview" id="audioPreview"><div class="audio-orb">${icons.audio}</div><span>Audio clip</span></div>
-              <div class="empty-preview" id="emptyPreview"><div class="empty-preview-icon">${icons.film}</div><strong>Your canvas is ready</strong><span>Import media, then drop a clip onto the timeline.</span></div>
               <div class="safe-area"></div>
             </div>
             <div class="player-controls">
@@ -213,12 +232,9 @@ const renderApp = () => {
               <div class="player-right" aria-live="polite"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span data-player-status>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button" aria-label="Player options">${icons.more}</button></div>
             </div>
           </div>
+          ${renderContextPanel()}
           <div class="stage-footer"><div class="tip"><span class="tip-icon">${icons.magic}</span><span>FAL-ready workspace</span><span class="muted">Generation hooks are isolated until you are ready.</span></div><div class="keyboard-hint"><kbd>Space</kbd> play/pause <kbd>⌘K</kbd> command menu</div></div>
         </section>
-
-        <aside class="sidebar inspector-panel">
-          ${renderInspector()}
-        </aside>
       </main>
 
       <section class="timeline-panel">
@@ -235,16 +251,15 @@ const renderApp = () => {
 };
 
 const renderMediaPanel = () => `
-  <div class="panel-heading"><div><span class="eyebrow">ASSET BIN</span><h2>Media</h2></div><button class="small-icon-button" data-action="open-file" type="button">${icons.plus}</button></div>
-  <div class="media-dropzone" data-dropzone="media"><div class="dropzone-icon">${icons.upload}</div><strong>Drop media here</strong><span>or <button data-action="open-file" type="button">browse files</button> · <button data-action="add-sample" type="button">try sample</button></span><small>Video, audio, and images</small></div>
-  ${state.media.length ? `<div class="media-list">${state.media.map(renderMediaCard).join('')}</div>` : `<div class="panel-empty"><div class="empty-dots">•••</div><span>Your imported media will appear here.</span></div>`}
-  <div class="panel-footnote"><span class="fal-dot"></span><span>FAL adapter</span><span class="status-pill">ready</span></div>
+  <div class="panel-heading"><div><span class="eyebrow">ASSET BIN</span><h2>Media</h2></div></div>
+  <div class="media-library" data-dropzone="media"><div class="media-list">${state.media.map(renderMediaCard).join('')}<button class="media-add-card" data-action="open-file" type="button" aria-label="Import media">${icons.plus}</button></div></div>
+  <div class="panel-footnote"><span>Drag assets onto the timeline to start editing.</span></div>
 `;
 
 const renderMediaCard = (item) => `
   <div class="media-card" draggable="true" data-media-id="${item.id}">
     <div class="media-thumb ${item.kind}">${renderMediaVisual(item)}<span class="type-badge">${kindIcon(item.kind)}</span></div>
-    <div class="media-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span>${item.url ? `${item.kind} · ${item.kind === 'image' ? 'still' : formatTime(item.duration)}` : `${item.kind} · re-import to preview`}</span></div>
+    <div class="media-card-copy"><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span>${item.url ? `${item.kind} · ${item.kind === 'image' ? 'still' : formatTime(item.duration)}` : state.mediaHydrated ? `${item.kind} · re-import to preview` : `${item.kind} · restoring…`}</span></div>
     <button class="card-more" data-action="remove-media" data-media-id="${item.id}" type="button">${icons.more}</button>
   </div>
 `;
@@ -454,41 +469,39 @@ const renderGhostInspector = (ghost) => {
   `;
 };
 
-const renderInspector = () => {
+const renderContextPanel = () => {
   const ghost = selectedGhost();
-  const selected = clipById(state.selectedClipId);
-  const media = selected ? mediaById(selected.assetId) : null;
-  return `
-    <div class="inspector-head"><div><span class="eyebrow">INSPECTOR</span><h2>${ghost ? 'Review change' : selected ? 'Clip properties' : 'Workspace'}</h2></div><button class="small-icon-button" type="button">${icons.more}</button></div>
-    ${ghost ? renderGhostInspector(ghost) : selected && media ? renderSelectedClipInspector(selected, media) : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip or pending ghost to inspect it.</span></div>`}
-    <div class="fal-card"><div class="fal-card-top"><div class="fal-logo">f/</div><div><strong>FAL connection</strong><span>Generation adapter</span></div><span class="connection-indicator" id="falIndicator"></span></div><div class="fal-status" id="falStatus">Checking local adapter…</div><button class="fal-button" type="button" disabled>${icons.magic} Add a generation later</button></div>
-  `;
+  if (ghost) return `<div class="context-panel ghost-context-panel" role="region" aria-label="Ghost proposal review">${renderGhostInspector(ghost)}</div>`;
+  return '';
 };
 
 const renderTimeline = () => {
   const timelineWidth = Math.max(900, (state.timelineDuration + 3) * scale());
   const ticks = Array.from({length: Math.ceil(state.timelineDuration) + 2}, (_, index) => index);
-  const videoClips = state.clips.filter((clip) => clip.trackId === 'V1');
-  const audioClips = state.clips.filter((clip) => clip.trackId === 'A1');
   const ghosts = buildGhostItems(state.pendingDiffs);
-  const videoGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'V1');
-  const audioGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'A1');
   const pendingCount = state.pendingDiffs.length;
   const reviewQueue = reviewItems();
   const selectedReviewIndex = reviewQueue.findIndex((item) => item.diffId === selectedGhost()?.diffId);
   const reviewPosition = selectedReviewIndex >= 0 ? selectedReviewIndex + 1 : 1;
+  const contentHeight = 29 + state.tracks.length * 74;
   const reviewControls = pendingCount ? `
     <span class="review-position" aria-live="polite" data-review-position>${reviewPosition} of ${pendingCount}</span>
     <button class="toolbar-button review-nav" data-action="previous-diff" type="button" aria-label="Previous proposal" ${reviewPosition <= 1 ? 'disabled' : ''}>‹</button>
     <button class="toolbar-button review-nav" data-action="next-diff" type="button" aria-label="Next proposal" ${reviewPosition >= pendingCount ? 'disabled' : ''}>›</button>` : '';
+  const trackMenu = state.trackMenuOpen ? `<div class="track-menu" role="menu"><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="video"><span class="track-color video"></span>Video</button><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="audio"><span class="track-color audio"></span>Audio</button></div>` : '';
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
     <div class="timeline-body">
-      <div class="track-labels"><div class="ruler-spacer"></div><div class="track-label video-label"><span class="track-color video"></span><div><strong>Video</strong><span>V1</span></div></div><div class="track-label audio-label"><span class="track-color audio"></span><div><strong>Audio</strong><span>A1</span></div></div></div>
-      <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="width:${timelineWidth}px">
+      <div class="track-labels"><div class="ruler-spacer"></div>${state.tracks.map((track) => `<div class="track-label ${track.kind}-label"><span class="track-color ${track.kind}"></span><div><strong>${escapeHtml(track.name)}</strong><span>${escapeHtml(track.id)}</span></div></div>`).join('')}</div>
+      <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="height:${contentHeight}px;width:${timelineWidth}px">
         <div class="ruler" id="timelineRuler">${ticks.map((tick) => `<div class="tick ${tick % 5 === 0 ? 'major' : ''}" style="left:${tick * scale()}px"><span>${formatTime(tick).slice(0, 5)}</span></div>`).join('')}</div>
-        <div class="track-lane video-lane" data-track-id="V1">${videoClips.length || videoGhosts.length ? `${videoClips.map(renderClip).join('')}${videoGhosts.map(renderGhostClip).join('')}` : '<div class="lane-placeholder">Drop video or images here</div>'}</div>
-        <div class="track-lane audio-lane" data-track-id="A1">${audioClips.length || audioGhosts.length ? `${audioClips.map(renderClip).join('')}${audioGhosts.map(renderGhostClip).join('')}` : '<div class="lane-placeholder">Drop audio here</div>'}</div>
+        ${state.tracks.map((track) => {
+          const clips = state.clips.filter((clip) => clip.trackId === track.id);
+          const trackGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === track.id);
+          const content = `${clips.map(renderClip).join('')}${trackGhosts.map(renderGhostClip).join('')}`;
+          return `<div class="track-lane ${track.kind}-lane" data-track-id="${escapeHtml(track.id)}">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
+        }).join('')}
+        <div class="timeline-drag-guide" id="timelineDragGuide" hidden></div>
         <div class="playhead" id="playhead" style="left:${state.currentTime * scale()}px"><span></span></div>
       </div></div>
     </div>
@@ -499,8 +512,10 @@ const renderClip = (clip) => {
   const media = mediaById(clip.assetId);
   if (!media) return '';
   const width = Math.max(clip.duration * scale(), 66);
-  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px"><div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(clip.duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div></div>`;
+  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px">${renderClipContents(media, clip.duration)}</div>`;
 };
+
+const renderClipContents = (media, duration) => `<div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div>`;
 
 const renderGhostClip = (ghost) => {
   const clip = ghost.clip;
@@ -516,8 +531,8 @@ const renderGhostClip = (ghost) => {
 
 const bindEvents = () => {
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
-  app.querySelectorAll('[data-action="add-sample"]').forEach((button) => button.addEventListener('click', addSampleMedia));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
+  app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
   app.querySelector('[data-action="create-character"]')?.addEventListener('click', createCharacter);
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
   app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
@@ -533,15 +548,30 @@ const bindEvents = () => {
   app.querySelector('[data-dropzone="media"]')?.addEventListener('drop', (event) => { event.preventDefault(); event.currentTarget.classList.remove('dragging'); addFiles([...event.dataTransfer.files]); });
   app.querySelectorAll('[data-media-id]').forEach((element) => {
     if (element.draggable) {
-      element.addEventListener('dragstart', (event) => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('text/media-id', element.dataset.mediaId); });
+      element.addEventListener('dragstart', (event) => {
+        state.dragPayload = {type: 'media', id: element.dataset.mediaId, native: true, grabOffset: 0};
+        event.dataTransfer.effectAllowed = 'copy';
+        event.dataTransfer.setData('text/media-id', element.dataset.mediaId);
+      });
+      element.addEventListener('dragend', clearNativeDrag);
       element.addEventListener('pointerdown', (event) => startPointerDrag(event, 'media', element.dataset.mediaId));
     }
   });
   app.querySelectorAll('[data-action="remove-media"]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); removeMedia(button.dataset.mediaId); }));
   app.querySelectorAll('[data-clip-id]').forEach((clipElement) => {
     clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; state.selectedGhostKey = null; state.previewDiffId = null; renderApp(); });
-    clipElement.addEventListener('dragstart', (event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/clip-id', clipElement.dataset.clipId); });
+    clipElement.addEventListener('dragstart', (event) => {
+      const clip = clipById(clipElement.dataset.clipId);
+      state.dragPayload = {type: 'clip', id: clipElement.dataset.clipId, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/clip-id', clipElement.dataset.clipId);
+    });
+    clipElement.addEventListener('dragend', clearNativeDrag);
     clipElement.addEventListener('pointerdown', (event) => startPointerDrag(event, 'clip', clipElement.dataset.clipId));
+    clipElement.querySelectorAll('.clip-handle').forEach((handle) => {
+      const edge = handle.classList.contains('left') ? 'left' : 'right';
+      handle.addEventListener('pointerdown', (event) => startTrimDrag(event, clipElement.dataset.clipId, edge));
+    });
   });
   app.querySelectorAll('[data-ghost-key]').forEach((ghostElement) => {
     ghostElement.addEventListener('click', (event) => {
@@ -552,9 +582,12 @@ const bindEvents = () => {
     });
     if (ghostElement.draggable) {
       ghostElement.addEventListener('dragstart', (event) => {
+        const clip = findGhostItem(state.pendingDiffs, ghostElement.dataset.ghostKey)?.clip;
+        state.dragPayload = {type: 'ghost', id: ghostElement.dataset.ghostKey, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/ghost-key', ghostElement.dataset.ghostKey);
       });
+      ghostElement.addEventListener('dragend', clearNativeDrag);
       ghostElement.addEventListener('pointerdown', (event) => startPointerDrag(event, 'ghost', ghostElement.dataset.ghostKey));
     }
   });
@@ -565,6 +598,14 @@ const bindEvents = () => {
     lane.addEventListener('click', (event) => { if (event.target.closest('.timeline-clip, .timeline-ghost')) return; seekFromTimeline(event); });
   });
   app.querySelector('#timelineRuler')?.addEventListener('click', seekFromTimeline);
+  app.querySelector('[data-action="split"]')?.addEventListener('click', splitClipAtPlayhead);
+  app.querySelector('[data-action="add-track"]')?.addEventListener('click', () => {
+    state.trackMenuOpen = !state.trackMenuOpen;
+    renderApp();
+  });
+  app.querySelectorAll('[data-action="add-track-kind"]').forEach((button) => {
+    button.addEventListener('click', () => addTrack(button.dataset.trackKind));
+  });
   app.querySelector('[data-action="toggle-play"]')?.addEventListener('click', togglePlay);
   app.querySelector('[data-action="step-back"]')?.addEventListener('click', () => seekTo(state.currentTime - 1 / 30));
   app.querySelector('[data-action="step-forward"]')?.addEventListener('click', () => seekTo(state.currentTime + 1 / 30));
@@ -949,43 +990,248 @@ const rejectAllDiffs = () => {
   renderApp();
 };
 
+const splitClipAtPlayhead = () => {
+  const clip = state.clips.find((candidate) => state.currentTime >= candidate.start && state.currentTime < candidate.start + candidate.duration);
+  if (!clip) {
+    showToast('Place the playhead over a clip to split it.');
+    return;
+  }
+  const result = updateProject({type: 'clip/split', clipId: clip.id, time: state.currentTime});
+  if (!result.changed) {
+    showToast('Move the playhead away from the clip edge to split it.');
+    return;
+  }
+  state.selectedClipId = result.affectedId;
+  renderApp();
+};
+
+const addTrack = (kind) => {
+  if (kind !== 'video' && kind !== 'audio') return;
+  const result = updateProject({type: 'track/add', kind});
+  state.trackMenuOpen = false;
+  if (!result.changed) return;
+  renderApp();
+  showToast(`${kind[0].toUpperCase()}${kind.slice(1)} track added.`);
+};
+
 const dropOnTimeline = (event, trackId) => {
   const mediaId = event.dataTransfer.getData('text/media-id');
   const clipId = event.dataTransfer.getData('text/clip-id');
   const ghostKey = event.dataTransfer.getData('text/ghost-key');
-  placeOnTimeline({mediaId, clipId, ghostKey, clientX: event.clientX, trackId});
+  const payload = state.dragPayload;
+  const start = payload?.native && payload.id === (clipId || ghostKey || mediaId) && payload.type !== 'media'
+    ? Math.max(0, rawTimeFromClientX(event.clientX) - payload.grabOffset)
+    : undefined;
+  placeOnTimeline({mediaId, clipId, ghostKey, clientX: event.clientX, trackId, start});
+  state.dragPayload = null;
+};
+
+const clearTimelineDragGuide = () => {
+  const guide = app.querySelector('#timelineDragGuide');
+  if (guide) guide.hidden = true;
+};
+
+const createTimelineDragPreview = (media) => {
+  const preview = document.createElement('div');
+  preview.className = `timeline-clip ${media.kind} timeline-drag-preview`;
+  preview.innerHTML = renderClipContents(media, media.kind === 'image' ? 5 : Math.max(0.1, media.duration || 5));
+  preview.style.width = `${Math.max((media.kind === 'image' ? 5 : Math.max(0.1, media.duration || 5)) * scale(), 66)}px`;
+  return preview;
+};
+
+const updateTimelineDragPreview = (payload, clientX, clientY) => {
+  const target = document.elementFromPoint(clientX, clientY);
+  const lane = target?.closest('.track-lane');
+  if (!lane) return false;
+
+  const start = Math.max(0, rawTimeFromClientX(clientX) - payload.grabOffset);
+  payload.currentStart = start;
+  payload.currentTrackId = lane.dataset.trackId;
+
+  if (payload.type === 'clip' || payload.type === 'ghost') {
+    if (payload.element.parentElement !== lane) lane.append(payload.element);
+    payload.element.classList.add('dragging');
+    payload.element.style.left = `${start * scale()}px`;
+  } else if (payload.type === 'media') {
+    if (!payload.previewElement) payload.previewElement = createTimelineDragPreview(mediaById(payload.id));
+    if (payload.previewElement && payload.previewElement.parentElement !== lane) lane.append(payload.previewElement);
+    if (payload.previewElement) payload.previewElement.style.left = `${start * scale()}px`;
+  }
+
+  const guide = app.querySelector('#timelineDragGuide');
+  if (guide) {
+    guide.hidden = false;
+    guide.style.left = `${start * scale()}px`;
+  }
+  return true;
+};
+
+const cleanupPointerDrag = (payload) => {
+  payload?.element?.classList?.remove('dragging', 'trimming');
+  payload?.previewElement?.remove();
+  clearTimelineDragGuide();
+  document.body.classList.remove('dragging-payload');
+};
+
+const clearNativeDrag = () => {
+  if (state.dragPayload?.native) state.dragPayload = null;
+  clearTimelineDragGuide();
+};
+
+const startTrimDrag = (event, clipId, edge) => {
+  if (event.button !== 0) return;
+  const clip = clipById(clipId);
+  const element = event.currentTarget.closest('.timeline-clip');
+  if (!clip || !element) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  const payload = {
+    type: 'trim',
+    id: clipId,
+    edge,
+    startX: event.clientX,
+    startY: event.clientY,
+    originalStart: clip.start,
+    originalDuration: clip.duration,
+    originalEnd: clip.start + clip.duration,
+    currentStart: clip.start,
+    currentDuration: clip.duration,
+    element,
+    dragging: false,
+  };
+  state.dragPayload = payload;
+  document.body.classList.add('dragging-payload');
+
+  const onPointerMove = (moveEvent) => {
+    if (state.dragPayload !== payload) return;
+    const moved = Math.hypot(moveEvent.clientX - payload.startX, moveEvent.clientY - payload.startY) >= 4;
+    if (!payload.dragging && !moved) return;
+    payload.dragging = true;
+    const pointerTime = rawTimeFromClientX(moveEvent.clientX);
+    if (edge === 'left') {
+      payload.currentStart = Math.min(Math.max(0, pointerTime), payload.originalEnd - 0.1);
+      payload.currentDuration = Math.max(0.1, payload.originalEnd - payload.currentStart);
+    } else {
+      payload.currentStart = payload.originalStart;
+      payload.currentDuration = Math.max(0.1, pointerTime - payload.originalStart);
+    }
+    element.classList.add('trimming');
+    element.style.left = `${payload.currentStart * scale()}px`;
+    element.style.width = `${Math.max(payload.currentDuration * scale(), 66)}px`;
+    const durationLabel = element.querySelector('.clip-copy span');
+    if (durationLabel) durationLabel.textContent = formatTime(payload.currentDuration);
+    const guide = app.querySelector('#timelineDragGuide');
+    if (guide) {
+      guide.hidden = false;
+      guide.style.left = `${(edge === 'left' ? payload.currentStart : payload.currentStart + payload.currentDuration) * scale()}px`;
+    }
+    moveEvent.preventDefault();
+  };
+
+  const finish = (upEvent, cancelled = false) => {
+    if (state.dragPayload !== payload) return;
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    document.removeEventListener('pointercancel', onPointerCancel);
+    const moved = payload.dragging;
+    cleanupPointerDrag(payload);
+    state.dragPayload = null;
+    if (!moved) return;
+    if (!cancelled) {
+      updateProject({
+        type: 'clip/trim',
+        clipId,
+        edge,
+        start: payload.currentStart,
+        duration: payload.currentDuration,
+      });
+    }
+    renderApp();
+  };
+
+  const onPointerUp = (upEvent) => finish(upEvent);
+  const onPointerCancel = (cancelEvent) => finish(cancelEvent, true);
+  document.addEventListener('pointermove', onPointerMove, {passive: false});
+  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointercancel', onPointerCancel);
 };
 
 const startPointerDrag = (event, type, id) => {
   if (event.button !== 0) return;
   event.preventDefault();
-  state.dragPayload = {type, id, startX: event.clientX, startY: event.clientY};
+  const source = type === 'clip'
+    ? clipById(id)
+    : type === 'ghost'
+      ? findGhostItem(state.pendingDiffs, id)?.clip
+      : mediaById(id);
+  const sourceStart = Number.isFinite(source?.start) ? source.start : 0;
+  const payload = {
+    type,
+    id,
+    startX: event.clientX,
+    startY: event.clientY,
+    grabOffset: rawTimeFromClientX(event.clientX) - sourceStart,
+    currentStart: sourceStart,
+    currentTrackId: source?.trackId || null,
+    element: event.currentTarget,
+    previewElement: null,
+    dragging: false,
+  };
+  state.dragPayload = payload;
   document.body.classList.add('dragging-payload');
 
-  const onPointerUp = (upEvent) => {
-    const target = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
-    const lane = target?.closest('.track-lane');
-    const moved = state.dragPayload
-      && Math.hypot(upEvent.clientX - state.dragPayload.startX, upEvent.clientY - state.dragPayload.startY) >= 4;
-    if (lane && state.dragPayload && moved) {
-      placeOnTimeline({
-        mediaId: state.dragPayload.type === 'media' ? state.dragPayload.id : '',
-        clipId: state.dragPayload.type === 'clip' ? state.dragPayload.id : '',
-        ghostKey: state.dragPayload.type === 'ghost' ? state.dragPayload.id : '',
-        clientX: upEvent.clientX,
-        trackId: lane.dataset.trackId,
-      });
-    }
-    state.dragPayload = null;
-    document.body.classList.remove('dragging-payload');
-    document.removeEventListener('pointerup', onPointerUp);
+  const onPointerMove = (moveEvent) => {
+    if (!state.dragPayload) return;
+    const moved = Math.hypot(moveEvent.clientX - payload.startX, moveEvent.clientY - payload.startY) >= 4;
+    if (!payload.dragging && !moved) return;
+    payload.dragging = true;
+    updateTimelineDragPreview(payload, moveEvent.clientX, moveEvent.clientY);
+    moveEvent.preventDefault();
   };
 
-  document.addEventListener('pointerup', onPointerUp, {once: true});
+  const finish = (upEvent, cancelled = false) => {
+    if (state.dragPayload !== payload) return;
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    document.removeEventListener('pointercancel', onPointerCancel);
+    const target = cancelled ? null : document.elementFromPoint(upEvent.clientX, upEvent.clientY);
+    const lane = target?.closest('.track-lane');
+    const moved = payload.dragging;
+    const canPlace = moved && lane && Number.isFinite(payload.currentStart);
+    const finalStart = payload.currentStart;
+    const finalTrackId = payload.currentTrackId;
+    cleanupPointerDrag(payload);
+    state.dragPayload = null;
+
+    if (!moved) return;
+    if (canPlace) {
+      placeOnTimeline({
+        mediaId: type === 'media' ? id : '',
+        clipId: type === 'clip' ? id : '',
+        ghostKey: type === 'ghost' ? id : '',
+        clientX: upEvent.clientX,
+        trackId: finalTrackId,
+        start: finalStart,
+      });
+    } else {
+      renderApp();
+    }
+  };
+
+  const onPointerUp = (upEvent) => {
+    finish(upEvent);
+  };
+
+  const onPointerCancel = (cancelEvent) => finish(cancelEvent, true);
+
+  document.addEventListener('pointermove', onPointerMove, {passive: false});
+  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointercancel', onPointerCancel);
 };
 
-const placeOnTimeline = ({mediaId, clipId, ghostKey, clientX, trackId}) => {
-  const start = timeFromClientX(clientX);
+const placeOnTimeline = ({mediaId, clipId, ghostKey, clientX, trackId, start: requestedStart}) => {
+  const start = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : timeFromClientX(clientX);
   if (mediaId) {
     const media = mediaById(mediaId);
     if (!media) return;
@@ -1027,13 +1273,22 @@ const timeFromClientX = (clientX) => {
   const scroll = app.querySelector('#timelineScroll');
   if (!content || !scroll) return 0;
   const rect = content.getBoundingClientRect();
-  return Math.max(0, Math.round(((clientX - rect.left) / scale()) * 10) / 10);
+  return Math.max(0, Math.round(rawTimeFromClientX(clientX) * 10) / 10);
+};
+
+const rawTimeFromClientX = (clientX) => {
+  const content = app.querySelector('#timelineContent');
+  const scroll = app.querySelector('#timelineScroll');
+  if (!content || !scroll) return 0;
+  const rect = content.getBoundingClientRect();
+  return Math.max(0, (clientX - rect.left) / scale());
 };
 
 const seekFromTimeline = (event) => seekTo(timeFromPointer(event));
 
-const addFiles = (files) => {
-  files.filter((file) => file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/')).forEach((file) => {
+const addFiles = async (files) => {
+  const acceptedFiles = files.filter((file) => file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'));
+  await Promise.all(acceptedFiles.map(async (file) => {
     const kind = mediaKind(file);
     const result = updateProject({
       type: 'asset/import',
@@ -1049,6 +1304,11 @@ const addFiles = (files) => {
       },
     });
     const item = mediaById(result.affectedId);
+    try {
+      await projectDatabase.putAsset(item.id, file);
+    } catch {
+      showToast('Media imported for this session, but could not be saved for refresh.');
+    }
     if (kind === 'image') renderApp();
     else {
       const probe = document.createElement(kind === 'audio' ? 'audio' : 'video');
@@ -1057,13 +1317,8 @@ const addFiles = (files) => {
       probe.onloadedmetadata = () => { updateProject({type: 'asset/update', assetId: item.id, patch: {duration: Number.isFinite(probe.duration) ? probe.duration : 5}}); renderApp(); };
       probe.onerror = () => { updateProject({type: 'asset/update', assetId: item.id, patch: {duration: 5}}); renderApp(); };
     }
-  });
-  if (files.length) showToast(`${files.length} media ${files.length === 1 ? 'file' : 'files'} imported.`);
-};
-
-const addSampleMedia = () => {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#6d4bd5"/><stop offset="1" stop-color="#42b9af"/></linearGradient></defs><rect width="640" height="360" fill="url(#g)"/><circle cx="510" cy="90" r="72" fill="#f7d6a0" opacity=".8"/><text x="48" y="190" fill="white" font-family="sans-serif" font-size="42" font-weight="700">PrismFlow sample</text></svg>`;
-  addFiles([new File([svg], 'prismflow-sample.svg', {type: 'image/svg+xml'})]);
+  }));
+  if (acceptedFiles.length) showToast(`${acceptedFiles.length} media ${acceptedFiles.length === 1 ? 'file' : 'files'} imported.`);
 };
 
 const removeMedia = (mediaId) => {
@@ -1072,6 +1327,7 @@ const removeMedia = (mediaId) => {
   const item = mediaById(mediaId);
   if (item?.url) URL.revokeObjectURL(item.url);
   updateProject({type: 'asset/remove', assetId: mediaId});
+  void projectDatabase.removeAsset(mediaId).catch(() => {});
   renderApp();
 };
 
@@ -1108,22 +1364,15 @@ const syncPreview = (forceSeek = false) => {
   const video = app.querySelector('#previewVideo');
   const image = app.querySelector('#previewImage');
   const audio = app.querySelector('#audioPreview');
-  const empty = app.querySelector('#emptyPreview');
-  if (!video || !image || !audio || !empty) return;
+  if (!video || !image || !audio) return;
   const clip = activeClipAt(state.currentTime);
   const media = clip ? mediaById(clip.assetId) : null;
   const hasSource = Boolean(media?.url);
+  const sourceTime = clip ? (clip.sourceStart || 0) + Math.max(0, state.currentTime - clip.start) : 0;
   const shouldShow = (element, show) => element.classList.toggle('visible', Boolean(show));
-  shouldShow(empty, !hasSource);
   shouldShow(video, hasSource && media?.kind === 'video');
   shouldShow(image, hasSource && media?.kind === 'image');
   shouldShow(audio, hasSource && media?.kind === 'audio');
-  const emptyTitle = empty.querySelector('strong');
-  const emptyCopy = empty.querySelector('span');
-  if (media && !hasSource) {
-    if (emptyTitle) emptyTitle.textContent = 'Source needs re-import';
-    if (emptyCopy) emptyCopy.textContent = `${media.name} metadata and timeline placement are still saved.`;
-  }
   if (!media || !clip || !hasSource) {
     video.pause();
     audio.querySelector('audio')?.pause();
@@ -1132,15 +1381,15 @@ const syncPreview = (forceSeek = false) => {
   } else if (state.previewSourceId !== media.id || state.previewClipId !== clip.id) {
     state.previewSourceId = media.id;
     state.previewClipId = clip.id;
-    if (media.kind === 'video') { video.src = media.url; video.currentTime = Math.max(0, state.currentTime - clip.start); }
+    if (media.kind === 'video') { video.src = media.url; video.currentTime = sourceTime; }
     if (media.kind === 'image') image.src = media.url;
     if (media.kind === 'audio') {
       if (!audio.querySelector('audio')) { const element = document.createElement('audio'); element.controls = false; audio.append(element); }
-      const audioElement = audio.querySelector('audio'); audioElement.src = media.url; audioElement.currentTime = Math.max(0, state.currentTime - clip.start);
+      const audioElement = audio.querySelector('audio'); audioElement.src = media.url; audioElement.currentTime = sourceTime;
     }
   } else if (forceSeek) {
-    if (media.kind === 'video') video.currentTime = Math.max(0, state.currentTime - clip.start);
-    if (media.kind === 'audio') { const audioElement = audio.querySelector('audio'); if (audioElement) audioElement.currentTime = Math.max(0, state.currentTime - clip.start); }
+    if (media.kind === 'video') video.currentTime = sourceTime;
+    if (media.kind === 'audio') { const audioElement = audio.querySelector('audio'); if (audioElement) audioElement.currentTime = sourceTime; }
   }
   if (state.isPlaying && media) {
     if (media.kind === 'video') video.play().catch(() => {});
@@ -1196,17 +1445,25 @@ const seekTo = (time) => {
   renderApp();
 };
 
+let falStatusRequest = null;
+
 const checkFalStatus = async () => {
   const status = app.querySelector('#falStatus');
   const indicator = app.querySelector('#falIndicator');
-  if (!status || !indicator) return;
+  const connection = app.querySelector('#falConnection');
+  if (!status || !indicator || !connection) return;
   try {
-    const response = await fetch('/api/fal/status');
-    const data = await response.json();
-    status.textContent = data.configured ? 'Server key detected · ready for models' : 'Add FAL_API_KEY to .env to enable calls';
+    // Fetch once per page load and reuse; renders happen on every
+    // interaction and must not each issue a status request.
+    falStatusRequest ||= fetch('/api/fal/status').then((response) => response.json());
+    const data = await falStatusRequest;
+    status.textContent = data.configured ? 'Ready' : 'Key missing';
+    connection.title = data.configured ? 'FAL adapter ready for models' : 'Add FAL_API_KEY to .env to enable calls';
     indicator.classList.toggle('ready', Boolean(data.configured));
   } catch {
-    status.textContent = 'Local adapter is offline';
+    falStatusRequest = null;
+    status.textContent = 'Offline';
+    connection.title = 'Local FAL adapter is offline';
     indicator.classList.remove('ready');
   }
 };
@@ -1227,4 +1484,52 @@ document.addEventListener('keydown', (event) => {
   if (event.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement?.tagName)) { event.preventDefault(); togglePlay(); }
 });
 
+const restoreSession = async () => {
+  const legacyProject = project;
+  let persistedProject = null;
+  try {
+    await projectDatabase.requestPersistence();
+    persistedProject = await projectDatabase.loadProject();
+  } catch {
+    // Fall back to the legacy bootstrap project if IndexedDB is unavailable.
+  }
+
+  projectStore = createProjectStore({
+    storage: null,
+    initialProject: persistedProject || legacyProject,
+    onCommit: (savedProject) => projectDatabase.saveProject(savedProject),
+  });
+  project = projectStore.getProject();
+
+  await Promise.all(project.mediaAssets.map(async (asset) => {
+    const blob = await projectDatabase.getAsset(asset.id);
+    if (!blob) return;
+    projectStore.registerAssetUrl(asset.id, URL.createObjectURL(blob));
+  }));
+  project = projectStore.getProject();
+  state.mediaHydrated = true;
+  renderApp();
+
+  if (new URLSearchParams(globalThis.location.search).get('syncModelPricing') === '1') {
+    try {
+      const {result} = await import('/scripts/sync-model-pricing.mjs');
+      showToast(`Stored ${result.modelCount} FAL models and ${result.priceCount} prices.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error));
+    }
+  }
+  if (new URLSearchParams(globalThis.location.search).get('importModelPricing') === '1') {
+    try {
+      const {result} = await import('/scripts/import-model-pricing.mjs');
+      showToast(`Imported ${result.storedCount} model pricing records.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error));
+    }
+  }
+};
+
 renderApp();
+void restoreSession().catch(() => {
+  state.mediaHydrated = true;
+  renderApp();
+});
