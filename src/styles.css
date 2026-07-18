@@ -474,6 +474,14 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 .transition-card-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .transition-card-copy strong { color: #dcdce2; font-size: 11px; font-weight: 500; }
 .transition-card-copy span { color: var(--dim); font-family: var(--mono); font-size: 9px; }
+.transition-card.custom { position: relative; border-color: rgba(62, 230, 194, .35); }
+.transition-card.custom .transition-thumb { color: var(--teal); }
+.transition-card-delete { align-items: center; background: rgba(5, 5, 12, .8); border: 1px solid var(--line); border-radius: 50%; color: var(--dim); cursor: pointer; display: none; height: 18px; justify-content: center; padding: 0; position: absolute; right: -6px; top: -6px; width: 18px; }
+.transition-card.custom:hover .transition-card-delete { display: flex; }
+.transition-card-delete:hover { color: #ff7d8a; border-color: rgba(255, 125, 138, .5); }
+.transition-card.add-card { background: transparent; border: 1px dashed var(--line); color: var(--dim); cursor: pointer; font: inherit; text-align: left; }
+.transition-card.add-card:hover { border-color: var(--cyan); box-shadow: none; }
+.transition-card.add-card .transition-thumb { background: transparent; border: 1px dashed var(--line); }
 
 /* characters */
 .character-grid { display: grid; gap: 9px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 13px 58px; }

@@ -11,14 +11,8 @@ const DEFAULT_TRACKS = [
   {id: 'A1', name: 'Audio', kind: 'audio', order: 1},
 ];
 const SECRET_KEY_PATTERN = /(api.?key|authorization|bearer|credential|password|secret|token)/i;
-export const TRANSITION_TYPES = {
-  'crossfade': {label: 'Crossfade', defaultDuration: 1},
-  'dip-to-black': {label: 'Dip to black', defaultDuration: 1},
-  'wipe-left': {label: 'Wipe left', defaultDuration: 0.8},
-  'wipe-right': {label: 'Wipe right', defaultDuration: 0.8},
-  'slide-left': {label: 'Slide left', defaultDuration: 0.8},
-  'slide-right': {label: 'Slide right', defaultDuration: 0.8},
-};
+import {TRANSITION_TYPES, getTransitionDefinition, validateTransitionDefinition, createTransitionKey} from './transitions.js';
+export {TRANSITION_TYPES};
 export const TRANSITION_EDGE_EPSILON = 0.05;
 const MIN_TRANSITION_DURATION = 0.1;
 const TIMELINE_DIFF_OPERATION_TYPES = new Set(['add', 'move', 'trim', 'replace', 'remove']);
@@ -193,15 +187,17 @@ const resolveTransitionAttachment = (transition, clips) => {
   return {fromClip, toClip, trackId: anchor.trackId, edgeTime};
 };
 
-const normalizeTransition = (value, {clips, createId}) => {
-  if (!isRecord(value) || !TRANSITION_TYPES[value.type]) return null;
+const normalizeTransition = (value, {clips, createId, customTransitions = []}) => {
+  if (!isRecord(value)) return null;
+  const definition = getTransitionDefinition(value.type, customTransitions);
+  if (!definition) return null;
   const transition = {
     id: asString(value.id, createId('transition')),
     type: value.type,
     trackId: asString(value.trackId),
     fromClipId: asNullableString(value.fromClipId),
     toClipId: asNullableString(value.toClipId),
-    duration: asNumber(value.duration, TRANSITION_TYPES[value.type].defaultDuration, MIN_TRANSITION_DURATION),
+    duration: asNumber(value.duration, definition.defaultDuration, MIN_TRANSITION_DURATION),
   };
   const attachment = resolveTransitionAttachment(transition, clips);
   if (!attachment) return null;
@@ -235,6 +231,7 @@ const createDefaultProject = ({now, createId}) => {
     scenes: [{id: sceneId, name: 'Opening scene', duration: DEFAULT_TIMELINE_DURATION, metadata: {}}],
     characters: [],
     styles: [],
+    customTransitions: [],
     usage: {schemaVersion: PROJECT_USAGE_SCHEMA_VERSION, estimatedUsd: 0, credits: 0, generationCount: 0, updatedAt: timestamp, entries: []},
     agentWorkspace: {schemaVersion: AGENT_WORKSPACE_SCHEMA_VERSION, updatedAt: timestamp, messages: [], script: {title: 'Untitled story', metadata: {}, beats: []}},
     contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
@@ -566,9 +563,18 @@ const normalizeProject = (value, dependencies) => {
   const clips = (Array.isArray(timeline.clips) ? timeline.clips : [])
     .map((clip) => normalizeClip(clip, {assetIds, sceneIds, trackIds, createId: dependencies.createId}))
     .filter(Boolean);
+  const seenTransitionKeys = new Set();
+  const customTransitions = (Array.isArray(value.customTransitions) ? value.customTransitions : [])
+    .map((definition) => {
+      const result = validateTransitionDefinition(definition);
+      if (!result.ok || !result.definition.key || TRANSITION_TYPES[result.definition.key]) return null;
+      if (isRecord(definition) && typeof definition.promptText === 'string') result.definition.promptText = definition.promptText;
+      return result.definition;
+    })
+    .filter((definition) => definition && !seenTransitionKeys.has(definition.key) && seenTransitionKeys.add(definition.key));
   const seenTransitionIds = new Set();
   const transitions = (Array.isArray(timeline.transitions) ? timeline.transitions : [])
-    .map((transition) => normalizeTransition(transition, {clips, createId: dependencies.createId}))
+    .map((transition) => normalizeTransition(transition, {clips, createId: dependencies.createId, customTransitions}))
     .filter((transition) => transition && !seenTransitionIds.has(transition.id) && seenTransitionIds.add(transition.id));
   const clipEnd = clips.reduce((maximum, clip) => Math.max(maximum, clip.start + clip.duration), 0);
   const duration = Math.max(DEFAULT_TIMELINE_DURATION, asNumber(timeline.duration, DEFAULT_TIMELINE_DURATION, 0.1), clipEnd);
@@ -615,6 +621,7 @@ const normalizeProject = (value, dependencies) => {
     styles: (Array.isArray(value.styles) ? value.styles : [])
       .map((style) => normalizeStyle(style, dependencies))
       .filter(Boolean),
+    customTransitions,
     usage,
     agentWorkspace,
     contextIndex,
@@ -631,6 +638,7 @@ const toPersistedProject = (project) => ({
   scenes: sanitizeJson(project.scenes),
   characters: sanitizeJson(project.characters),
   styles: sanitizeJson(project.styles),
+  customTransitions: sanitizeJson(project.customTransitions || []),
   usage: {
     schemaVersion: PROJECT_USAGE_SCHEMA_VERSION,
     estimatedUsd: project.usage?.estimatedUsd || 0,
@@ -1033,7 +1041,7 @@ export const createProjectStore = ({
         acceptedTimelineChanged = true;
       }
     } else if (command.type === 'transition/add') {
-      const definition = TRANSITION_TYPES[command.transitionType];
+      const definition = getTransitionDefinition(command.transitionType, project.customTransitions);
       if (!definition) throw new Error(`Unknown transition type: ${String(command.transitionType)}`);
       const fromClipId = asNullableString(command.fromClipId);
       const toClipId = asNullableString(command.toClipId);
@@ -1066,6 +1074,26 @@ export const createProjectStore = ({
         affectedId = command.transitionId;
         changed = true;
         acceptedTimelineChanged = true;
+      }
+    } else if (command.type === 'transition-def/create') {
+      const result = validateTransitionDefinition(command.definition);
+      if (!result.ok) throw new Error(`Invalid transition definition: ${result.errors.join('; ')}`);
+      const definition = result.definition;
+      definition.key = createTransitionKey(definition.label, project.customTransitions.map((existing) => existing.key));
+      if (typeof command.promptText === 'string' && command.promptText.trim()) definition.promptText = command.promptText.trim();
+      definition.createdAt = now();
+      project.customTransitions.push(definition);
+      affectedId = definition.key;
+      changed = true;
+    } else if (command.type === 'transition-def/remove') {
+      const definitionIndex = project.customTransitions.findIndex((definition) => definition.key === command.key);
+      if (definitionIndex >= 0) {
+        project.customTransitions.splice(definitionIndex, 1);
+        const before = project.timeline.transitions.length;
+        project.timeline.transitions = project.timeline.transitions.filter((transition) => transition.type !== command.key);
+        if (project.timeline.transitions.length !== before) acceptedTimelineChanged = true;
+        affectedId = command.key;
+        changed = true;
       }
     } else if (command.type === 'clip/character-attach') {
       const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);

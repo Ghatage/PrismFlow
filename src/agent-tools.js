@@ -1,5 +1,6 @@
 import {describeClip} from './project-context.js';
 import {TRANSITION_TYPES, transitionEdgeTime} from './project-store.js';
+import {getTransitionDefinition} from './transitions.js';
 
 const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
@@ -93,7 +94,7 @@ export const createAgentTools = ({
     }, ['kind']),
     tool('list_transitions', 'List all transitions on the timeline with ids, type, attached clips, duration, and the clip-edge time they sit on.'),
     tool('add_transition', 'Add a transition at a clip edge. Give both fromClipId and toClipId for a clip-to-clip transition (the clips must be adjacent on the same video track), or only one of them for a fade to/from black at that clip\'s free edge. Replaces any existing transition at the same edge.', {
-      type: {type: 'string', enum: Object.keys(TRANSITION_TYPES)},
+      type: {type: 'string', description: `Built-in transition key (${Object.keys(TRANSITION_TYPES).join(', ')}) or a custom transition key from the project's transition library.`},
       fromClipId: {type: 'string', description: 'Clip the transition leads out of (its end edge).'},
       toClipId: {type: 'string', description: 'Clip the transition leads into (its start edge).'},
       duration: {type: 'number', description: 'Transition length in seconds (clamped to half the shortest attached clip).'},
@@ -284,8 +285,10 @@ export const createAgentTools = ({
     },
 
     add_transition({type, fromClipId, toClipId, duration} = {}) {
-      if (!TRANSITION_TYPES[type]) {
-        throw new Error(`type must be one of: ${Object.keys(TRANSITION_TYPES).join(', ')}.`);
+      const customTransitions = getProject().customTransitions || [];
+      if (!getTransitionDefinition(type, customTransitions)) {
+        const keys = [...Object.keys(TRANSITION_TYPES), ...customTransitions.map((definition) => definition.key)];
+        throw new Error(`type must be one of: ${keys.join(', ')}.`);
       }
       if (!fromClipId && !toClipId) throw new Error('Provide fromClipId, toClipId, or both. Call list_timeline_clips for valid ids.');
       if (fromClipId) requireClip(fromClipId);

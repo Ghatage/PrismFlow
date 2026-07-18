@@ -302,6 +302,52 @@ test('transitions attach to clip edges, clamp duration, replace at junctions, an
   assert.equal(store.getProject().timeline.transitions.length, 0);
 });
 
+test('custom transition definitions persist, drive the timeline, and clean up on removal', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const assetId = store.dispatch({type: 'asset/import', asset: {name: 'a.mp4', kind: 'video', duration: 30}}).affectedId;
+  const first = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 0, duration: 5}).affectedId;
+  const second = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 5, duration: 5}).affectedId;
+
+  const definition = {
+    label: 'Iris open',
+    glyph: '◎',
+    defaultDuration: 1.2,
+    mode: 'blend',
+    tracks: [
+      {target: 'layerB', property: 'opacity', keyframes: [{at: 0, value: '1'}, {at: 1, value: '1'}]},
+      {target: 'layerB', property: 'clipPath', keyframes: [{at: 0, value: 'circle(0% at 50% 50%)'}, {at: 1, value: 'circle(75% at 50% 50%)'}]},
+    ],
+  };
+  const created = store.dispatch({type: 'transition-def/create', definition, promptText: 'circular reveal'});
+  assert.equal(created.affectedId, 'custom-iris-open');
+  assert.equal(store.getProject().customTransitions[0].promptText, 'circular reveal');
+
+  assert.throws(
+    () => store.dispatch({type: 'transition-def/create', definition: {label: 'Bad', mode: 'blend', tracks: []}}),
+    /Invalid transition definition/,
+  );
+
+  const duplicate = store.dispatch({type: 'transition-def/create', definition});
+  assert.equal(duplicate.affectedId, 'custom-iris-open-2');
+
+  const added = store.dispatch({type: 'transition/add', transitionType: 'custom-iris-open', fromClipId: first, toClipId: second});
+  assert.equal(added.project.timeline.transitions[0].duration, 1.2);
+
+  const reloaded = createProjectStore({storage, ...createDependencies()});
+  assert.equal(reloaded.getProject().customTransitions.length, 2);
+  assert.equal(reloaded.getProject().timeline.transitions[0].type, 'custom-iris-open');
+
+  const removed = store.dispatch({type: 'transition-def/remove', key: 'custom-iris-open'});
+  assert.equal(removed.changed, true);
+  assert.equal(store.getProject().customTransitions.length, 1);
+  assert.equal(store.getProject().timeline.transitions.length, 0);
+  assert.throws(
+    () => store.dispatch({type: 'transition/add', transitionType: 'custom-iris-open', fromClipId: first, toClipId: second}),
+    /Unknown transition type/,
+  );
+});
+
 test('transitions are rejected on audio tracks', () => {
   const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
   const audioAssetId = store.dispatch({type: 'asset/import', asset: {name: 'a.wav', kind: 'audio', duration: 10}}).affectedId;

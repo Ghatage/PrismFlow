@@ -1,4 +1,5 @@
-import {createProjectStore, TRANSITION_EDGE_EPSILON, TRANSITION_TYPES, transitionEdgeTime} from './project-store.js';
+import {createProjectStore, TRANSITION_EDGE_EPSILON, transitionEdgeTime} from './project-store.js';
+import {BUILT_IN_TRANSITIONS, applyTransitionStyles, buildTransitionGenerationMessages, getTransitionDefinition} from './transitions.js';
 import {createBrowserDatabase} from './browser-database.js';
 import {createCharacterLibrary} from './character-library.js';
 import {createStyleLibrary} from './style-library.js';
@@ -65,6 +66,7 @@ const state = {
   get clips() { return project.timeline.clips; },
   get tracks() { return project.timeline.tracks; },
   get transitions() { return project.timeline.transitions; },
+  get customTransitions() { return project.customTransitions; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
@@ -99,6 +101,9 @@ const state = {
   isStyleModalOpen: false,
   generateVideoModal: null,
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
+  isTransitionComposerOpen: false,
+  transitionComposerInput: {name: '', prompt: ''},
+  transitionComposerStatus: {phase: 'idle', error: ''},
   promptMentionMap: {},
   rebaseConflicts: {},
   mediaPanelOpen: true,
@@ -395,7 +400,7 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
-    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : ''}
+    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : state.isTransitionComposerOpen ? renderTransitionComposerModal() : ''}
   `;
 
   bindEvents();
@@ -604,20 +609,42 @@ const renderCharacterComposerModal = () => {
   `;
 };
 
-const TRANSITION_GLYPHS = {
-  'crossfade': '◐',
-  'dip-to-black': '●',
-  'wipe-left': '◧',
-  'wipe-right': '◨',
-  'slide-left': '⇤',
-  'slide-right': '⇥',
-};
+const renderTransitionCard = (definition, isCustom) => `<div class="transition-card ${isCustom ? 'custom' : ''}" draggable="true" data-transition-type="${escapeHtml(definition.key)}" title="Drag onto the timeline"><div class="transition-thumb" aria-hidden="true">${escapeHtml(definition.glyph || '◐')}</div><div class="transition-card-copy"><strong>${escapeHtml(definition.label)}</strong><span>${definition.defaultDuration}s</span></div>${isCustom ? `<button class="transition-card-delete" data-action="delete-transition-def" data-transition-key="${escapeHtml(definition.key)}" draggable="false" title="Delete transition" aria-label="Delete ${escapeHtml(definition.label)}" type="button">${icons.close}</button>` : ''}</div>`;
 
 const renderTransitionsPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">CLIP BLENDS</span><h2>Transitions</h2></div></div>
-  <div class="transition-list">${Object.entries(TRANSITION_TYPES).map(([type, definition]) => `<div class="transition-card" draggable="true" data-transition-type="${escapeHtml(type)}" title="Drag onto the timeline"><div class="transition-thumb" aria-hidden="true">${TRANSITION_GLYPHS[type] || '◐'}</div><div class="transition-card-copy"><strong>${escapeHtml(definition.label)}</strong><span>${definition.defaultDuration}s</span></div></div>`).join('')}</div>
+  <div class="transition-list">${Object.values(BUILT_IN_TRANSITIONS).map((definition) => renderTransitionCard(definition, false)).join('')}${state.customTransitions.map((definition) => renderTransitionCard(definition, true)).join('')}<button class="transition-card add-card" data-action="open-transition-composer" type="button"><div class="transition-thumb" aria-hidden="true">${icons.plus}</div><div class="transition-card-copy"><strong>AI transition</strong><span>Describe your own</span></div></button></div>
   <div class="scene-empty"><div class="scene-line"></div><span>Drop between two clips to blend them, or at a lone clip edge to fade to black. Drops snap to the nearest clip edge.</span></div>
 `;
+
+const renderTransitionComposerModal = () => {
+  const status = state.agentLlmStatus;
+  const unconfigured = status && !status.configured;
+  const composer = state.transitionComposerStatus;
+  const isWorking = composer.phase === 'generating';
+  const input = state.transitionComposerInput;
+  return `
+    <div class="modal-backdrop" data-action="close-transition-composer">
+      <section class="character-modal composer-modal" role="dialog" aria-modal="true" aria-labelledby="transitionComposerTitle">
+        <div class="modal-head"><div><span class="eyebrow">NEW TRANSITION</span><h2 id="transitionComposerTitle">AI transition</h2></div><button class="small-icon-button" data-action="close-transition-composer" aria-label="Close" type="button">${icons.close}</button></div>
+        <form class="character-composer-form" data-transition-composer-form>
+          <div class="composer-fields">
+            <label for="transitionComposerName">Transition name</label>
+            <input id="transitionComposerName" name="name" value="${escapeHtml(input.name)}" placeholder="Iris open" ${isWorking ? 'disabled' : ''} required />
+            <label for="transitionComposerPrompt">Describe the transition</label>
+            <textarea id="transitionComposerPrompt" name="prompt" rows="5" placeholder="A circular reveal of the incoming clip, expanding from the center of the frame…" ${isWorking ? 'disabled' : ''} required>${escapeHtml(input.prompt)}</textarea>
+          </div>
+          <div class="generation-job-card ${composer.phase === 'error' ? 'failed' : composer.phase === 'generating' ? 'generating' : 'idle'}">
+            <span class="job-state-dot"></span>
+            <div><strong>${composer.phase === 'error' ? 'Generation failed' : isWorking ? 'Generating transition' : 'Ready to compose'}</strong><span>${composer.phase === 'error' ? escapeHtml(composer.error || 'Unknown generation error') : isWorking ? 'The model is drafting keyframes for your transition…' : 'The model turns your description into animation keyframes you can drag onto the timeline.'}</span></div>
+          </div>
+          ${unconfigured ? '<p class="agent-prompt-note error">Set LLM_BASE_URL (and LLM_API_KEY) in .env, then restart the server.</p>' : ''}
+          <div class="composer-foot"><small>Built-in transitions are sent as examples; the result is saved to this project.</small><button class="button primary" type="submit" ${isWorking || unconfigured ? 'disabled' : ''}>${isWorking ? 'Generating…' : 'Generate transition'}</button></div>
+        </form>
+      </section>
+    </div>
+  `;
+};
 
 const renderScriptPanel = () => {
   const script = state.agentWorkspace.script;
@@ -712,6 +739,77 @@ const openAgentPrompt = () => {
       .then((status) => { state.agentLlmStatus = status; renderApp(); })
       .catch(() => { state.agentLlmStatus = {configured: false}; renderApp(); });
   }
+};
+
+const openTransitionComposer = () => {
+  state.isTransitionComposerOpen = true;
+  state.transitionComposerStatus = {phase: 'idle', error: ''};
+  renderApp();
+  if (!state.agentLlmStatus) {
+    fetch('/api/agent/status')
+      .then((response) => response.json())
+      .then((status) => { state.agentLlmStatus = status; renderApp(); })
+      .catch(() => { state.agentLlmStatus = {configured: false}; renderApp(); });
+  }
+};
+
+const closeTransitionComposer = () => {
+  if (state.transitionComposerStatus.phase === 'generating') return;
+  state.isTransitionComposerOpen = false;
+  state.transitionComposerInput = {name: '', prompt: ''};
+  state.transitionComposerStatus = {phase: 'idle', error: ''};
+  renderApp();
+};
+
+const parseTransitionResponse = (response) => {
+  const content = response?.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content.trim()) throw new Error('The model returned an empty response.');
+  const stripped = content.replace(/```[a-z]*\n?/gi, '');
+  const start = stripped.indexOf('{');
+  const end = stripped.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('The model reply did not contain a JSON object.');
+  try {
+    return JSON.parse(stripped.slice(start, end + 1));
+  } catch {
+    throw new Error('The model reply was not valid JSON.');
+  }
+};
+
+const submitTransitionComposer = async (event) => {
+  event.preventDefault();
+  const formData = new FormData(event.target);
+  const name = String(formData.get('name') || '').trim();
+  const prompt = String(formData.get('prompt') || '').trim();
+  if (!name || !prompt) return;
+  state.transitionComposerInput = {name, prompt};
+  state.transitionComposerStatus = {phase: 'generating', error: ''};
+  renderApp();
+  try {
+    const messages = buildTransitionGenerationMessages({
+      name,
+      prompt,
+      existingKeys: state.customTransitions.map((definition) => definition.key),
+    });
+    const response = await callLlm({messages});
+    const definition = parseTransitionResponse(response);
+    definition.label = name;
+    updateProject({type: 'transition-def/create', definition, promptText: prompt});
+    state.isTransitionComposerOpen = false;
+    state.transitionComposerInput = {name: '', prompt: ''};
+    state.transitionComposerStatus = {phase: 'idle', error: ''};
+    state.activeTab = 'transitions';
+  } catch (error) {
+    state.transitionComposerStatus = {phase: 'error', error: error?.message || 'Transition generation failed.'};
+  }
+  renderApp();
+};
+
+const deleteTransitionDefinition = (key) => {
+  updateProject({type: 'transition-def/remove', key});
+  if (state.selectedTransitionId && !state.transitions.some((transition) => transition.id === state.selectedTransitionId)) {
+    state.selectedTransitionId = null;
+  }
+  renderApp();
 };
 
 const closeAgentPrompt = () => {
@@ -1054,10 +1152,11 @@ const renderClip = (clip) => {
 const renderTransitionMarker = (transition) => {
   const edgeTime = transitionEdgeTime(transition, state.clips);
   if (!Number.isFinite(edgeTime)) return '';
-  const label = TRANSITION_TYPES[transition.type]?.label || transition.type;
+  const definition = getTransitionDefinition(transition.type, state.customTransitions);
+  const label = definition?.label || transition.type;
   const placement = transition.fromClipId && transition.toClipId ? 'between clips' : transition.fromClipId ? 'to black' : 'from black';
   const description = `${label} · ${placement} · ${formatTime(transition.duration)}`;
-  return `<button class="timeline-transition ${transition.id === state.selectedTransitionId ? 'selected' : ''}" data-transition-id="${escapeHtml(transition.id)}" type="button" style="left:${edgeTime * scale()}px" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${label} transition, ${placement}`)}"><span aria-hidden="true">${TRANSITION_GLYPHS[transition.type] || '◐'}</span></button>`;
+  return `<button class="timeline-transition ${transition.id === state.selectedTransitionId ? 'selected' : ''}" data-transition-id="${escapeHtml(transition.id)}" type="button" style="left:${edgeTime * scale()}px" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${label} transition, ${placement}`)}"><span aria-hidden="true">${escapeHtml(definition?.glyph || '◐')}</span></button>`;
 };
 
 const renderClipContents = (media, duration) => `<div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div>`;
@@ -1198,6 +1297,15 @@ const bindEvents = () => {
   app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
   app.querySelector('[data-style-name-form]')?.addEventListener('submit', renameStyle);
   app.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
+  app.querySelector('[data-action="open-transition-composer"]')?.addEventListener('click', openTransitionComposer);
+  app.querySelectorAll('[data-action="close-transition-composer"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeTransitionComposer(); }));
+  app.querySelector('[data-transition-composer-form]')?.addEventListener('submit', submitTransitionComposer);
+  app.querySelector('#transitionComposerName')?.addEventListener('input', (event) => { state.transitionComposerInput.name = event.target.value; });
+  app.querySelector('#transitionComposerPrompt')?.addEventListener('input', (event) => { state.transitionComposerInput.prompt = event.target.value; });
+  app.querySelectorAll('[data-action="delete-transition-def"]').forEach((button) => {
+    button.addEventListener('pointerdown', (event) => event.stopPropagation());
+    button.addEventListener('click', (event) => { event.stopPropagation(); deleteTransitionDefinition(button.dataset.transitionKey); });
+  });
   app.querySelector('[data-action="retry-character-generation"]')?.addEventListener('click', retryCharacterComposer);
   app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
   app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
@@ -2678,7 +2786,7 @@ const activeTransitionAt = (time) => {
     const edge = transitionEdgeTime(transition, state.clips);
     if (!Number.isFinite(edge)) continue;
     const duration = transition.duration;
-    if (transition.fromClipId && transition.toClipId && transition.type === 'dip-to-black') {
+    if (transition.fromClipId && transition.toClipId && getTransitionDefinition(transition.type, state.customTransitions)?.mode === 'dip') {
       if (time >= edge - duration / 2 && time < edge + duration / 2) {
         return {transition, progress: (time - (edge - duration / 2)) / duration, incomingClip: null, mode: 'dip'};
       }
@@ -2704,26 +2812,23 @@ const applyTransitionFrame = () => {
   const imageB = app.querySelector('#previewImageB');
   if (!fade || !videoB || !imageB) return;
   const active = activeTransitionAt(state.currentTime);
-  const resetLayer = (element) => { element.style.opacity = ''; element.style.clipPath = ''; element.style.transform = ''; };
+  const resetLayer = (element) => { element.style.opacity = ''; element.style.clipPath = ''; element.style.transform = ''; element.style.filter = ''; };
   if (!active || active.mode !== 'blend') [videoB, imageB].forEach(resetLayer);
   if (!active) {
     fade.style.opacity = '0';
     return;
   }
   const {mode, progress, transition} = active;
+  const definition = getTransitionDefinition(transition.type, state.customTransitions);
   if (mode === 'blend') {
     fade.style.opacity = '0';
     const layer = videoB.classList.contains('visible') ? videoB : imageB.classList.contains('visible') ? imageB : null;
-    if (!layer) return;
-    const remaining = (1 - progress) * 100;
+    if (!layer || !definition) return;
     resetLayer(layer);
-    if (transition.type === 'crossfade') layer.style.opacity = String(progress);
-    else if (transition.type === 'wipe-left') { layer.style.opacity = '1'; layer.style.clipPath = `inset(0 0 0 ${remaining}%)`; }
-    else if (transition.type === 'wipe-right') { layer.style.opacity = '1'; layer.style.clipPath = `inset(0 ${remaining}% 0 0)`; }
-    else if (transition.type === 'slide-left') { layer.style.opacity = '1'; layer.style.transform = `translateX(${remaining}%)`; }
-    else if (transition.type === 'slide-right') { layer.style.opacity = '1'; layer.style.transform = `translateX(-${remaining}%)`; }
+    applyTransitionStyles(definition, progress, {layer, fade});
   } else if (mode === 'dip') {
-    fade.style.opacity = String(1 - Math.abs(progress * 2 - 1));
+    if (!definition) return;
+    applyTransitionStyles(definition, progress, {layer: null, fade});
   } else if (mode === 'to-black') {
     fade.style.opacity = String(progress);
   } else {

@@ -117,3 +117,23 @@ Plan: ~/.claude/plans/hashed-tumbling-volcano.md (approved)
 - Transcription reuses the video search index verbatim (records only need searchText), so spoken phrases are semantically searchable with zero server-side changes; records carry kind:'audio-transcript'.
 - Whisper (whisper-tiny.en) runs locally at detach time, not at import, to avoid the model download/inference cost on every video; failed/interrupted transcriptions resume on reload via metadata.audioIndex.
 - Not verified live with a real speech video in-browser yet (unit coverage + app smoke test only); first detach downloads ~40MB of Whisper weights.
+
+# Normalized transitions + AI transition generator (2026-07-18)
+
+Plan: ~/.claude/plans/adaptive-gathering-summit.md (approved)
+
+- [x] src/transitions.js — new single-module home for transitions: declarative TransitionDefinition schema (mode + keyframed CSS tracks on layerB/fade), the 6 built-ins expressed in it, generic numeric-lerp interpreter (no eval), validator with property/target whitelists + skeleton-match rule, key slugifier, LLM few-shot prompt builder
+- [x] project-store: TRANSITION_TYPES now derived/re-exported from transitions.js; project.customTransitions array (normalized on load, persisted); transition lookups custom-aware; transition-def/create + transition-def/remove reducers (remove also drops timeline instances using the key)
+- [x] main.js: applyTransitionFrame/activeTransitionAt now interpret definitions generically (hardcoded if/else chain deleted); transitions panel renders built-ins + custom cards (with hover delete) + "[+] AI transition" card; composer modal (name + prompt) → /api/agent/llm with built-ins as examples → parse/validate → saved as custom transition; LLM-unconfigured note + error-in-modal retry path
+- [x] agent-tools: add_transition accepts custom keys (static enum removed, call-time validation); editor-agent system prompt mentions custom transitions
+- [x] styles.css: add-card, custom badge, delete-button styles only (no per-type CSS existed)
+- [x] test/transitions.test.mjs (schema/interpolation/validation/keys/prompt), custom-def reducer test in project-store.test.mjs, test/transitions-browser.test.mjs (Playwright: custom transition renders clip-path mid-blend, composer creates a card from a mocked LLM reply)
+- [x] npm test green (148/148)
+
+## Review
+
+- A transition is now data: {key, label, glyph, defaultDuration, mode, tracks[{target, property, keyframes[{at, value}]}]}. Between keyframes every number in the CSS value lerps; adjacent values must differ only in their numbers (validated), so no eval and nothing reaches the DOM except whitelisted style properties.
+- Built-in behavior is bit-identical to the old hardcoded chain (unit-asserted against the legacy formulas, e.g. wipe-left at p=0.25 → inset(0 0 0 75%)).
+- Custom transitions live on project.customTransitions (characters/styles pattern): persisted to IndexedDB via the existing onCommit, pruned self-healingly if a definition disappears, deleted definitions take their timeline instances with them.
+- LLM flow reuses /api/agent/llm + /api/agent/status; a malformed model reply (bad JSON or schema violation) surfaces the exact validator error in the modal with inputs preserved — verified in the browser test debug run.
+- Lone-edge (to/from black) fades remain fixed behavior regardless of definition, as before.
