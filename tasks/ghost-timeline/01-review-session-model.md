@@ -1,6 +1,6 @@
 # Ghost timeline review session model
 
-Status: planned
+Status: complete
 
 ## Goal
 

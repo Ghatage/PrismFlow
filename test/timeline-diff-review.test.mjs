@@ -2,7 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {createProjectStore} from '../src/project-store.js';
-import {buildGhostItems, previewTimelineForDiff, reviseGhostProposal} from '../src/timeline-diff-review.js';
+import {
+  buildGhostItems,
+  createReviewSession,
+  derivePreviewClips,
+  enterPreview,
+  exitPreview,
+  listReviewableDiffs,
+  listReviewItems,
+  previewTimelineForDiff,
+  reviseGhostProposal,
+  selectFirstReviewItem,
+  selectNextReviewItem,
+  selectPreviousReviewItem,
+} from '../src/timeline-diff-review.js';
 import {createTimelineDiffs} from '../src/timeline-diffs.js';
 
 class MemoryStorage {
@@ -79,6 +92,78 @@ test('builds distinct ghost representations and previews without mutating accept
   assert.equal(revised.provenance.revisedFromDiffId, diff.id);
   assert.equal(diff.operations[1].after.start, 1);
   assert.throws(() => reviseGhostProposal(diff, 4, {start: 9}), /cannot be dragged/);
+});
+
+test('orders review proposals deterministically and navigates one item per diff', () => {
+  const first = {
+    id: 'diff-first',
+    status: 'pending',
+    source: 'generation',
+    baseRevision: 2,
+    summary: 'First proposal',
+    provenance: {requestId: 'first'},
+    createdAt: '2026-07-16T10:00:00.000Z',
+    operations: [{type: 'add', clipId: 'new-clip', before: null, after: clip('new-clip', 0)}],
+  };
+  const second = {
+    id: 'diff-second',
+    status: 'stale',
+    source: 'user',
+    baseRevision: 1,
+    summary: 'Second proposal',
+    provenance: {requestId: 'second'},
+    createdAt: '2026-07-16T11:00:00.000Z',
+    operations: [{type: 'move', clipId: 'move-clip', before: clip('move-clip', 1), after: clip('move-clip', 4)}],
+  };
+  const ignored = {...first, id: 'ignored', status: 'accepted'};
+
+  assert.deepEqual(listReviewableDiffs([second, ignored, first]).map((diff) => diff.id), ['diff-first', 'diff-second']);
+  const items = listReviewItems([second, first]);
+  assert.deepEqual(items.map((item) => item.diffId), ['diff-first', 'diff-second']);
+  assert.equal(items[1].type, 'move');
+  assert.equal(items[1].role, 'destination');
+  assert.equal(items[1].status, 'stale');
+  assert.equal(items[1].source, 'user');
+  assert.deepEqual(items[1].provenance, {requestId: 'second'});
+
+  const firstItem = selectFirstReviewItem([second, first]);
+  assert.equal(firstItem.diffId, 'diff-first');
+  assert.equal(selectPreviousReviewItem([second, first], firstItem.key).key, firstItem.key);
+  assert.equal(selectNextReviewItem([second, first], firstItem.key).diffId, 'diff-second');
+  assert.equal(selectNextReviewItem([second, first], 'missing').diffId, 'diff-first');
+  assert.equal(selectNextReviewItem([], firstItem.key), null);
+
+  firstItem.provenance.requestId = 'mutated';
+  assert.equal(first.provenance.requestId, 'first');
+});
+
+test('keeps preview state separate from accepted playback clips', () => {
+  const accepted = [clip('accepted', 0)];
+  const diff = {
+    id: 'diff-preview',
+    status: 'pending',
+    createdAt: '2026-07-16T12:00:00.000Z',
+    operations: [{type: 'trim', clipId: 'accepted', before: accepted[0], after: {...accepted[0], duration: 0.5}}],
+  };
+  const session = createReviewSession({acceptedClips: accepted, diffs: [diff]});
+  const selected = session.selectFirst();
+  assert.equal(selected.diffId, diff.id);
+  assert.deepEqual(session.getState(), {selectedKey: selected.key, previewDiffId: null});
+  assert.deepEqual(session.getPlaybackClips(), accepted);
+
+  assert.deepEqual(enterPreview(session.getState(), diff.id), {
+    selectedKey: selected.key,
+    previewDiffId: diff.id,
+  });
+  session.enterPreview(diff.id);
+  const preview = session.getPlaybackClips();
+  assert.equal(preview[0].duration, 0.5);
+  assert.equal(accepted[0].duration, 2);
+  assert.equal(derivePreviewClips(accepted, diff)[0].duration, 0.5);
+
+  session.exitPreview();
+  assert.deepEqual(session.getPlaybackClips(), accepted);
+  assert.equal(exitPreview(session.getState()).previewDiffId, null);
 });
 
 test('accepts or rejects multiple reviewable diffs as one store transition', () => {
