@@ -535,8 +535,8 @@ export const createProjectStore = ({
     markPendingDiffsStale(timestamp);
   };
 
-  const applyTimelineDiff = (diff) => {
-    const context = {...timelineDiffContext(), clips: project.timeline.clips.map(cloneJson)};
+  const applyTimelineDiff = (diff, clips = project.timeline.clips) => {
+    const context = {...timelineDiffContext(), clips: clips.map(cloneJson)};
     diff.operations.forEach((operation) => normalizeTimelineDiffOperation(operation, context));
     return context.clips;
   };
@@ -681,6 +681,35 @@ export const createProjectStore = ({
       if (diff.status !== 'rejected') {
         diff.status = 'rejected';
         diff.updatedAt = now();
+        changed = true;
+      }
+    } else if (command.type === 'timeline-diff/accept-all') {
+      const reviewable = project.timelineDiffs.items.filter((diff) => diff.status === 'pending' || diff.status === 'stale');
+      if (reviewable.some((diff) => diff.status === 'stale' || diff.baseRevision !== project.timeline.revision)) {
+        throw new Error('Stale timeline diffs must be reconciled before acceptance.');
+      }
+      if (reviewable.length) {
+        const nextClips = reviewable.reduce((clips, diff) => applyTimelineDiff(diff, clips), project.timeline.clips);
+        project.timeline.clips = nextClips;
+        nextClips.forEach(extendTimeline);
+        const timestamp = now();
+        reviewable.forEach((diff) => {
+          diff.status = 'accepted';
+          diff.updatedAt = timestamp;
+        });
+        advanceTimelineRevision(timestamp);
+        affectedId = reviewable[0].id;
+        changed = true;
+      }
+    } else if (command.type === 'timeline-diff/reject-all') {
+      const reviewable = project.timelineDiffs.items.filter((diff) => diff.status === 'pending' || diff.status === 'stale');
+      if (reviewable.length) {
+        const timestamp = now();
+        reviewable.forEach((diff) => {
+          diff.status = 'rejected';
+          diff.updatedAt = timestamp;
+        });
+        affectedId = reviewable[0].id;
         changed = true;
       }
     } else if (command.type === 'timeline-diff/mark-stale') {

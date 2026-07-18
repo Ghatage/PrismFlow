@@ -20,7 +20,9 @@ export const createTimelineDiffs = (projectStore) => {
 
   const accept = (diffId) => store.dispatch({type: 'timeline-diff/accept', diffId});
   const reject = (diffId) => store.dispatch({type: 'timeline-diff/reject', diffId});
+  const acceptAll = () => store.dispatch({type: 'timeline-diff/accept-all'});
+  const rejectAll = () => store.dispatch({type: 'timeline-diff/reject-all'});
   const markStale = (diffIds) => store.dispatch({type: 'timeline-diff/mark-stale', diffIds});
 
-  return {createProposal, listPending, accept, reject, markStale};
+  return {createProposal, listPending, accept, reject, acceptAll, rejectAll, markStale};
 };

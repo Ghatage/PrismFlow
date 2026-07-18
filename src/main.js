@@ -8,6 +8,13 @@ import {
   recordCharacterSheetVersion,
 } from './character-generation.js';
 import {createTimelineCharacterAttachments} from './timeline-characters.js';
+import {createTimelineDiffs} from './timeline-diffs.js';
+import {
+  buildGhostItems,
+  findGhostItem,
+  previewTimelineForDiff,
+  reviseGhostProposal,
+} from './timeline-diff-review.js';
 
 const projectStore = createProjectStore();
 let project = projectStore.getProject();
@@ -16,8 +23,11 @@ const state = {
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get clips() { return project.timeline.clips; },
+  get pendingDiffs() { return project.timelineDiffs.items.filter((diff) => diff.status === 'pending' || diff.status === 'stale'); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
+  selectedGhostKey: null,
+  previewDiffId: null,
   currentTime: 0,
   isPlaying: false,
   zoom: 1,
@@ -48,6 +58,7 @@ const timelineCharacterAttachments = createTimelineCharacterAttachments({
   getProject: () => project,
   dispatch: updateProject,
 });
+const timelineDiffs = createTimelineDiffs({getProject: () => project, dispatch: updateProject});
 const useFakeCharacterAdapter = new URLSearchParams(globalThis.location.search).get('characterAdapter') === 'fake';
 const characterGenerationAdapter = useFakeCharacterAdapter
   ? createFakeCharacterGenerationAdapter()
@@ -109,6 +120,8 @@ const mediaKind = (file) => {
 
 const kindIcon = (kind) => icons[kind] || icons.film;
 const clipById = (id) => state.clips.find((clip) => clip.id === id);
+const diffById = (id) => state.pendingDiffs.find((diff) => diff.id === id);
+const selectedGhost = () => findGhostItem(state.pendingDiffs, state.selectedGhostKey);
 const mediaById = (id) => state.media.find((item) => item.id === id);
 const characterById = (id) => state.characters.find((character) => character.id === id);
 const characterVersion = (character) => character?.versions.find((version) => version.id === (character.lockedVersionId || character.activeVersionId)) || null;
@@ -167,7 +180,7 @@ const renderApp = () => {
             <div class="player-controls">
               <div class="player-time"><span id="playerCurrent">00:00.00</span><span class="muted"> / </span><span id="playerDuration">00:12.00</span></div>
               <div class="player-buttons"><button class="round-control" data-action="step-back" title="Previous frame" type="button">${icons.skipBack}</button><button class="play-control" data-action="toggle-play" title="${state.isPlaying ? 'Pause' : 'Play'}" type="button">${state.isPlaying ? icons.pause : icons.play}</button><button class="round-control" data-action="step-forward" title="Next frame" type="button">${icons.skipForward}</button></div>
-              <div class="player-right"><span class="live-dot"></span><span>Preview</span><button class="toolbar-button" type="button">${icons.more}</button></div>
+              <div class="player-right"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button">${icons.more}</button></div>
             </div>
           </div>
           <div class="stage-footer"><div class="tip"><span class="tip-icon">${icons.magic}</span><span>FAL-ready workspace</span><span class="muted">Generation hooks are isolated until you are ready.</span></div><div class="keyboard-hint"><kbd>Space</kbd> play/pause <kbd>⌘K</kbd> command menu</div></div>
@@ -317,12 +330,56 @@ const renderSelectedClipInspector = (selected, media) => `
   <button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>
 `;
 
+const renderProvenanceReview = (label, clip) => {
+  const provenance = clip?.provenance || {};
+  const characterVersions = Array.isArray(provenance.characterVersionIds) ? provenance.characterVersionIds : [];
+  return `
+    <div class="provenance-review">
+      <strong>${label}</strong>
+      <dl>
+        <div><dt>Prompt</dt><dd>${escapeHtml(provenance.prompt || 'None')}</dd></div>
+        <div><dt>Model</dt><dd>${escapeHtml(provenance.modelId || 'None')}</dd></div>
+        <div><dt>Seed</dt><dd>${escapeHtml(provenance.seed ?? 'None')}</dd></div>
+        <div><dt>Parameters</dt><dd>${escapeHtml(JSON.stringify(provenance.params || {}))}</dd></div>
+        <div><dt>Parent asset</dt><dd>${escapeHtml(provenance.parentAssetId || 'None')}</dd></div>
+        <div><dt>Character versions</dt><dd>${characterVersions.length ? characterVersions.map(escapeHtml).join(', ') : 'None'}</dd></div>
+      </dl>
+    </div>
+  `;
+};
+
+const renderGhostInspector = (ghost) => {
+  const diff = diffById(ghost.diffId);
+  if (!diff) return '';
+  const beforeMedia = ghost.before ? mediaById(ghost.before.assetId) : null;
+  const afterMedia = ghost.after ? mediaById(ghost.after.assetId) : null;
+  const actionLabel = ghost.type[0].toUpperCase() + ghost.type.slice(1);
+  return `
+    <div class="diff-review-card ${diff.status}">
+      <div class="diff-review-heading"><span>${actionLabel}</span><strong>${escapeHtml(diff.summary)}</strong><small>Base revision ${diff.baseRevision} · ${escapeHtml(diff.source)}</small></div>
+      <div class="diff-review-timing">
+        <div><span>Before</span><strong>${ghost.before ? `${formatTime(ghost.before.start)} · ${formatTime(ghost.before.duration)}` : 'New clip'}</strong><small>${escapeHtml(beforeMedia?.name || 'No accepted source')}</small></div>
+        <div><span>After</span><strong>${ghost.after ? `${formatTime(ghost.after.start)} · ${formatTime(ghost.after.duration)}` : 'Removed'}</strong><small>${escapeHtml(afterMedia?.name || 'No proposed source')}</small></div>
+      </div>
+      ${renderProvenanceReview('Before provenance', ghost.before)}
+      ${renderProvenanceReview('After provenance', ghost.after)}
+      ${diff.status === 'stale' ? '<p class="stale-warning">The accepted timeline changed. Reconcile this proposal before accepting it.</p>' : ''}
+      <div class="diff-review-actions">
+        <button class="button ghost" data-action="preview-diff" data-diff-id="${diff.id}" type="button">Preview proposal</button>
+        <button class="button ghost" data-action="reject-diff" data-diff-id="${diff.id}" type="button">Reject</button>
+        <button class="button primary" data-action="accept-diff" data-diff-id="${diff.id}" type="button" ${diff.status === 'stale' ? 'disabled' : ''}>Accept</button>
+      </div>
+    </div>
+  `;
+};
+
 const renderInspector = () => {
+  const ghost = selectedGhost();
   const selected = clipById(state.selectedClipId);
   const media = selected ? mediaById(selected.assetId) : null;
   return `
-    <div class="inspector-head"><div><span class="eyebrow">INSPECTOR</span><h2>${selected ? 'Clip properties' : 'Workspace'}</h2></div><button class="small-icon-button" type="button">${icons.more}</button></div>
-    ${selected && media ? renderSelectedClipInspector(selected, media) : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip to inspect timing, provenance, and future generation settings.</span></div>`}
+    <div class="inspector-head"><div><span class="eyebrow">INSPECTOR</span><h2>${ghost ? 'Review change' : selected ? 'Clip properties' : 'Workspace'}</h2></div><button class="small-icon-button" type="button">${icons.more}</button></div>
+    ${ghost ? renderGhostInspector(ghost) : selected && media ? renderSelectedClipInspector(selected, media) : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip or pending ghost to inspect it.</span></div>`}
     <div class="fal-card"><div class="fal-card-top"><div class="fal-logo">f/</div><div><strong>FAL connection</strong><span>Generation adapter</span></div><span class="connection-indicator" id="falIndicator"></span></div><div class="fal-status" id="falStatus">Checking local adapter…</div><button class="fal-button" type="button" disabled>${icons.magic} Add a generation later</button></div>
   `;
 };
@@ -332,14 +389,18 @@ const renderTimeline = () => {
   const ticks = Array.from({length: Math.ceil(state.timelineDuration) + 2}, (_, index) => index);
   const videoClips = state.clips.filter((clip) => clip.trackId === 'V1');
   const audioClips = state.clips.filter((clip) => clip.trackId === 'A1');
+  const ghosts = buildGhostItems(state.pendingDiffs);
+  const videoGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'V1');
+  const audioGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === 'A1');
+  const pendingCount = state.pendingDiffs.length;
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span></div><div class="timeline-actions"><button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><button class="toolbar-button" data-action="add-track" type="button">${icons.plus} Track</button><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button">+</button></div></div>
     <div class="timeline-body">
       <div class="track-labels"><div class="ruler-spacer"></div><div class="track-label video-label"><span class="track-color video"></span><div><strong>Video</strong><span>V1</span></div></div><div class="track-label audio-label"><span class="track-color audio"></span><div><strong>Audio</strong><span>A1</span></div></div></div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="width:${timelineWidth}px">
         <div class="ruler" id="timelineRuler">${ticks.map((tick) => `<div class="tick ${tick % 5 === 0 ? 'major' : ''}" style="left:${tick * scale()}px"><span>${formatTime(tick).slice(0, 5)}</span></div>`).join('')}</div>
-        <div class="track-lane video-lane" data-track-id="V1">${videoClips.length ? videoClips.map(renderClip).join('') : '<div class="lane-placeholder">Drop video or images here</div>'}</div>
-        <div class="track-lane audio-lane" data-track-id="A1">${audioClips.length ? audioClips.map(renderClip).join('') : '<div class="lane-placeholder">Drop audio here</div>'}</div>
+        <div class="track-lane video-lane" data-track-id="V1">${videoClips.length || videoGhosts.length ? `${videoClips.map(renderClip).join('')}${videoGhosts.map(renderGhostClip).join('')}` : '<div class="lane-placeholder">Drop video or images here</div>'}</div>
+        <div class="track-lane audio-lane" data-track-id="A1">${audioClips.length || audioGhosts.length ? `${audioClips.map(renderClip).join('')}${audioGhosts.map(renderGhostClip).join('')}` : '<div class="lane-placeholder">Drop audio here</div>'}</div>
         <div class="playhead" id="playhead" style="left:${state.currentTime * scale()}px"><span></span></div>
       </div></div>
     </div>
@@ -351,6 +412,16 @@ const renderClip = (clip) => {
   if (!media) return '';
   const width = Math.max(clip.duration * scale(), 66);
   return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px"><div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(clip.duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div></div>`;
+};
+
+const renderGhostClip = (ghost) => {
+  const clip = ghost.clip;
+  if (!clip) return '';
+  const media = mediaById(clip.assetId);
+  const width = Math.max(clip.duration * scale(), 66);
+  const label = ghost.role === 'origin' ? 'Original position' : ghost.type === 'remove' ? 'Remove' : `${ghost.type} proposal`;
+  const draggable = ghost.role !== 'origin' && ghost.type !== 'remove';
+  return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${formatTime(clip.duration)}</small></button>`;
 };
 
 const bindEvents = () => {
@@ -378,15 +449,30 @@ const bindEvents = () => {
   });
   app.querySelectorAll('[data-action="remove-media"]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); removeMedia(button.dataset.mediaId); }));
   app.querySelectorAll('[data-clip-id]').forEach((clipElement) => {
-    clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; renderApp(); });
+    clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; state.selectedGhostKey = null; state.previewDiffId = null; renderApp(); });
     clipElement.addEventListener('dragstart', (event) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/clip-id', clipElement.dataset.clipId); });
     clipElement.addEventListener('pointerdown', (event) => startPointerDrag(event, 'clip', clipElement.dataset.clipId));
+  });
+  app.querySelectorAll('[data-ghost-key]').forEach((ghostElement) => {
+    ghostElement.addEventListener('click', (event) => {
+      event.stopPropagation();
+      state.selectedGhostKey = ghostElement.dataset.ghostKey;
+      state.selectedClipId = null;
+      renderApp();
+    });
+    if (ghostElement.draggable) {
+      ghostElement.addEventListener('dragstart', (event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/ghost-key', ghostElement.dataset.ghostKey);
+      });
+      ghostElement.addEventListener('pointerdown', (event) => startPointerDrag(event, 'ghost', ghostElement.dataset.ghostKey));
+    }
   });
   app.querySelectorAll('.track-lane').forEach((lane) => {
     lane.addEventListener('dragover', (event) => { event.preventDefault(); lane.classList.add('dragging'); });
     lane.addEventListener('dragleave', () => lane.classList.remove('dragging'));
     lane.addEventListener('drop', (event) => { event.preventDefault(); lane.classList.remove('dragging'); dropOnTimeline(event, lane.dataset.trackId); });
-    lane.addEventListener('click', (event) => { if (event.target.closest('.timeline-clip')) return; seekFromTimeline(event); });
+    lane.addEventListener('click', (event) => { if (event.target.closest('.timeline-clip, .timeline-ghost')) return; seekFromTimeline(event); });
   });
   app.querySelector('#timelineRuler')?.addEventListener('click', seekFromTimeline);
   app.querySelector('[data-action="toggle-play"]')?.addEventListener('click', togglePlay);
@@ -395,6 +481,12 @@ const bindEvents = () => {
   app.querySelector('[data-action="zoom-in"]')?.addEventListener('click', () => { state.zoom = Math.min(2, state.zoom + 0.1); renderApp(); });
   app.querySelector('[data-action="zoom-out"]')?.addEventListener('click', () => { state.zoom = Math.max(0.6, state.zoom - 0.1); renderApp(); });
   app.querySelector('[data-action="delete-clip"]')?.addEventListener('click', deleteSelectedClip);
+  app.querySelector('[data-action="select-first-diff"]')?.addEventListener('click', selectFirstDiff);
+  app.querySelector('[data-action="accept-diff"]')?.addEventListener('click', (event) => acceptDiff(event.currentTarget.dataset.diffId));
+  app.querySelector('[data-action="reject-diff"]')?.addEventListener('click', (event) => rejectDiff(event.currentTarget.dataset.diffId));
+  app.querySelector('[data-action="preview-diff"]')?.addEventListener('click', (event) => previewDiff(event.currentTarget.dataset.diffId));
+  app.querySelector('[data-action="accept-all-diffs"]')?.addEventListener('click', acceptAllDiffs);
+  app.querySelector('[data-action="reject-all-diffs"]')?.addEventListener('click', rejectAllDiffs);
   app.querySelector('[data-action="attach-clip-character"]')?.addEventListener('click', attachCharacterToSelectedClip);
   app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
@@ -540,25 +632,84 @@ const pollCharacterGeneration = async () => {
   if (job.status === 'generating' || job.status === 'retrying') scheduleCharacterPoll();
 };
 
+const selectFirstDiff = () => {
+  state.selectedGhostKey = buildGhostItems(state.pendingDiffs)[0]?.key || null;
+  state.selectedClipId = null;
+  renderApp();
+};
+
+const acceptDiff = (diffId) => {
+  try {
+    timelineDiffs.accept(diffId);
+    state.selectedGhostKey = null;
+    state.previewDiffId = null;
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const rejectDiff = (diffId) => {
+  try {
+    timelineDiffs.reject(diffId);
+    state.selectedGhostKey = null;
+    if (state.previewDiffId === diffId) state.previewDiffId = null;
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const previewDiff = (diffId) => {
+  const diff = diffById(diffId);
+  if (!diff) return;
+  state.previewDiffId = diffId;
+  const firstChangedClip = diff.operations.find((operation) => operation.after || operation.before);
+  state.currentTime = firstChangedClip?.after?.start ?? firstChangedClip?.before?.start ?? state.currentTime;
+  renderApp();
+};
+
+const acceptAllDiffs = () => {
+  try {
+    timelineDiffs.acceptAll();
+    state.selectedGhostKey = null;
+    state.previewDiffId = null;
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const rejectAllDiffs = () => {
+  timelineDiffs.rejectAll();
+  state.selectedGhostKey = null;
+  state.previewDiffId = null;
+  renderApp();
+};
+
 const dropOnTimeline = (event, trackId) => {
   const mediaId = event.dataTransfer.getData('text/media-id');
   const clipId = event.dataTransfer.getData('text/clip-id');
-  placeOnTimeline({mediaId, clipId, clientX: event.clientX, trackId});
+  const ghostKey = event.dataTransfer.getData('text/ghost-key');
+  placeOnTimeline({mediaId, clipId, ghostKey, clientX: event.clientX, trackId});
 };
 
 const startPointerDrag = (event, type, id) => {
   if (event.button !== 0) return;
   event.preventDefault();
-  state.dragPayload = {type, id};
+  state.dragPayload = {type, id, startX: event.clientX, startY: event.clientY};
   document.body.classList.add('dragging-payload');
 
   const onPointerUp = (upEvent) => {
     const target = document.elementFromPoint(upEvent.clientX, upEvent.clientY);
     const lane = target?.closest('.track-lane');
-    if (lane && state.dragPayload) {
+    const moved = state.dragPayload
+      && Math.hypot(upEvent.clientX - state.dragPayload.startX, upEvent.clientY - state.dragPayload.startY) >= 4;
+    if (lane && state.dragPayload && moved) {
       placeOnTimeline({
         mediaId: state.dragPayload.type === 'media' ? state.dragPayload.id : '',
         clipId: state.dragPayload.type === 'clip' ? state.dragPayload.id : '',
+        ghostKey: state.dragPayload.type === 'ghost' ? state.dragPayload.id : '',
         clientX: upEvent.clientX,
         trackId: lane.dataset.trackId,
       });
@@ -571,7 +722,7 @@ const startPointerDrag = (event, type, id) => {
   document.addEventListener('pointerup', onPointerUp, {once: true});
 };
 
-const placeOnTimeline = ({mediaId, clipId, clientX, trackId}) => {
+const placeOnTimeline = ({mediaId, clipId, ghostKey, clientX, trackId}) => {
   const start = timeFromClientX(clientX);
   if (mediaId) {
     const media = mediaById(mediaId);
@@ -588,6 +739,20 @@ const placeOnTimeline = ({mediaId, clipId, clientX, trackId}) => {
     if (!clip) return;
     const result = updateProject({type: 'clip/move', clipId, trackId, start});
     state.selectedClipId = result.affectedId;
+  } else if (ghostKey) {
+    const ghost = findGhostItem(state.pendingDiffs, ghostKey);
+    const diff = ghost ? diffById(ghost.diffId) : null;
+    if (!ghost || !diff || ghost.role === 'origin' || ghost.type === 'remove') return;
+    try {
+      const revised = reviseGhostProposal(diff, ghost.operationIndex, {start, trackId});
+      const result = timelineDiffs.createProposal({...revised, baseRevision: project.timeline.revision});
+      timelineDiffs.reject(diff.id);
+      state.selectedGhostKey = buildGhostItems(state.pendingDiffs)
+        .find((item) => item.diffId === result.affectedId && item.role !== 'origin')?.key || null;
+      state.selectedClipId = null;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : String(error));
+    }
   }
   renderApp();
 };
@@ -672,7 +837,11 @@ const removeCharacterFromSelectedClip = (versionId) => {
   renderApp();
 };
 
-const activeClipAt = (time) => state.clips.find((clip) => time >= clip.start && time < clip.start + clip.duration);
+const activeClipAt = (time) => {
+  const previewDiff = state.previewDiffId ? diffById(state.previewDiffId) : null;
+  const clips = previewDiff ? previewTimelineForDiff(state.clips, previewDiff) : state.clips;
+  return clips.find((clip) => time >= clip.start && time < clip.start + clip.duration);
+};
 
 const syncPreview = (forceSeek = false) => {
   const video = app.querySelector('#previewVideo');
