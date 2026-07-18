@@ -178,6 +178,77 @@ test('marks old proposals stale and prevents silent acceptance after accepted ed
   assert.doesNotThrow(() => createTimelineDiffs(reopened).reject('diff-stale'));
 });
 
+test('rebases compatible stale proposals into new pending history and is idempotent', () => {
+  const {store, diffs, clipIds} = createFixture();
+  diffs.createProposal({
+    id: 'diff-rebase-compatible',
+    operations: [{type: 'move', clipId: clipIds[0], after: {start: 9}}],
+  });
+  store.dispatch({type: 'clip/move', clipId: clipIds[1], trackId: 'V1', start: 7});
+  const acceptedAfterConcurrentEdit = JSON.stringify(store.getProject().timeline.clips);
+
+  const first = diffs.rebase('diff-rebase-compatible');
+  assert.equal(first.changed, true);
+  const rebased = first.project.timelineDiffs.items.find((diff) => diff.id === first.affectedId);
+  assert.equal(rebased.status, 'pending');
+  assert.equal(rebased.baseRevision, first.project.timeline.revision);
+  assert.equal(rebased.provenance.reconciliation.rebasedFromDiffId, 'diff-rebase-compatible');
+  assert.equal(first.project.timelineDiffs.items.find((diff) => diff.id === 'diff-rebase-compatible').status, 'stale');
+  assert.equal(JSON.stringify(first.project.timeline.clips), acceptedAfterConcurrentEdit);
+
+  const repeated = diffs.rebase('diff-rebase-compatible');
+  assert.equal(repeated.changed, false);
+  assert.equal(repeated.affectedId, first.affectedId);
+  assert.equal(repeated.project.timelineDiffs.items.filter((diff) => diff.provenance.reconciliation?.rebasedFromDiffId === 'diff-rebase-compatible').length, 1);
+
+  const accepted = diffs.accept(first.affectedId);
+  assert.equal(accepted.project.timelineDiffs.items.find((diff) => diff.id === first.affectedId).status, 'accepted');
+  assert.equal(accepted.project.timeline.clips.find((clip) => clip.id === clipIds[0]).start, 9);
+});
+
+test('reports stale rebase conflicts without changing accepted clips or the stale record', () => {
+  const {store, diffs, clipIds, secondAssetId} = createFixture();
+  diffs.createProposal({
+    id: 'diff-rebase-move-conflict',
+    operations: [{type: 'move', clipId: clipIds[0], after: {start: 9}}],
+  });
+  store.dispatch({type: 'clip/move', clipId: clipIds[0], trackId: 'V1', start: 4});
+  const beforeConflict = JSON.stringify(store.getProject());
+  const moveConflict = diffs.rebase('diff-rebase-move-conflict');
+  assert.equal(moveConflict.changed, false);
+  assert.ok(moveConflict.conflicts.some((conflict) => conflict.code === 'target-changed-concurrently'));
+  assert.equal(JSON.stringify(moveConflict.project), beforeConflict);
+
+  diffs.createProposal({
+    id: 'diff-rebase-replace-conflict',
+    operations: [{type: 'replace', clipId: clipIds[1], proposedClip: {assetId: secondAssetId, start: 2, duration: 1}}],
+  });
+  diffs.createProposal({
+    id: 'diff-current-replace',
+    operations: [{type: 'replace', clipId: clipIds[1], proposedClip: {assetId: secondAssetId, start: 2, duration: 1}}],
+  });
+  diffs.accept('diff-current-replace');
+  const replacementConflict = diffs.rebase('diff-rebase-replace-conflict');
+  assert.equal(replacementConflict.changed, false);
+  assert.ok(replacementConflict.conflicts.some((conflict) => conflict.code === 'target-identity-changed'));
+  assert.equal(replacementConflict.project.timelineDiffs.items.filter((diff) => diff.provenance.reconciliation?.rebasedFromDiffId === 'diff-rebase-replace-conflict').length, 0);
+});
+
+test('reports deleted proposal assets as explicit rebase conflicts', () => {
+  const {store, diffs, firstAssetId, clipIds} = createFixture();
+  diffs.createProposal({
+    id: 'diff-rebase-add-asset-conflict',
+    operations: [{type: 'add', clipId: 'generated-clip', proposedClip: {assetId: firstAssetId, start: 10, duration: 1}}],
+  });
+  store.dispatch({type: 'clip/move', clipId: clipIds[0], trackId: 'V1', start: 3});
+  store.dispatch({type: 'asset/remove', assetId: firstAssetId});
+  const beforeConflict = JSON.stringify(store.getProject());
+  const result = diffs.rebase('diff-rebase-add-asset-conflict');
+  assert.equal(result.changed, false);
+  assert.ok(result.conflicts.some((conflict) => conflict.code === 'missing-proposed-asset'));
+  assert.equal(JSON.stringify(result.project), beforeConflict);
+});
+
 test('rejects malformed proposals without partially changing clips or persistence', () => {
   const {store, diffs, firstAssetId, clipIds} = createFixture();
   const before = JSON.stringify(store.getProject());

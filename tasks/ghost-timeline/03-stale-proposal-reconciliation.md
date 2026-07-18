@@ -1,6 +1,6 @@
 # Stale ghost proposal reconciliation
 
-Status: planned
+Status: complete
 
 ## Goal
 

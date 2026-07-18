@@ -48,6 +48,7 @@ const state = {
   isCharacterModalOpen: false,
   characterModalMode: 'detail',
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
+  rebaseConflicts: {},
   previewSourceId: null,
   previewClipId: null,
   rafId: null,
@@ -417,11 +418,19 @@ const renderProvenanceReview = (label, clip) => {
   `;
 };
 
+const renderRebaseConflicts = (conflicts) => `
+  <div class="rebase-conflicts" role="alert">
+    <strong>Cannot rebase this proposal</strong>
+    <ul>${conflicts.map((conflict) => `<li>${escapeHtml(conflict.message)}</li>`).join('')}</ul>
+  </div>
+`;
+
 const renderGhostInspector = (ghost) => {
   const diff = diffById(ghost.diffId);
   if (!diff) return '';
   const beforeMedia = ghost.before ? mediaById(ghost.before.assetId) : null;
   const afterMedia = ghost.after ? mediaById(ghost.after.assetId) : null;
+  const conflicts = state.rebaseConflicts[diff.id] || [];
   const actionLabel = ghost.type[0].toUpperCase() + ghost.type.slice(1);
   return `
     <div class="diff-review-card ${diff.status}">
@@ -432,10 +441,12 @@ const renderGhostInspector = (ghost) => {
       </div>
       ${renderProvenanceReview('Before provenance', ghost.before)}
       ${renderProvenanceReview('After provenance', ghost.after)}
-      ${diff.status === 'stale' ? '<p class="stale-warning">The accepted timeline changed. Reconcile this proposal before accepting it.</p>' : ''}
+      ${diff.status === 'stale' && !conflicts.length ? '<p class="stale-warning">The accepted timeline changed. Reconcile this proposal before accepting it.</p>' : ''}
+      ${conflicts.length ? renderRebaseConflicts(conflicts) : ''}
       <div class="diff-review-actions">
         <button class="button ghost" data-action="preview-diff" data-diff-id="${diff.id}" type="button" ${state.previewDiffId === diff.id ? 'disabled' : ''}>Preview proposal</button>
         <button class="button ghost" data-action="exit-preview" data-diff-id="${diff.id}" type="button" ${state.previewDiffId !== diff.id ? 'disabled' : ''}>Exit preview</button>
+        ${diff.status === 'stale' ? `<button class="button ghost" data-action="rebase-diff" data-diff-id="${diff.id}" type="button" ${conflicts.length ? 'disabled' : ''}>Rebase proposal</button>` : ''}
         <button class="button ghost" data-action="reject-diff" data-diff-id="${diff.id}" type="button">Reject</button>
         <button class="button primary" data-action="accept-diff" data-diff-id="${diff.id}" type="button" ${diff.status === 'stale' ? 'disabled' : ''}>Accept</button>
       </div>
@@ -563,6 +574,7 @@ const bindEvents = () => {
   app.querySelector('[data-action="reject-diff"]')?.addEventListener('click', (event) => rejectDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="preview-diff"]')?.addEventListener('click', (event) => previewDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="exit-preview"]')?.addEventListener('click', exitProposalPreview);
+  app.querySelector('[data-action="rebase-diff"]')?.addEventListener('click', (event) => rebaseDiff(event.currentTarget.dataset.diffId));
   app.querySelector('[data-action="previous-diff"]')?.addEventListener('click', previousDiff);
   app.querySelector('[data-action="next-diff"]')?.addEventListener('click', nextDiff);
   app.querySelector('[data-action="accept-all-diffs"]')?.addEventListener('click', acceptAllDiffs);
@@ -896,6 +908,25 @@ const exitProposalPreview = () => {
   state.previewSourceId = null;
   state.previewClipId = null;
   renderApp();
+};
+
+const rebaseDiff = (diffId) => {
+  try {
+    const result = timelineDiffs.rebase(diffId);
+    if (result.conflicts?.length) {
+      state.rebaseConflicts = {...state.rebaseConflicts, [diffId]: result.conflicts};
+      renderApp();
+      return;
+    }
+    const nextConflicts = {...state.rebaseConflicts};
+    delete nextConflicts[diffId];
+    state.rebaseConflicts = nextConflicts;
+    selectReviewItem(reviewItemForDiff(result.affectedId));
+    state.previewDiffId = null;
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
 };
 
 const acceptAllDiffs = () => {

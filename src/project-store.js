@@ -545,11 +545,75 @@ export const createProjectStore = ({
     return context.clips;
   };
 
+  const rebaseConflictsFor = (diff) => {
+    const conflicts = [];
+    const acceptedClip = (clipId) => project.timeline.clips.find((clip) => clip.id === clipId) || null;
+    const conflict = (operationIndex, operation, code, message, expected, actual) => {
+      conflicts.push({
+        diffId: diff.id,
+        operationIndex,
+        type: operation.type,
+        code,
+        message,
+        expected: cloneJson(expected),
+        actual: cloneJson(actual),
+      });
+    };
+    const beforeFor = (operation) => operation.before || operation.after || operation.proposedClip || null;
+    const sameIdentityAndAsset = (current, before) => Boolean(current && before)
+      && current.id === before.id
+      && current.assetId === before.assetId;
+    const samePlacement = (current, before) => sameIdentityAndAsset(current, before)
+      && current.sceneId === before.sceneId
+      && current.trackId === before.trackId
+      && current.start === before.start
+      && current.duration === before.duration;
+
+    diff.operations.forEach((operation, operationIndex) => {
+      const before = beforeFor(operation);
+      const proposed = operation.after || operation.proposedClip || null;
+      const sourceAssetId = before?.assetId;
+      const proposedAssetId = proposed?.assetId;
+      if (sourceAssetId && !project.mediaAssets.some((asset) => asset.id === sourceAssetId)) {
+        conflict(operationIndex, operation, 'missing-source-asset', `Source asset ${sourceAssetId} is no longer available.`, sourceAssetId, null);
+      }
+      if (proposedAssetId && !project.mediaAssets.some((asset) => asset.id === proposedAssetId)) {
+        conflict(operationIndex, operation, 'missing-proposed-asset', `Proposed asset ${proposedAssetId} is no longer available.`, proposedAssetId, null);
+      }
+
+      if (operation.type === 'add') {
+        const clipId = operation.clipId || proposed?.id;
+        if (clipId && acceptedClip(clipId)) {
+          conflict(operationIndex, operation, 'clip-id-used', `Proposed clip ${clipId} is already present in the accepted timeline.`, null, acceptedClip(clipId));
+        }
+        return;
+      }
+
+      const current = acceptedClip(operation.clipId);
+      if (!current) {
+        conflict(operationIndex, operation, 'target-clip-missing', `Target clip ${operation.clipId} is no longer present.`, before, null);
+        return;
+      }
+      if (!sameIdentityAndAsset(current, before)) {
+        conflict(operationIndex, operation, 'target-identity-changed', `Target clip ${operation.clipId} no longer matches the proposal source.`, before, current);
+        return;
+      }
+      if ((operation.type === 'move' || operation.type === 'trim') && !samePlacement(current, before)) {
+        conflict(operationIndex, operation, 'target-changed-concurrently', `Target clip ${operation.clipId} moved or changed while this proposal was waiting.`, before, current);
+      }
+    });
+    return conflicts;
+  };
+
+  const existingRebaseFor = (diffId) => project.timelineDiffs.items.find((candidate) =>
+    candidate.provenance?.reconciliation?.rebasedFromDiffId === diffId);
+
   const dispatch = (command) => {
     if (!isRecord(command)) throw new TypeError('Project commands must be objects.');
     let affectedId = null;
     let changed = false;
     let acceptedTimelineChanged = false;
+    let conflicts = [];
 
     if (command.type === 'asset/import') {
       const asset = normalizeAsset(command.asset, dependencies);
@@ -722,6 +786,47 @@ export const createProjectStore = ({
         : null;
       changed = markPendingDiffsStale(now(), diffIds);
       affectedId = diffIds?.[0] || null;
+    } else if (command.type === 'timeline-diff/rebase') {
+      const diff = project.timelineDiffs.items.find((candidate) => candidate.id === command.diffId);
+      if (!diff) throw new Error('Timeline diff was not found.');
+      const existing = existingRebaseFor(diff.id);
+      if (existing) {
+        affectedId = existing.id;
+      } else if (diff.status !== 'stale') {
+        conflicts = [{
+          diffId: diff.id,
+          operationIndex: null,
+          type: 'proposal',
+          code: 'not-stale',
+          message: 'Only stale timeline diffs can be rebased.',
+          expected: 'stale',
+          actual: diff.status,
+        }];
+        affectedId = diff.id;
+      } else {
+        conflicts = rebaseConflictsFor(diff);
+        affectedId = diff.id;
+        if (!conflicts.length) {
+          const rebased = cloneJson(diff);
+          delete rebased.id;
+          delete rebased.status;
+          delete rebased.createdAt;
+          delete rebased.updatedAt;
+          rebased.baseRevision = project.timeline.revision;
+          rebased.summary = `${diff.summary} (rebased)`;
+          rebased.provenance = {
+            ...rebased.provenance,
+            reconciliation: {
+              ...(rebased.provenance?.reconciliation || {}),
+              rebasedFromDiffId: diff.id,
+            },
+          };
+          const normalized = normalizeTimelineDiff({...rebased, status: 'pending'}, timelineDiffContext(), {strict: true});
+          project.timelineDiffs.items.push(normalized);
+          affectedId = normalized.id;
+          changed = true;
+        }
+      }
     } else if (command.type === 'scene/update') {
       const scene = project.scenes.find((candidate) => candidate.id === command.sceneId);
       if (scene && isRecord(command.patch)) {
@@ -806,7 +911,7 @@ export const createProjectStore = ({
       if (acceptedTimelineChanged) advanceTimelineRevision(now());
       commit();
     }
-    return {project: getProject(), affectedId, changed};
+    return {project: getProject(), affectedId, changed, conflicts};
   };
 
   saveProject(storage, project);
