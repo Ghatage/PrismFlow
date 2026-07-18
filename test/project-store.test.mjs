@@ -78,6 +78,7 @@ test('persists project structure and provenance without runtime URLs or secrets'
     params: {steps: 28},
     parentAssetId: 'media-parent',
     derivedMetadata: {operation: 'upscale'},
+    characterVersionIds: [],
   });
   assert.equal(serialized.includes('blob:'), false);
   assert.equal(serialized.includes('never-persist-this'), false);
@@ -119,6 +120,7 @@ test('recovers from malformed or unavailable browser storage', () => {
     params: {},
     parentAssetId: null,
     derivedMetadata: null,
+    characterVersionIds: [],
   });
   assert.equal(added.project.timeline.clips[0].trackId, 'A1');
   assert.doesNotThrow(() => memoryOnlyStore.dispatch({type: 'clip/remove', clipId: added.affectedId}));

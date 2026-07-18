@@ -13,6 +13,9 @@ const asString = (value, fallback = '') => typeof value === 'string' && value.tr
 const asNullableString = (value) => typeof value === 'string' && value.trim() ? value : null;
 const asNumber = (value, fallback = 0, minimum = 0) => Number.isFinite(value) ? Math.max(minimum, value) : fallback;
 const asTimestamp = (value, fallback) => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : fallback;
+const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
+  .map((entry) => asString(entry))
+  .filter(Boolean))];
 
 const sanitizeJson = (value, depth = 0, seen = new WeakSet()) => {
   if (depth > 8 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
@@ -49,6 +52,7 @@ const normalizeProvenance = (value) => {
     params: isRecord(provenance.params) ? sanitizeJson(provenance.params) || {} : {},
     parentAssetId: asNullableString(provenance.parentAssetId),
     derivedMetadata: isRecord(derivedMetadata) ? sanitizeJson(derivedMetadata) || {} : null,
+    characterVersionIds: normalizeStringIds(provenance.characterVersionIds),
   };
 };
 
@@ -96,10 +100,6 @@ const normalizeAsset = (value, {now, createId}) => {
     metadata: isRecord(asset.metadata) ? sanitizeJson(asset.metadata) || {} : {},
   };
 };
-
-const normalizeStringIds = (value) => [...new Set((Array.isArray(value) ? value : [])
-  .map((entry) => asString(entry))
-  .filter(Boolean))];
 
 const normalizeCharacterVersion = (value, {now, createId}) => {
   if (!isRecord(value)) return null;
@@ -359,6 +359,24 @@ export const createProjectStore = ({
       if (project.timeline.clips.some((clip) => clip.id === command.clipId)) {
         project.timeline.clips = project.timeline.clips.filter((clip) => clip.id !== command.clipId);
         affectedId = command.clipId;
+        changed = true;
+      }
+    } else if (command.type === 'clip/character-attach') {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
+      const character = project.characters.find((candidate) => candidate.lockedVersionId === command.versionId);
+      if (!clip) throw new Error('Timeline clip was not found.');
+      if (!character) throw new Error('Only a currently locked character version can be attached.');
+      if (!clip.provenance.characterVersionIds.includes(command.versionId)) {
+        clip.provenance.characterVersionIds.push(command.versionId);
+        affectedId = clip.id;
+        changed = true;
+      }
+    } else if (command.type === 'clip/character-remove') {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
+      if (!clip) throw new Error('Timeline clip was not found.');
+      if (clip.provenance.characterVersionIds.includes(command.versionId)) {
+        clip.provenance.characterVersionIds = clip.provenance.characterVersionIds.filter((versionId) => versionId !== command.versionId);
+        affectedId = clip.id;
         changed = true;
       }
     } else if (command.type === 'timeline/set-duration') {

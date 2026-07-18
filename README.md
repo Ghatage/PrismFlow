@@ -24,6 +24,7 @@ The local server reads `.env` and keeps `FAL_API_KEY` server-side. Character gen
 - Import video, audio, and image files through the asset bin or drop zone.
 - Drag assets from the bin to the Video or Audio track.
 - Drag clips to reposition them, select them to inspect timing, and remove them.
+- Create versioned character sheets, explicitly lock an identity version, and attach locked versions to selected clips.
 - Use Space or the player controls to preview the timeline.
 - Adjust the timeline zoom and seek by clicking the ruler or lanes.
 

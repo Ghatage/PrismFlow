@@ -7,6 +7,7 @@ import {
   normalizeCharacterGenerationInput,
   recordCharacterSheetVersion,
 } from './character-generation.js';
+import {createTimelineCharacterAttachments} from './timeline-characters.js';
 
 const projectStore = createProjectStore();
 let project = projectStore.getProject();
@@ -40,6 +41,10 @@ const updateProject = (command) => {
 };
 
 const characterLibrary = createCharacterLibrary({
+  getProject: () => project,
+  dispatch: updateProject,
+});
+const timelineCharacterAttachments = createTimelineCharacterAttachments({
   getProject: () => project,
   dispatch: updateProject,
 });
@@ -290,12 +295,34 @@ const renderScenesPanel = () => `
   <div class="scene-empty"><div class="scene-line"></div><span>Scenes will group timeline beats as your story grows.</span></div>
 `;
 
+const renderInspectorCharacters = (clip) => {
+  const attached = timelineCharacterAttachments.attachedVersions(clip.id);
+  const available = timelineCharacterAttachments.lockedVersions(clip.id);
+  return `
+    <div class="property-group inspector-characters">
+      <label>Characters</label>
+      ${attached.length ? `<div class="character-chips">${attached.map((entry) => `<span class="character-chip ${entry.missing ? 'missing' : ''}"><span>${entry.missing ? 'Missing version' : `${escapeHtml(entry.characterName)} · V${entry.versionNumber}`}</span><small>${entry.missing ? escapeHtml(entry.versionId) : entry.isLocked ? 'Locked reference' : 'Historical reference'}</small><button data-action="remove-clip-character" data-version-id="${escapeHtml(entry.versionId)}" aria-label="Remove ${escapeHtml(entry.characterName || entry.versionId)}" type="button">${icons.close}</button></span>`).join('')}</div>` : '<p class="inspector-empty-copy">No character versions attached.</p>'}
+      ${available.length ? `<div class="attach-character-row"><select id="clipCharacterVersion" aria-label="Locked character version">${available.map((entry) => `<option value="${escapeHtml(entry.versionId)}">${escapeHtml(entry.characterName)} · V${entry.versionNumber} (locked)</option>`).join('')}</select><button class="button ghost" data-action="attach-clip-character" type="button">Add character</button></div>` : '<p class="inspector-empty-copy">Lock a library character to make it available here.</p>'}
+      ${attached.length ? '<small class="generation-reference-note">Future generation uses the exact version shown above.</small>' : ''}
+    </div>
+  `;
+};
+
+const renderSelectedClipInspector = (selected, media) => `
+  <div class="selected-preview ${media.kind}">${media.url ? media.kind === 'audio' ? `<div class="audio-orb">${icons.audio}</div>` : renderMediaVisual(media) : `<div class="offline-thumb">${kindIcon(media.kind)}<span>re-import source</span></div>`}<span class="selected-type">${media.kind.toUpperCase()}</span></div>
+  <div class="inspector-title"><strong>${escapeHtml(media.name)}</strong><span>${selected.trackId === 'V1' ? 'Video track' : 'Audio track'} · ${formatTime(selected.duration)}</span></div>
+  <div class="property-group"><label>Timing</label><div class="property-grid"><div><span>Start</span><strong>${formatTime(selected.start)}</strong></div><div><span>Duration</span><strong>${formatTime(selected.duration)}</strong></div></div></div>
+  <div class="property-group"><label>Source</label><div class="source-line"><span class="source-icon">${kindIcon(media.kind)}</span><span>${escapeHtml(media.name)}</span></div></div>
+  ${renderInspectorCharacters(selected)}
+  <button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>
+`;
+
 const renderInspector = () => {
   const selected = clipById(state.selectedClipId);
   const media = selected ? mediaById(selected.assetId) : null;
   return `
     <div class="inspector-head"><div><span class="eyebrow">INSPECTOR</span><h2>${selected ? 'Clip properties' : 'Workspace'}</h2></div><button class="small-icon-button" type="button">${icons.more}</button></div>
-    ${selected && media ? `<div class="selected-preview ${media.kind}">${media.url ? media.kind === 'audio' ? `<div class="audio-orb">${icons.audio}</div>` : renderMediaVisual(media) : `<div class="offline-thumb">${kindIcon(media.kind)}<span>re-import source</span></div>`}<span class="selected-type">${media.kind.toUpperCase()}</span></div><div class="inspector-title"><strong>${escapeHtml(media.name)}</strong><span>${selected.trackId === 'V1' ? 'Video track' : 'Audio track'} · ${formatTime(selected.duration)}</span></div><div class="property-group"><label>Timing</label><div class="property-grid"><div><span>Start</span><strong>${formatTime(selected.start)}</strong></div><div><span>Duration</span><strong>${formatTime(selected.duration)}</strong></div></div></div><div class="property-group"><label>Source</label><div class="source-line"><span class="source-icon">${kindIcon(media.kind)}</span><span>${escapeHtml(media.name)}</span></div></div><button class="danger-button" data-action="delete-clip" type="button">${icons.close} Remove from timeline</button>` : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip to inspect timing, provenance, and future generation settings.</span></div>`}
+    ${selected && media ? renderSelectedClipInspector(selected, media) : `<div class="workspace-card"><div class="workspace-glow">${icons.magic}</div><strong>Compose with intent</strong><span>Select a timeline clip to inspect timing, provenance, and future generation settings.</span></div>`}
     <div class="fal-card"><div class="fal-card-top"><div class="fal-logo">f/</div><div><strong>FAL connection</strong><span>Generation adapter</span></div><span class="connection-indicator" id="falIndicator"></span></div><div class="fal-status" id="falStatus">Checking local adapter…</div><button class="fal-button" type="button" disabled>${icons.magic} Add a generation later</button></div>
   `;
 };
@@ -368,6 +395,8 @@ const bindEvents = () => {
   app.querySelector('[data-action="zoom-in"]')?.addEventListener('click', () => { state.zoom = Math.min(2, state.zoom + 0.1); renderApp(); });
   app.querySelector('[data-action="zoom-out"]')?.addEventListener('click', () => { state.zoom = Math.max(0.6, state.zoom - 0.1); renderApp(); });
   app.querySelector('[data-action="delete-clip"]')?.addEventListener('click', deleteSelectedClip);
+  app.querySelector('[data-action="attach-clip-character"]')?.addEventListener('click', attachCharacterToSelectedClip);
+  app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
   app.querySelector('[data-action="export"]')?.addEventListener('click', () => showToast('Export will be connected after the composition pipeline is defined.'));
   checkFalStatus();
@@ -623,6 +652,23 @@ const removeMedia = (mediaId) => {
 const deleteSelectedClip = () => {
   updateProject({type: 'clip/remove', clipId: state.selectedClipId});
   state.selectedClipId = null;
+  renderApp();
+};
+
+const attachCharacterToSelectedClip = () => {
+  const versionId = app.querySelector('#clipCharacterVersion')?.value;
+  if (!state.selectedClipId || !versionId) return;
+  try {
+    timelineCharacterAttachments.attach(state.selectedClipId, versionId);
+    renderApp();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
+const removeCharacterFromSelectedClip = (versionId) => {
+  if (!state.selectedClipId) return;
+  timelineCharacterAttachments.remove(state.selectedClipId, versionId);
   renderApp();
 };
 
