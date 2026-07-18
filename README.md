@@ -10,7 +10,7 @@ npm run dev
 
 Then open [http://localhost:4173](http://localhost:4173).
 
-The local server reads `.env` and keeps `FAL_API_KEY` server-side. The browser only sees the adapter status. A generic `POST /api/fal/run` seam is available for wiring model generation later:
+The local server reads `.env` and keeps `FAL_API_KEY` server-side. Character generation uses the local `POST /api/characters/generate` and `GET /api/characters/jobs/:jobId` routes; the browser never receives credentials or constructs Nano Banana 2 payloads. The existing generic `POST /api/fal/run` seam remains available for other models:
 
 ```json
 {
@@ -27,4 +27,8 @@ The local server reads `.env` and keeps `FAL_API_KEY` server-side. The browser o
 - Use Space or the player controls to preview the timeline.
 - Adjust the timeline zoom and seek by clicking the ruler or lanes.
 
-The editor intentionally stops before model selection, generation jobs, provenance persistence, and final rendering. Those are the next product layer around the isolated FAL adapter.
+The editor now persists character versions and generation provenance while keeping final rendering as a separate future layer.
+
+## Deterministic character testing
+
+Open [http://localhost:4173/?characterAdapter=fake](http://localhost:4173/?characterAdapter=fake) to run the character composer without a FAL key or network request. Include `[fail]` in the visual prompt to exercise the failed and retrying states. The default route uses the server-side Nano Banana 2 queue adapter.

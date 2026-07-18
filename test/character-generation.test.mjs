@@ -106,8 +106,14 @@ test('records one completed version without locking or duplicating its character
   assert.equal(project.characters[0].versions.length, 1);
   assert.equal(project.characters[0].lockedVersionId, null);
   assert.equal(project.characters[0].versions[0].prompt, input.prompt);
+  assert.equal(project.characters[0].versions[0].modelId, 'local/fake-character-sheet-v1');
+  assert.equal(Number.isFinite(project.characters[0].versions[0].seed), true);
+  assert.equal(project.characters[0].versions[0].params.mode, 'deterministic');
   assert.equal(project.mediaAssets.length, 1);
   assert.match(project.mediaAssets[0].url, /^data:image\/svg\+xml/);
+  assert.equal(project.mediaAssets[0].metadata.provider, 'local-fake');
+  assert.equal(project.mediaAssets[0].metadata.providerModelId, 'local/fake-character-sheet-v1');
+  assert.match(project.mediaAssets[0].metadata.providerJobId, /^fake-character-job-/);
 
   const reopened = createProjectStore({storage}).getProject();
   assert.equal(reopened.characters[0].versions.length, 1);

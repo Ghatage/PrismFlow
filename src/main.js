@@ -3,6 +3,7 @@ import {createCharacterLibrary} from './character-library.js';
 import {
   createCharacterGenerationController,
   createFakeCharacterGenerationAdapter,
+  createServerCharacterGenerationAdapter,
   normalizeCharacterGenerationInput,
   recordCharacterSheetVersion,
 } from './character-generation.js';
@@ -42,7 +43,12 @@ const characterLibrary = createCharacterLibrary({
   getProject: () => project,
   dispatch: updateProject,
 });
-const characterGenerationAdapter = createFakeCharacterGenerationAdapter();
+const useFakeCharacterAdapter = new URLSearchParams(globalThis.location.search).get('characterAdapter') === 'fake';
+const characterGenerationAdapter = useFakeCharacterAdapter
+  ? createFakeCharacterGenerationAdapter()
+  : createServerCharacterGenerationAdapter({
+    resolveReferenceUrl: (assetId) => project.mediaAssets.find((asset) => asset.id === assetId)?.url || null,
+  });
 let characterGenerationController = null;
 let characterPollTimer = null;
 
@@ -269,9 +275,9 @@ const renderCharacterComposerModal = () => {
           <fieldset class="composer-references" ${isWorking ? 'disabled' : ''}><legend>Optional media references</legend>${imageAssets.length ? `<div class="reference-options">${imageAssets.map((asset) => `<label><input type="checkbox" name="referenceAssetIds" value="${asset.id}" ${input.referenceAssetIds.includes(asset.id) ? 'checked' : ''}/><span class="reference-option-thumb">${renderMediaVisual(asset)}</span><span>${escapeHtml(asset.name)}</span></label>`).join('')}</div>` : '<p>Import images in Media to use them as references.</p>'}</fieldset>
           <div class="generation-job-card ${job.status}">
             <span class="job-state-dot"></span>
-            <div><strong>${job.status === 'idle' ? 'Ready to compose' : job.status === 'failed' ? 'Generation failed' : job.status === 'ready' ? 'Character sheet ready' : job.status === 'retrying' ? 'Retrying character sheet' : 'Generating character sheet'}</strong><span>${job.status === 'idle' ? 'The local adapter creates a deterministic sheet without network calls.' : job.status === 'failed' ? escapeHtml(job.error || 'Unknown generation error') : `${escapeHtml(job.providerStatus || 'queued')} · attempt ${job.attempt}`}</span></div>
+            <div><strong>${job.status === 'idle' ? 'Ready to compose' : job.status === 'failed' ? 'Generation failed' : job.status === 'ready' ? 'Character sheet ready' : job.status === 'retrying' ? 'Retrying character sheet' : 'Generating character sheet'}</strong><span>${job.status === 'idle' ? useFakeCharacterAdapter ? 'The local adapter creates a deterministic sheet without network calls.' : 'Nano Banana 2 will run through the credential-safe local server.' : job.status === 'failed' ? escapeHtml(job.error || 'Unknown generation error') : `${escapeHtml(job.providerStatus || 'queued')} · attempt ${job.attempt}`}</span></div>
           </div>
-          <div class="composer-foot"><small>Deterministic test path: include <code>[fail]</code> in the prompt, then remove it before retrying.</small>${action}</div>
+          <div class="composer-foot"><small>${useFakeCharacterAdapter ? 'Deterministic test path: include <code>[fail]</code> in the prompt, then remove it before retrying.' : 'The browser sends no model ID or FAL credential. Queue polling and result extraction stay server-side.'}</small>${action}</div>
         </form>
       </section>
     </div>

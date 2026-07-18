@@ -77,6 +77,44 @@ export const createFakeCharacterGenerationAdapter = ({
   };
 };
 
+export const createServerCharacterGenerationAdapter = ({
+  fetchImpl = globalThis.fetch,
+  resolveReferenceUrl = () => null,
+} = {}) => {
+  const requestJson = async (url, options = {}) => {
+    const response = await fetchImpl(url, options);
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      data = {};
+    }
+    if (!response.ok) throw new Error(data.error || `Character generation request failed (${response.status}).`);
+    return data;
+  };
+
+  return {
+    kind: 'fal',
+
+    async generateCharacterSheet(input) {
+      const normalized = normalizeCharacterGenerationInput(input);
+      const referenceUrls = normalized.referenceAssetIds
+        .map((assetId) => resolveReferenceUrl(assetId))
+        .filter((url) => typeof url === 'string' && /^(https:\/\/|data:image\/)/i.test(url));
+      return requestJson('/api/characters/generate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({...normalized, referenceUrls}),
+      });
+    },
+
+    async getCharacterSheetJob(jobId) {
+      return requestJson(`/api/characters/jobs/${encodeURIComponent(requiredText(jobId, 'Generation job id'))}`);
+    },
+  };
+};
+
 export const createCharacterGenerationController = ({adapter, onCompleted = async () => {}}) => {
   if (!adapter || typeof adapter.generateCharacterSheet !== 'function' || typeof adapter.getCharacterSheetJob !== 'function') {
     throw new TypeError('Character generation requires a submit-and-poll adapter.');
@@ -167,6 +205,9 @@ export const recordCharacterSheetVersion = ({dispatch, library, characterId, inp
         height: result.asset.height,
         provider: result.source?.provider || 'local',
         providerJobId: result.source?.jobId || null,
+        providerModelId: result.source?.modelId || result.modelId || null,
+        providerFileName: result.source?.fileName || null,
+        providerDescription: result.source?.description || '',
       },
     },
   });
