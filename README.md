@@ -51,12 +51,19 @@ It returns model metadata, pricing, the derived API documentation URL, and ranki
 
 - Import video, audio, and image files through the asset bin or drop zone.
 - Drag assets from the bin to the Video or Audio track.
-- Drag clips to reposition them, select them to inspect timing, and remove them.
+- Drag clips to reposition them, select them to inspect timing, and remove them. Cmd/Ctrl-click toggles selection and Shift-click selects a contiguous same-track range.
 - Create versioned character sheets, explicitly lock an identity version, and attach locked versions to selected clips.
+- Right-click selected image/video clips and choose `Apply Style` to generate review candidates without replacing accepted clips.
 - Use Space or the player controls to preview the timeline.
 - Adjust the timeline zoom and seek by clicking the ruler or lanes.
 
 The editor now persists character versions and generation provenance while keeping final rendering as a separate future layer.
+
+## Apply Style
+
+Apply Style runs up to three clip jobs concurrently and persists their queue state so unfinished work resumes after a refresh. Video clips are trimmed to their exact source range, then sent to `fal-ai/kling-video/o3/standard/video-to-video/edit`; image clips use `fal-ai/nano-banana-2/edit`. A style version can contribute up to four image references. The optional `PRISMFLOW_STYLE_VIDEO_MODEL`, `PRISMFLOW_STYLE_IMAGE_MODEL`, and `PRISMFLOW_STYLE_TRIM_MODEL` environment variables override those server-side endpoints.
+
+Each completed result is added to Imports and proposed in a stacked ghost rail above the accepted clip. Accept replaces the clip through the existing diff review contract; reject removes only the proposal and preserves the generated import. Video clips outside Kling O3 Edit's 3–15 second range are shown as unsupported while other selected clips can continue.
 
 ## Local video frame annotations and semantic search
 

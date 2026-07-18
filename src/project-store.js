@@ -4,6 +4,7 @@ export const TIMELINE_DIFF_SCHEMA_VERSION = 1;
 export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
 export const PROJECT_USAGE_SCHEMA_VERSION = 1;
 export const AGENT_WORKSPACE_SCHEMA_VERSION = 1;
+export const STYLE_APPLICATION_SCHEMA_VERSION = 1;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -17,7 +18,8 @@ export const TRANSITION_EDGE_EPSILON = 0.05;
 const MIN_TRANSITION_DURATION = 0.1;
 const TIMELINE_DIFF_OPERATION_TYPES = new Set(['add', 'move', 'trim', 'replace', 'remove']);
 const TIMELINE_DIFF_STATUSES = new Set(['pending', 'accepted', 'rejected', 'stale']);
-const TIMELINE_DIFF_SOURCES = new Set(['agent', 'generation', 'user']);
+const TIMELINE_DIFF_SOURCES = new Set(['agent', 'generation', 'style-application', 'user']);
+const ACTIVE_STYLE_APPLICATION_STATUSES = new Set(['queued', 'uploading', 'trimming', 'generating']);
 
 const isRecord = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const asString = (value, fallback = '') => typeof value === 'string' && value.trim() ? value : fallback;
@@ -83,6 +85,47 @@ const normalizeAgentWorkspace = (value, {now, createId}) => {
   };
 };
 
+const normalizeStyleApplications = (value, {now, createId}) => {
+  const collection = isRecord(value) && value.schemaVersion === STYLE_APPLICATION_SCHEMA_VERSION ? value : {};
+  const batches = (Array.isArray(collection.batches) ? collection.batches : [])
+    .filter(isRecord)
+    .map((batch) => {
+      const createdAt = asTimestamp(batch.createdAt, now());
+      const jobs = (Array.isArray(batch.jobs) ? batch.jobs : [])
+        .filter(isRecord)
+        .map((job) => ({
+          ...(sanitizeJson(job) || {}),
+          id: asString(job.id, createId('style-job')),
+          clipId: asString(job.clipId),
+          mediaKind: job.mediaKind === 'image' ? 'image' : 'video',
+          status: ['queued', 'uploading', 'trimming', 'generating', 'completed', 'failed', 'skipped'].includes(job.status)
+            ? job.status
+            : 'queued',
+          createdAt: asTimestamp(job.createdAt, createdAt),
+          updatedAt: asTimestamp(job.updatedAt, createdAt),
+        }))
+        .filter((job) => job.clipId);
+      return {
+        ...(sanitizeJson(batch) || {}),
+        id: asString(batch.id, createId('style-batch')),
+        styleId: asString(batch.styleId),
+        styleName: asString(batch.styleName, 'Deleted style'),
+        styleVersionId: asString(batch.styleVersionId),
+        referenceAssetIds: normalizeStringIds(batch.referenceAssetIds),
+        referenceUrls: normalizeStringIds(batch.referenceUrls).filter((url) => /^https:\/\//i.test(url)),
+        instruction: asString(batch.instruction),
+        preserveAudio: batch.preserveAudio !== false,
+        status: ['queued', 'running', 'completed', 'failed'].includes(batch.status) ? batch.status : 'queued',
+        baseRevision: Number.isInteger(batch.baseRevision) && batch.baseRevision >= 0 ? batch.baseRevision : 0,
+        jobs,
+        createdAt,
+        updatedAt: asTimestamp(batch.updatedAt, createdAt),
+      };
+    })
+    .filter((batch) => batch.styleId && batch.styleVersionId && batch.jobs.length);
+  return {schemaVersion: STYLE_APPLICATION_SCHEMA_VERSION, batches};
+};
+
 const sanitizeJson = (value, depth = 0, seen = new WeakSet()) => {
   if (depth > 16 || value === undefined || typeof value === 'function' || typeof value === 'symbol') return undefined;
   if (value === null || typeof value === 'boolean') return value;
@@ -131,6 +174,24 @@ const normalizeProvenance = (value) => {
   if (isRecord(provenance.qualitySettings)) normalized.qualitySettings = sanitizeJson(provenance.qualitySettings) || {};
   if (Number.isFinite(provenance.estimatedUsd)) normalized.estimatedUsd = Math.max(0, provenance.estimatedUsd);
   return normalized;
+};
+
+const detachStyleVersions = (provenance, versionIds) => {
+  if (!isRecord(provenance) || !Array.isArray(provenance.styleVersionIds)) return false;
+  const next = provenance.styleVersionIds.filter((versionId) => !versionIds.has(versionId));
+  if (next.length === provenance.styleVersionIds.length) return false;
+  provenance.styleVersionIds = next;
+  return true;
+};
+
+const detachStyleVersionsFromDiff = (diff, versionIds) => {
+  let changed = detachStyleVersions(diff?.provenance, versionIds);
+  for (const operation of Array.isArray(diff?.operations) ? diff.operations : []) {
+    for (const clip of [operation.before, operation.after, operation.proposedClip]) {
+      if (detachStyleVersions(clip?.provenance, versionIds)) changed = true;
+    }
+  }
+  return changed;
 };
 
 const mergeProvenance = (current, proposed) => {
@@ -231,6 +292,7 @@ const createDefaultProject = ({now, createId}) => {
     scenes: [{id: sceneId, name: 'Opening scene', duration: DEFAULT_TIMELINE_DURATION, metadata: {}}],
     characters: [],
     styles: [],
+    styleApplications: {schemaVersion: STYLE_APPLICATION_SCHEMA_VERSION, batches: []},
     customTransitions: [],
     usage: {schemaVersion: PROJECT_USAGE_SCHEMA_VERSION, estimatedUsd: 0, credits: 0, generationCount: 0, updatedAt: timestamp, entries: []},
     agentWorkspace: {schemaVersion: AGENT_WORKSPACE_SCHEMA_VERSION, updatedAt: timestamp, messages: [], script: {title: 'Untitled story', metadata: {}, beats: []}},
@@ -386,6 +448,7 @@ const normalizeProposedClip = (value, context, {clipId, currentClip = null} = {}
     start,
     duration,
     sourceStart,
+    audioDetached: value.audioDetached === undefined ? Boolean(currentClip?.audioDetached) : Boolean(value.audioDetached),
     provenance: mergeProvenance(currentClip?.provenance, value.provenance),
   };
 };
@@ -604,6 +667,7 @@ const normalizeProject = (value, dependencies) => {
     };
   const usage = normalizeUsage(value.usage || fallback.usage, dependencies);
   const agentWorkspace = normalizeAgentWorkspace(value.agentWorkspace || fallback.agentWorkspace, dependencies);
+  const styleApplications = normalizeStyleApplications(value.styleApplications || fallback.styleApplications, dependencies);
 
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -621,6 +685,7 @@ const normalizeProject = (value, dependencies) => {
     styles: (Array.isArray(value.styles) ? value.styles : [])
       .map((style) => normalizeStyle(style, dependencies))
       .filter(Boolean),
+    styleApplications,
     customTransitions,
     usage,
     agentWorkspace,
@@ -638,6 +703,7 @@ const toPersistedProject = (project) => ({
   scenes: sanitizeJson(project.scenes),
   characters: sanitizeJson(project.characters),
   styles: sanitizeJson(project.styles),
+  styleApplications: sanitizeJson(project.styleApplications || {schemaVersion: STYLE_APPLICATION_SCHEMA_VERSION, batches: []}),
   customTransitions: sanitizeJson(project.customTransitions || []),
   usage: {
     schemaVersion: PROJECT_USAGE_SCHEMA_VERSION,
@@ -857,6 +923,16 @@ export const createProjectStore = ({
 
   const existingRebaseFor = (diffId) => project.timelineDiffs.items.find((candidate) =>
     candidate.provenance?.reconciliation?.rebasedFromDiffId === diffId);
+
+  const refreshStyleApplicationBatchStatus = (batch) => {
+    const statuses = batch.jobs.map((job) => job.status);
+    batch.status = statuses.some((status) => ACTIVE_STYLE_APPLICATION_STATUSES.has(status))
+      ? 'running'
+      : statuses.some((status) => status === 'failed')
+        ? 'failed'
+        : 'completed';
+    batch.updatedAt = now();
+  };
 
   const dispatch = (command) => {
     if (!isRecord(command)) throw new TypeError('Project commands must be objects.');
@@ -1355,6 +1431,51 @@ export const createProjectStore = ({
         affectedId = command.beatId;
         changed = true;
       }
+    } else if (command.type === 'style-application/batch-create') {
+      const normalized = normalizeStyleApplications({
+        schemaVersion: STYLE_APPLICATION_SCHEMA_VERSION,
+        batches: [{...command.batch, createdAt: command.batch?.createdAt || now(), updatedAt: now()}],
+      }, dependencies).batches[0];
+      if (!normalized) throw new Error('Style application batch is invalid.');
+      if (project.styleApplications.batches.some((batch) => batch.id === normalized.id)) {
+        throw new Error(`Style application batch already exists: ${normalized.id}`);
+      }
+      const style = project.styles.find((candidate) => candidate.id === normalized.styleId);
+      if (!style?.versions.some((version) => version.id === normalized.styleVersionId)) {
+        throw new Error('Style application requires an existing style version.');
+      }
+      project.styleApplications.batches.push(normalized);
+      affectedId = normalized.id;
+      changed = true;
+    } else if (command.type === 'style-application/batch-update') {
+      const batch = project.styleApplications.batches.find((candidate) => candidate.id === command.batchId);
+      if (batch && isRecord(command.patch)) {
+        if (command.patch.referenceUrls !== undefined) {
+          batch.referenceUrls = normalizeStringIds(command.patch.referenceUrls).filter((url) => /^https:\/\//i.test(url));
+        }
+        if (command.patch.error !== undefined) batch.error = asNullableString(command.patch.error);
+        if (['queued', 'running', 'completed', 'failed'].includes(command.patch.status)) batch.status = command.patch.status;
+        batch.updatedAt = now();
+        affectedId = batch.id;
+        changed = true;
+      }
+    } else if (command.type === 'style-application/job-update') {
+      const batch = project.styleApplications.batches.find((candidate) => candidate.id === command.batchId);
+      const job = batch?.jobs.find((candidate) => candidate.id === command.jobId);
+      if (batch && job && isRecord(command.patch)) {
+        const patch = sanitizeJson(command.patch) || {};
+        delete patch.id;
+        delete patch.clipId;
+        delete patch.sourceClip;
+        delete patch.sourceAssetId;
+        if (patch.status && !['queued', 'uploading', 'trimming', 'generating', 'completed', 'failed', 'skipped'].includes(patch.status)) {
+          throw new Error(`Unknown style application job status: ${String(patch.status)}`);
+        }
+        Object.assign(job, patch, {updatedAt: now()});
+        refreshStyleApplicationBatchStatus(batch);
+        affectedId = job.id;
+        changed = true;
+      }
     } else if (command.type === 'character/create') {
       const character = normalizeCharacter({
         id: createId('character'),
@@ -1433,6 +1554,22 @@ export const createProjectStore = ({
         character.lockedVersionId = null;
         character.activeVersionId = character.versions.at(-1)?.id || null;
         affectedId = character.id;
+        changed = true;
+      }
+    } else if (command.type === 'style/remove') {
+      const styleIndex = project.styles.findIndex((candidate) => candidate.id === command.styleId);
+      if (styleIndex >= 0) {
+        const style = project.styles[styleIndex];
+        const hasActiveJobs = project.styleApplications.batches.some((batch) => batch.styleId === style.id
+          && batch.jobs.some((job) => ACTIVE_STYLE_APPLICATION_STATUSES.has(job.status)));
+        if (hasActiveJobs) throw new Error('This style cannot be deleted while Apply Style jobs are active.');
+        const versionIds = new Set(style.versions.map((version) => version.id));
+        project.styles.splice(styleIndex, 1);
+        for (const clip of project.timeline.clips) {
+          if (detachStyleVersions(clip.provenance, versionIds)) acceptedTimelineChanged = true;
+        }
+        for (const diff of project.timelineDiffs.items) detachStyleVersionsFromDiff(diff, versionIds);
+        affectedId = style.id;
         changed = true;
       }
     } else if (command.type === 'style/create') {

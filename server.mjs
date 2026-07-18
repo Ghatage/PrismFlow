@@ -11,6 +11,7 @@ import {createModelSearchAdapter} from './server/model-search.mjs';
 import {createLocalVideoVlmAdapter} from './server/video-vlm.mjs';
 import {createVideoSearchAdapter} from './server/video-search.mjs';
 import {createLlmAdapter} from './server/llm-adapter.mjs';
+import {createFalStyleApplicationAdapter} from './server/style-application-adapter.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -30,6 +31,7 @@ const videoSearch = createVideoSearchAdapter({
   indexPath: join(rootDir, 'video-search-index.json'),
 });
 const llm = createLlmAdapter();
+const styleApplications = createFalStyleApplicationAdapter({fal});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -60,6 +62,17 @@ const readJson = async (request, maxBytes = 1_000_000) => {
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+};
+
+const readBytes = async (request, maxBytes = 200_000_000) => {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > maxBytes) throw new Error('Uploaded media is too large.');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 };
 
 const serveStatic = async (requestPath, response) => {
@@ -97,7 +110,48 @@ const server = createServer(async (request, response) => {
       adapter: 'ready',
       configured: fal.configured,
       characterModelId: characterSheets.modelId,
+      styleVideoModelId: styleApplications.videoModelId,
+      styleImageModelId: styleApplications.imageModelId,
     });
+    return;
+  }
+
+  if (url.pathname === '/api/fal/upload' && request.method === 'POST') {
+    try {
+      const mimeType = String(request.headers['content-type'] || 'application/octet-stream').split(';')[0];
+      if (!/^(image|video)\//i.test(mimeType)) throw new Error('Only image and video assets can be uploaded.');
+      const encodedName = String(request.headers['x-file-name'] || 'asset.bin');
+      const fileName = decodeURIComponent(encodedName).replace(/[^a-zA-Z0-9._ -]+/g, '-').slice(0, 160) || 'asset.bin';
+      const bytes = await readBytes(request);
+      const uploadedUrl = await fal.upload(bytes, {fileName, mimeType});
+      sendJson(response, 201, {url: uploadedUrl});
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/style-applications/jobs' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 2_000_000);
+      sendJson(response, 202, await styleApplications.submitStyleJob(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const styleJobMatch = url.pathname.match(/^\/api\/style-applications\/jobs\/([^/]+)$/);
+  if (styleJobMatch && request.method === 'GET') {
+    try {
+      const result = await styleApplications.getStyleJob({
+        modelId: url.searchParams.get('modelId') || '',
+        requestId: decodeURIComponent(styleJobMatch[1]),
+      });
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
     return;
   }
 

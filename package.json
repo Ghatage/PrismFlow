@@ -14,9 +14,10 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@fal-ai/client": "^1.10.1",
     "@huggingface/transformers": "^3.8.1",
-    "tinylm": "^0.0.6",
-    "tinkerbird": "^0.0.7"
+    "tinkerbird": "^0.0.7",
+    "tinylm": "^0.0.6"
   },
   "devDependencies": {
     "playwright": "^1.61.1"

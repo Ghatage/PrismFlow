@@ -43,6 +43,15 @@ import {AudioExtractError, extractAudioFromBlob} from './audio-extract.js';
 import {createAgentRunStore} from './agent-runs.js';
 import {createAgentTools} from './agent-tools.js';
 import {AgentCancelledError, runEditorAgent} from './editor-agent.js';
+import {
+  DEFAULT_STYLE_IMAGE_MODEL,
+  DEFAULT_STYLE_VIDEO_MODEL,
+  createServerStyleApplicationAdapter,
+  createStyleApplicationBatch,
+  createStyleApplicationController,
+  defaultStyleInstruction,
+  styleApplicationEligibility,
+} from './style-application.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -70,6 +79,7 @@ const state = {
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
+  selectedClipIds: new Set(),
   selectedTransitionId: null,
   selectedGhostKey: null,
   previewDiffId: null,
@@ -99,6 +109,7 @@ const state = {
   characterModalMode: 'detail',
   selectedStyleId: null,
   isStyleModalOpen: false,
+  styleApplicationModal: null,
   generateVideoModal: null,
   characterComposerInput: {name: '', prompt: '', styleNotes: '', referenceAssetIds: []},
   isTransitionComposerOpen: false,
@@ -198,6 +209,17 @@ const timelineCharacterAttachments = createTimelineCharacterAttachments({
   dispatch: updateProject,
 });
 const timelineDiffs = createTimelineDiffs({getProject: () => project, dispatch: updateProject});
+const styleApplicationAdapter = createServerStyleApplicationAdapter();
+const styleAssetUploadPromises = new Map();
+const styleApplicationController = createStyleApplicationController({
+  store: {getProject: () => project, dispatch: updateProject},
+  diffs: timelineDiffs,
+  adapter: styleApplicationAdapter,
+  resolveAssetUrl: (asset) => resolveStyleAssetUrl(asset),
+  persistAsset: (assetId) => persistGeneratedAsset(assetId),
+});
+let styleApplicationPollTimer = null;
+let styleApplicationPollInFlight = false;
 const useFakeTimelineAdapter = new URLSearchParams(globalThis.location.search).get('timelineAdapter') === 'fake';
 const timelineGenerationAdapter = useFakeTimelineAdapter
   ? createFakeTimelineGenerationAdapter({
@@ -294,13 +316,52 @@ const mediaKind = (file) => {
 
 const kindIcon = (kind) => icons[kind] || icons.film;
 const clipById = (id) => state.clips.find((clip) => clip.id === id);
+const selectedTimelineClips = () => state.clips.filter((clip) => state.selectedClipIds.has(clip.id));
+const clearTimelineClipSelection = () => {
+  state.selectedClipId = null;
+  state.selectedClipIds.clear();
+};
+const selectOnlyClip = (clipId) => {
+  state.selectedClipIds = new Set(clipId ? [clipId] : []);
+  state.selectedClipId = clipId || null;
+};
+const selectTimelineClip = (clipId, event = {}) => {
+  const clip = clipById(clipId);
+  if (!clip) return;
+  if (event.shiftKey && state.selectedClipId) {
+    const anchor = clipById(state.selectedClipId);
+    if (anchor?.trackId === clip.trackId) {
+      const trackClips = state.clips
+        .filter((candidate) => candidate.trackId === clip.trackId)
+        .sort((left, right) => left.start - right.start || left.id.localeCompare(right.id));
+      const anchorIndex = trackClips.findIndex((candidate) => candidate.id === anchor.id);
+      const clipIndex = trackClips.findIndex((candidate) => candidate.id === clip.id);
+      const [start, end] = anchorIndex < clipIndex ? [anchorIndex, clipIndex] : [clipIndex, anchorIndex];
+      state.selectedClipIds = new Set(trackClips.slice(start, end + 1).map((candidate) => candidate.id));
+      state.selectedClipId = clip.id;
+    } else {
+      selectOnlyClip(clip.id);
+    }
+  } else if (event.metaKey || event.ctrlKey) {
+    const next = new Set(state.selectedClipIds);
+    if (next.has(clip.id)) next.delete(clip.id);
+    else next.add(clip.id);
+    state.selectedClipIds = next;
+    state.selectedClipId = next.has(clip.id) ? clip.id : [...next].at(-1) || null;
+  } else {
+    selectOnlyClip(clip.id);
+  }
+  state.selectedTransitionId = null;
+  state.selectedGhostKey = null;
+  state.previewDiffId = null;
+};
 const diffById = (id) => state.pendingDiffs.find((diff) => diff.id === id);
 const selectedGhost = () => findGhostItem(state.pendingDiffs, state.selectedGhostKey);
 const reviewItems = () => listReviewItems(state.pendingDiffs);
 const reviewItemForDiff = (diffId) => reviewItems().find((item) => item.diffId === diffId) || null;
 const selectReviewItem = (item) => {
   state.selectedGhostKey = item?.ghostKey || item?.key || null;
-  state.selectedClipId = null;
+  clearTimelineClipSelection();
   return item;
 };
 const mediaById = (id) => state.media.find((item) => item.id === id);
@@ -308,6 +369,8 @@ const characterById = (id) => state.characters.find((character) => character.id 
 const characterVersion = (character) => character?.versions.find((version) => version.id === (character.lockedVersionId || character.activeVersionId)) || null;
 const styleById = (id) => state.styles.find((style) => style.id === id);
 const styleVersion = (style) => style?.versions.find((version) => version.id === (style.lockedVersionId || style.activeVersionId)) || null;
+const styleReferenceImageIds = (style) => (styleVersion(style)?.referenceAssetIds || [])
+  .filter((assetId) => mediaById(assetId)?.kind === 'image');
 const activeScene = () => project.scenes.find((scene) => scene.id === project.timeline.activeSceneId) || project.scenes[0];
 const scale = () => 88 * state.zoom;
 
@@ -319,6 +382,9 @@ const renderMediaVisual = (item) => {
 };
 
 const renderApp = () => {
+  const acceptedClipIds = new Set(state.clips.map((clip) => clip.id));
+  state.selectedClipIds = new Set([...state.selectedClipIds].filter((clipId) => acceptedClipIds.has(clipId)));
+  if (state.selectedClipId && !acceptedClipIds.has(state.selectedClipId)) state.selectedClipId = [...state.selectedClipIds].at(-1) || null;
   const previousTimelineBody = app.querySelector('.timeline-body');
   const previousTimelineScroll = app.querySelector('#timelineScroll');
   if (previousTimelineBody) state.timelineScrollTop = previousTimelineBody.scrollTop;
@@ -400,7 +466,7 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
-    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : state.isTransitionComposerOpen ? renderTransitionComposerModal() : ''}
+    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.styleApplicationModal ? renderStyleApplicationModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : state.isTransitionComposerOpen ? renderTransitionComposerModal() : ''}
   `;
 
   bindEvents();
@@ -553,7 +619,7 @@ const renderStyleModal = () => {
   return `
     <div class="modal-backdrop" data-action="close-style-modal">
       <section class="character-modal" role="dialog" aria-modal="true" aria-labelledby="styleModalTitle">
-        <div class="modal-head"><div><span class="eyebrow">STYLE DETAIL</span><h2 id="styleModalTitle">${escapeHtml(style.name)}</h2></div><button class="small-icon-button" data-action="close-style-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <div class="modal-head"><div><span class="eyebrow">STYLE DETAIL</span><h2 id="styleModalTitle">${escapeHtml(style.name)}</h2></div><div class="modal-head-actions"><button class="danger-button character-delete-button" data-action="delete-style" type="button">${icons.close} Delete</button><button class="small-icon-button" data-action="close-style-modal" aria-label="Close" type="button">${icons.close}</button></div></div>
         <div class="character-detail-grid">
           <div class="character-detail-sheet">${activeVersion ? renderStyleVisual(style) : `<div class="character-placeholder">${icons.magic}<span>Add reference images</span></div>`}${style.lockedVersionId ? '<span class="character-lock detail-lock">LOCKED VERSION</span>' : ''}</div>
           <div class="character-detail-copy">
@@ -574,6 +640,73 @@ const renderStyleModal = () => {
       </section>
     </div>
   `;
+};
+
+const styleApplicationBatchById = (batchId) => project.styleApplications?.batches.find((batch) => batch.id === batchId) || null;
+
+const renderStyleApplicationModal = () => {
+  const modal = state.styleApplicationModal;
+  if (!modal) return '';
+  const batch = modal.batchId ? styleApplicationBatchById(modal.batchId) : null;
+  if (batch) {
+    const completed = batch.jobs.filter((job) => job.status === 'completed').length;
+    const failed = batch.jobs.filter((job) => job.status === 'failed').length;
+    return `
+      <div class="modal-backdrop" data-action="close-style-application-modal">
+        <section class="character-modal style-application-modal" role="dialog" aria-modal="true" aria-labelledby="styleApplicationTitle">
+          <div class="modal-head"><div><span class="eyebrow">APPLY STYLE</span><h2 id="styleApplicationTitle">${escapeHtml(batch.styleName)}</h2></div><button class="small-icon-button" data-action="close-style-application-modal" aria-label="Close" type="button">${icons.close}</button></div>
+          <div class="style-application-progress" aria-live="polite"><div><strong>${completed} of ${batch.jobs.length} complete</strong><span>${failed ? `${failed} failed · completed results are already available` : batch.status === 'completed' ? 'All styled media is ready for review' : 'Jobs run independently, up to 3 at a time'}</span></div><span class="status-pill ${escapeHtml(batch.status)}">${escapeHtml(batch.status)}</span></div>
+          <div class="style-clip-list">${batch.jobs.map((job) => `
+            <article class="style-clip-row ${escapeHtml(job.status)}">
+              <div class="style-clip-thumb">${renderMediaVisual(mediaById(job.sourceAssetId) || {kind: job.mediaKind})}</div>
+              <div><strong>${escapeHtml(job.sourceAssetName)}</strong><span>${escapeHtml(job.mediaKind)} · ${formatTime(job.sourceClip.duration)} · ${escapeHtml(job.stage)}</span>${job.error ? `<small>${escapeHtml(job.error)}</small>` : ''}</div>
+              ${job.status === 'failed' ? `<button class="button ghost" data-action="retry-style-application" data-batch-id="${escapeHtml(batch.id)}" data-job-id="${escapeHtml(job.id)}" type="button">Retry</button>` : `<span class="style-job-state">${job.status === 'completed' ? 'Ready' : job.status}</span>`}
+            </article>`).join('')}</div>
+          <div class="style-application-note"><strong>Review on the timeline</strong><span>Each finished result appears in Imports and in a ghost rail above its source clip. Accept or reject each proposal independently.</span></div>
+          <div class="style-application-actions"><button class="button primary" data-action="close-style-application-modal" type="button">Done</button></div>
+        </section>
+      </div>`;
+  }
+
+  const styles = state.styles.filter((style) => styleReferenceImageIds(style).length);
+  const selectedStyle = styles.find((style) => style.id === modal.styleId) || styles[0] || null;
+  const selectedVersion = styleVersion(selectedStyle);
+  const referenceAssets = (selectedVersion?.referenceAssetIds || []).map(mediaById).filter((asset) => asset?.kind === 'image');
+  const selectedReferenceIds = new Set(modal.referenceAssetIds || []);
+  const selectedClips = (modal.clipIds || []).map(clipById).filter(Boolean);
+  const clipEntries = selectedClips.map((clip) => {
+    const asset = mediaById(clip.assetId);
+    return {clip, asset, eligibility: styleApplicationEligibility({clip, asset, project})};
+  });
+  const eligibleEntries = clipEntries.filter((entry) => entry.eligibility.eligible);
+  const estimatedUsd = eligibleEntries.reduce((total, {clip, asset}) => {
+    const unitPrice = asset.kind === 'video' ? modal.prices?.video : modal.prices?.image;
+    return Number.isFinite(unitPrice) ? total + unitPrice * (asset.kind === 'video' ? clip.duration : 1) : total;
+  }, 0);
+  const hasKnownCost = eligibleEntries.some(({asset}) => Number.isFinite(asset.kind === 'video' ? modal.prices?.video : modal.prices?.image));
+  return `
+    <div class="modal-backdrop" data-action="close-style-application-modal">
+      <section class="character-modal style-application-modal" role="dialog" aria-modal="true" aria-labelledby="styleApplicationTitle">
+        <div class="modal-head"><div><span class="eyebrow">APPLY STYLE</span><h2 id="styleApplicationTitle">Restyle ${selectedClips.length} selected clip${selectedClips.length === 1 ? '' : 's'}</h2></div><button class="small-icon-button" data-action="close-style-application-modal" aria-label="Close" type="button">${icons.close}</button></div>
+        <form class="style-application-form" data-style-application-form>
+          <div class="style-application-grid">
+            <div>
+              <label for="styleApplicationStyle">Style</label>
+              <select id="styleApplicationStyle" name="styleId" ${styles.length ? '' : 'disabled'}>${styles.map((style) => `<option value="${escapeHtml(style.id)}" ${style.id === selectedStyle?.id ? 'selected' : ''}>${escapeHtml(style.name)}${style.lockedVersionId ? ' · locked' : ''}</option>`).join('')}</select>
+              ${styles.length ? '' : '<small>Create a style and add an image reference version first.</small>'}
+            </div>
+            <div class="style-model-summary"><span>Video model</span><strong>Kling O3 Edit · Standard</strong><code>${escapeHtml(DEFAULT_STYLE_VIDEO_MODEL)}</code><span>Images</span><strong>Nano Banana 2 Edit</strong></div>
+          </div>
+          <div><label>Selected clips</label><div class="style-clip-list compact">${clipEntries.map(({clip, asset, eligibility}) => `<article class="style-clip-row ${eligibility.eligible ? 'eligible' : 'unsupported'}"><div class="style-clip-thumb">${asset ? renderMediaVisual(asset) : icons.image}</div><div><strong>${escapeHtml(asset?.name || 'Missing media')}</strong><span>${escapeHtml(asset?.kind || 'unknown')} · ${formatTime(clip.duration)} · ${escapeHtml(clip.trackId)}</span>${eligibility.eligible ? '' : `<small>${escapeHtml(eligibility.reason)}</small>`}</div><span class="style-job-state">${eligibility.eligible ? 'Ready' : 'Unsupported'}</span></article>`).join('')}</div></div>
+          <fieldset class="composer-references style-reference-picker" ${referenceAssets.length ? '' : 'disabled'}><legend>Style references · choose up to 4</legend><div class="reference-options">${referenceAssets.map((asset) => `<label><input type="checkbox" data-style-reference-id="${escapeHtml(asset.id)}" ${selectedReferenceIds.has(asset.id) ? 'checked' : ''} /><span class="reference-option-thumb">${renderMediaVisual(asset)}</span><span>${escapeHtml(asset.name)}</span></label>`).join('')}</div></fieldset>
+          <div class="composer-fields"><label for="styleApplicationInstruction">Preservation instruction</label><textarea id="styleApplicationInstruction" rows="3">${escapeHtml(modal.instruction)}</textarea></div>
+          <label class="style-audio-option"><input id="styleApplicationAudio" type="checkbox" ${modal.preserveAudio ? 'checked' : ''} /><span><strong>Preserve source audio</strong><small>Detached-audio clips remain muted in the styled video.</small></span></label>
+          <div class="style-application-cost"><div><span>Eligible</span><strong>${eligibleEntries.length} / ${clipEntries.length}</strong></div><div><span>Estimated provider cost</span><strong>${modal.loadingPrices ? 'Loading…' : hasKnownCost ? formatUsd(estimatedUsd) : 'Unavailable'}</strong></div></div>
+          ${modal.error ? `<p class="style-application-error" role="alert">${escapeHtml(modal.error)}</p>` : ''}
+          <div class="style-application-actions"><button class="button ghost" data-action="close-style-application-modal" type="button">Cancel</button><button class="button primary" type="submit" ${!selectedStyle || !selectedReferenceIds.size || !eligibleEntries.length || modal.submitting ? 'disabled' : ''}>${modal.submitting ? 'Starting…' : `Apply ${escapeHtml(selectedStyle?.name || 'style')}`}</button></div>
+        </form>
+      </section>
+    </div>`;
 };
 
 const renderCharacterComposerModal = () => {
@@ -1072,7 +1205,7 @@ const selectAgentResult = (entryId) => {
   const entry = projectContext.getIndex().entries.find((candidate) => candidate.id === entryId);
   if (!entry) return;
   if (entry.clipId) {
-    state.selectedClipId = entry.clipId;
+    selectOnlyClip(entry.clipId);
     state.selectedGhostKey = null;
     state.previewDiffId = null;
     state.currentTime = entry.start || 0;
@@ -1091,7 +1224,7 @@ const selectVideoSearchResult = (frameId) => {
     const sourceStart = candidate.sourceStart || 0;
     return result.time >= sourceStart && result.time <= sourceStart + candidate.duration;
   }) || matchingClips[0];
-  state.selectedClipId = clip?.id || null;
+  selectOnlyClip(clip?.id || null);
   state.activeTab = 'media';
   state.currentTime = clip
     ? clip.start + Math.max(0, Math.min(clip.duration, result.time - (clip.sourceStart || 0)))
@@ -1107,11 +1240,16 @@ const renderTimeline = () => {
   const timelineWidth = Math.max(900, (duration + 3) * scale());
   const ticks = Array.from({length: Math.ceil(duration) + 2}, (_, index) => index);
   const ghosts = buildGhostItems(state.pendingDiffs);
+  const trackLayouts = state.tracks.map((track) => {
+    const styleGhosts = ghosts.filter((ghost) => ghost.source === 'style-application' && ghost.clip?.trackId === track.id);
+    const hasStyleRail = styleGhosts.length > 0;
+    return {track, hasStyleRail, height: hasStyleRail ? 139 : 74, acceptedTop: hasStyleRail ? 74 : 9};
+  });
   const pendingCount = state.pendingDiffs.length;
   const reviewQueue = reviewItems();
   const selectedReviewIndex = reviewQueue.findIndex((item) => item.diffId === selectedGhost()?.diffId);
   const reviewPosition = selectedReviewIndex >= 0 ? selectedReviewIndex + 1 : 1;
-  const contentHeight = 29 + state.tracks.length * 74;
+  const contentHeight = 29 + trackLayouts.reduce((total, layout) => total + layout.height, 0);
   const reviewControls = pendingCount ? `
     <span class="review-position" aria-live="polite" data-review-position>${reviewPosition} of ${pendingCount}</span>
     <button class="toolbar-button review-nav" data-action="previous-diff" type="button" aria-label="Previous proposal" ${reviewPosition <= 1 ? 'disabled' : ''}>‹</button>
@@ -1120,16 +1258,16 @@ const renderTimeline = () => {
   return `
     <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><button class="toolbar-button agent-launch" data-action="open-agent-prompt" title="AI editing agent" aria-label="Launch AI editing agent" type="button">${icons.robot} Agent</button><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
     <div class="timeline-body">
-      <div class="track-labels"><div class="ruler-spacer"></div>${state.tracks.map((track) => `<div class="track-label ${track.kind}-label"><span class="track-color ${track.kind}"></span><div><strong>${escapeHtml(track.name)}</strong><span>${escapeHtml(track.id)}</span></div></div>`).join('')}</div>
+      <div class="track-labels"><div class="ruler-spacer"></div>${trackLayouts.map(({track, height, hasStyleRail}) => `<div class="track-label ${track.kind}-label ${hasStyleRail ? 'has-style-rail' : ''}" style="height:${height}px"><span class="track-color ${track.kind}"></span><div><strong>${escapeHtml(track.name)}</strong><span>${escapeHtml(track.id)}</span>${hasStyleRail ? '<small>STYLE REVIEW</small>' : ''}</div></div>`).join('')}</div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="height:${contentHeight}px;width:${timelineWidth}px">
         <div class="ruler" id="timelineRuler">${ticks.map((tick) => `<div class="tick ${tick % 5 === 0 ? 'major' : ''}" style="left:${tick * scale()}px"><span>${formatTime(tick).slice(0, 5)}</span></div>`).join('')}</div>
-        ${state.tracks.map((track) => {
+        ${trackLayouts.map(({track, height, acceptedTop, hasStyleRail}) => {
           const clips = state.clips.filter((clip) => clip.trackId === track.id);
           const trackGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === track.id);
           const generating = pendingAddGeneration();
           const trackTransitions = state.transitions.filter((transition) => transition.trackId === track.id);
-          const content = `${clips.map(renderClip).join('')}${trackTransitions.map(renderTransitionMarker).join('')}${trackGhosts.map(renderGhostClip).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating) : ''}`;
-          return `<div class="track-lane ${track.kind}-lane" data-track-id="${escapeHtml(track.id)}">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
+          const content = `${hasStyleRail ? '<div class="style-review-rail-label">Styled candidates</div><div class="style-review-rail-line"></div>' : ''}${clips.map((clip) => renderClip(clip, {top: acceptedTop})).join('')}${trackTransitions.map((transition) => renderTransitionMarker(transition, {top: acceptedTop + 17})).join('')}${trackGhosts.map((ghost) => renderGhostClip(ghost, {top: ghost.source === 'style-application' ? 9 : acceptedTop})).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating, {top: acceptedTop}) : ''}`;
+          return `<div class="track-lane ${track.kind}-lane ${hasStyleRail ? 'has-style-rail' : ''}" data-track-id="${escapeHtml(track.id)}" style="height:${height}px">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
         }).join('')}
         <div class="timeline-drag-guide" id="timelineDragGuide" hidden></div>
         <div class="playhead" id="playhead" style="left:${state.currentTime * scale()}px"><span></span></div>
@@ -1138,7 +1276,7 @@ const renderTimeline = () => {
   `;
 };
 
-const renderClip = (clip) => {
+const renderClip = (clip, {top = 9} = {}) => {
   const media = mediaById(clip.assetId);
   if (!media) return '';
   const width = Math.max(clip.duration * scale(), 66);
@@ -1146,28 +1284,29 @@ const renderClip = (clip) => {
   const sourceStart = clip.sourceStart || 0;
   const frameSelected = frame?.videoAssetId === clip.assetId && frame.time >= sourceStart && frame.time <= sourceStart + clip.duration;
   const regenerating = clipRegeneration.listJobs(clip.id).some((job) => job.status === 'queued' || job.status === 'running');
-  return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px">${renderClipContents(media, clip.duration)}</div>`;
+  const styleApplying = (project.styleApplications?.batches || []).some((batch) => batch.jobs.some((job) => job.clipId === clip.id && ['queued', 'uploading', 'trimming', 'generating'].includes(job.status)));
+  return `<div class="timeline-clip ${media.kind} ${state.selectedClipIds.has(clip.id) ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''} ${styleApplying ? 'style-applying' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px;top:${top}px">${renderClipContents(media, clip.duration)}</div>`;
 };
 
-const renderTransitionMarker = (transition) => {
+const renderTransitionMarker = (transition, {top = 26} = {}) => {
   const edgeTime = transitionEdgeTime(transition, state.clips);
   if (!Number.isFinite(edgeTime)) return '';
   const definition = getTransitionDefinition(transition.type, state.customTransitions);
   const label = definition?.label || transition.type;
   const placement = transition.fromClipId && transition.toClipId ? 'between clips' : transition.fromClipId ? 'to black' : 'from black';
   const description = `${label} · ${placement} · ${formatTime(transition.duration)}`;
-  return `<button class="timeline-transition ${transition.id === state.selectedTransitionId ? 'selected' : ''}" data-transition-id="${escapeHtml(transition.id)}" type="button" style="left:${edgeTime * scale()}px" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${label} transition, ${placement}`)}"><span aria-hidden="true">${escapeHtml(definition?.glyph || '◐')}</span></button>`;
+  return `<button class="timeline-transition ${transition.id === state.selectedTransitionId ? 'selected' : ''}" data-transition-id="${escapeHtml(transition.id)}" type="button" style="left:${edgeTime * scale()}px;top:${top}px" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${label} transition, ${placement}`)}"><span aria-hidden="true">${escapeHtml(definition?.glyph || '◐')}</span></button>`;
 };
 
 const renderClipContents = (media, duration) => `<div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div>`;
 
-const renderGenerationPendingClip = (input) => {
+const renderGenerationPendingClip = (input, {top = 9} = {}) => {
   const duration = input.duration || 5;
   const width = Math.max(duration * scale(), 66);
-  return `<div class="timeline-clip video generation-pending" style="left:${(input.start || 0) * scale()}px;width:${width}px" aria-label="Generating video"><div class="clip-copy"><strong>Generating…</strong><span>${escapeHtml(input.prompt.slice(0, 48))}</span></div></div>`;
+  return `<div class="timeline-clip video generation-pending" style="left:${(input.start || 0) * scale()}px;width:${width}px;top:${top}px" aria-label="Generating video"><div class="clip-copy"><strong>Generating…</strong><span>${escapeHtml(input.prompt.slice(0, 48))}</span></div></div>`;
 };
 
-const renderGhostClip = (ghost) => {
+const renderGhostClip = (ghost, {top = 9} = {}) => {
   const clip = ghost.clip;
   if (!clip) return '';
   const media = mediaById(clip.assetId);
@@ -1176,7 +1315,7 @@ const renderGhostClip = (ghost) => {
   const roleLabel = ghost.role === 'origin' ? 'original position' : ghost.role === 'destination' ? 'destination' : ghost.role === 'removal' ? 'removal' : 'proposal';
   const label = `${statusLabel} ${ghost.type} ${roleLabel}: ${ghost.summary}`;
   const draggable = ghost.role !== 'origin' && ghost.type !== 'remove';
-  return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" data-ghost-status="${escapeHtml(ghost.status)}" data-ghost-role="${escapeHtml(ghost.role)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}" aria-pressed="${ghost.key === state.selectedGhostKey}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${statusLabel} · ${formatTime(clip.duration)}</small></button>`;
+  return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.source === 'style-application' ? 'style-application-ghost' : ''} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" data-ghost-status="${escapeHtml(ghost.status)}" data-ghost-role="${escapeHtml(ghost.role)}" type="button" style="left:${clip.start * scale()}px;width:${width}px;top:${top}px" aria-label="${escapeHtml(label)}" aria-pressed="${ghost.key === state.selectedGhostKey}"><span class="ghost-kind">${ghost.source === 'style-application' ? 'STYLE' : escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${statusLabel} · ${formatTime(clip.duration)}</small></button>`;
 };
 
 const filteredModalModels = (modal) => modal.categoryFilter
@@ -1278,6 +1417,32 @@ const bindEvents = () => {
   app.querySelectorAll('[data-style-id]').forEach((button) => button.addEventListener('click', () => openStyle(button.dataset.styleId)));
   app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
   app.querySelectorAll('[data-action="close-style-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleModal(); }));
+  app.querySelectorAll('[data-action="close-style-application-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleApplicationModal(); }));
+  app.querySelector('[data-style-application-form]')?.addEventListener('submit', submitStyleApplication);
+  app.querySelector('#styleApplicationStyle')?.addEventListener('change', (event) => {
+    const modal = state.styleApplicationModal;
+    if (!modal) return;
+    modal.styleId = event.target.value;
+    modal.referenceAssetIds = styleReferenceImageIds(styleById(modal.styleId)).slice(0, 4);
+    renderApp();
+  });
+  app.querySelectorAll('[data-style-reference-id]').forEach((input) => input.addEventListener('change', () => {
+    const modal = state.styleApplicationModal;
+    if (!modal) return;
+    const next = new Set(modal.referenceAssetIds);
+    if (input.checked) {
+      if (next.size >= 4) {
+        showToast('Choose up to 4 style references.');
+        renderApp();
+        return;
+      }
+      next.add(input.dataset.styleReferenceId);
+    } else next.delete(input.dataset.styleReferenceId);
+    modal.referenceAssetIds = [...next];
+  }));
+  app.querySelector('#styleApplicationInstruction')?.addEventListener('input', (event) => { if (state.styleApplicationModal) state.styleApplicationModal.instruction = event.target.value; });
+  app.querySelector('#styleApplicationAudio')?.addEventListener('change', (event) => { if (state.styleApplicationModal) state.styleApplicationModal.preserveAudio = event.target.checked; });
+  app.querySelectorAll('[data-action="retry-style-application"]').forEach((button) => button.addEventListener('click', () => retryStyleApplicationJob(button.dataset.batchId, button.dataset.jobId)));
   app.querySelectorAll('[data-action="close-generate-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeGenerateVideoModal(); }));
   app.querySelector('[data-generate-video-form]')?.addEventListener('submit', submitGenerateVideoForm);
   attachPromptMentions('#generateVideoPrompt');
@@ -1315,6 +1480,7 @@ const bindEvents = () => {
   app.querySelector('[data-action="record-style-version"]')?.addEventListener('click', recordStyleVersion);
   app.querySelector('[data-action="lock-style"]')?.addEventListener('click', lockStyle);
   app.querySelector('[data-action="unlock-style"]')?.addEventListener('click', unlockStyle);
+  app.querySelector('[data-action="delete-style"]')?.addEventListener('click', deleteStyle);
   app.querySelectorAll('[data-action="activate-style-version"]').forEach((button) => button.addEventListener('click', () => activateStyleVersion(button.dataset.versionId)));
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragover', (event) => { event.preventDefault(); event.currentTarget.classList.add('dragging'); });
   app.querySelector('[data-dropzone="media"]')?.addEventListener('dragleave', (event) => event.currentTarget.classList.remove('dragging'));
@@ -1332,11 +1498,18 @@ const bindEvents = () => {
     const clipElement = event.target.closest('[data-clip-id]');
     if (clipElement) {
       const clipId = clipElement.dataset.clipId;
+      if (!state.selectedClipIds.has(clipId)) selectOnlyClip(clipId);
       const clip = clipById(clipId);
       const generated = Boolean(clip?.provenance?.prompt && clip?.provenance?.modelId);
       const clipAsset = mediaById(clip?.assetId);
       const canDetachAudio = clipAsset?.kind === 'video' && !clip?.audioDetached;
+      const selectedClips = selectedTimelineClips();
+      const hasVisualSelection = selectedClips.some((candidate) => ['video', 'image'].includes(mediaById(candidate.assetId)?.kind));
+      const relatedBatch = [...(project.styleApplications?.batches || [])].reverse().find((batch) =>
+        batch.jobs.some((job) => state.selectedClipIds.has(job.clipId)));
       showContextMenu(event, [
+        ...(hasVisualSelection ? [{label: `Apply Style${selectedClips.length > 1 ? ` to ${selectedClips.length} clips` : ''}`, onSelect: () => openStyleApplicationModal({clipIds: selectedClips.map((candidate) => candidate.id)})}] : []),
+        ...(relatedBatch ? [{label: 'View Apply Style jobs', onSelect: () => openStyleApplicationModal({batchId: relatedBatch.id})}] : []),
         ...(canDetachAudio ? [
           {label: 'Detach audio', onSelect: () => { void detachAudioFromClip(clipId); }},
         ] : []),
@@ -1380,7 +1553,7 @@ const bindEvents = () => {
     marker.addEventListener('click', (event) => {
       event.stopPropagation();
       state.selectedTransitionId = marker.dataset.transitionId;
-      state.selectedClipId = null;
+      clearTimelineClipSelection();
       state.selectedGhostKey = null;
       renderApp();
     });
@@ -1391,7 +1564,7 @@ const bindEvents = () => {
     });
   });
   app.querySelectorAll('[data-clip-id]').forEach((clipElement) => {
-    clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; state.selectedTransitionId = null; state.selectedGhostKey = null; state.previewDiffId = null; renderApp(); });
+    clipElement.addEventListener('click', (event) => { selectTimelineClip(clipElement.dataset.clipId, event); renderApp(); });
     clipElement.addEventListener('dragstart', (event) => {
       const clip = clipById(clipElement.dataset.clipId);
       state.dragPayload = {type: 'clip', id: clipElement.dataset.clipId, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
@@ -1409,7 +1582,7 @@ const bindEvents = () => {
     ghostElement.addEventListener('click', (event) => {
       event.stopPropagation();
       state.selectedGhostKey = ghostElement.dataset.ghostKey;
-      state.selectedClipId = null;
+      clearTimelineClipSelection();
       renderApp();
     });
     if (ghostElement.draggable) {
@@ -1501,6 +1674,9 @@ const bindEvents = () => {
       if (state.agentPromptModalOpen) {
         event.preventDefault();
         closeAgentPrompt();
+      } else if (state.styleApplicationModal) {
+        event.preventDefault();
+        closeStyleApplicationModal();
       } else if (state.generateVideoModal) {
         event.preventDefault();
         closeGenerateVideoModal();
@@ -1560,6 +1736,107 @@ const closeStyleModal = () => {
   renderApp();
 };
 
+const closeStyleApplicationModal = () => {
+  state.styleApplicationModal = null;
+  renderApp();
+};
+
+const openStyleApplicationModal = ({clipIds = [...state.selectedClipIds], batchId = null} = {}) => {
+  if (batchId) {
+    const batch = styleApplicationBatchById(batchId);
+    if (!batch) return;
+    state.styleApplicationModal = {batchId, clipIds: batch.jobs.map((job) => job.clipId)};
+    renderApp();
+    return;
+  }
+  const readyStyles = state.styles.filter((style) => styleReferenceImageIds(style).length);
+  const selectedStyle = readyStyles[0] || null;
+  state.styleApplicationModal = {
+    batchId: null,
+    clipIds: [...new Set(clipIds)].filter((clipId) => clipById(clipId)),
+    styleId: selectedStyle?.id || null,
+    referenceAssetIds: styleReferenceImageIds(selectedStyle).slice(0, 4),
+    instruction: defaultStyleInstruction(),
+    preserveAudio: true,
+    prices: {video: null, image: null},
+    loadingPrices: true,
+    submitting: false,
+    error: '',
+  };
+  const modal = state.styleApplicationModal;
+  renderApp();
+  void loadModelCatalog().then((models) => {
+    if (state.styleApplicationModal !== modal) return;
+    modal.prices = {
+      video: models.find((model) => model.id === DEFAULT_STYLE_VIDEO_MODEL)?.unitPrice ?? null,
+      image: models.find((model) => model.id === DEFAULT_STYLE_IMAGE_MODEL)?.unitPrice ?? null,
+    };
+  }).catch(() => {}).finally(() => {
+    if (state.styleApplicationModal !== modal) return;
+    modal.loadingPrices = false;
+    renderApp();
+  });
+};
+
+const scheduleStyleApplicationPoll = (delay = 0) => {
+  if (styleApplicationPollTimer) clearTimeout(styleApplicationPollTimer);
+  styleApplicationPollTimer = setTimeout(async () => {
+    if (styleApplicationPollInFlight) return scheduleStyleApplicationPoll(500);
+    styleApplicationPollInFlight = true;
+    try {
+      const result = await styleApplicationController.tick();
+      if (state.styleApplicationModal?.batchId || result.hasWork) renderApp();
+      if (result.hasWork) scheduleStyleApplicationPoll(1200);
+    } catch (error) {
+      showToast(`Apply Style could not continue: ${error instanceof Error ? error.message : String(error)}`);
+      scheduleStyleApplicationPoll(1800);
+    } finally {
+      styleApplicationPollInFlight = false;
+    }
+  }, delay);
+};
+
+const submitStyleApplication = (event) => {
+  event.preventDefault();
+  const modal = state.styleApplicationModal;
+  if (!modal || modal.batchId || modal.submitting) return;
+  const style = styleById(modal.styleId);
+  const version = styleVersion(style);
+  modal.submitting = true;
+  modal.error = '';
+  try {
+    const batch = createStyleApplicationBatch({
+      project,
+      clips: modal.clipIds.map(clipById).filter(Boolean),
+      style,
+      styleVersion: version,
+      referenceAssetIds: modal.referenceAssetIds,
+      instruction: modal.instruction,
+      preserveAudio: modal.preserveAudio,
+      prices: modal.prices,
+    });
+    styleApplicationController.createBatch(batch);
+    modal.batchId = batch.id;
+    modal.submitting = false;
+    renderApp();
+    scheduleStyleApplicationPoll();
+  } catch (error) {
+    modal.submitting = false;
+    modal.error = error instanceof Error ? error.message : String(error);
+    renderApp();
+  }
+};
+
+const retryStyleApplicationJob = (batchId, jobId) => {
+  try {
+    styleApplicationController.retry(batchId, jobId);
+    renderApp();
+    scheduleStyleApplicationPoll();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
+};
+
 const renameStyle = (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -1599,6 +1876,30 @@ const lockStyle = () => {
 const unlockStyle = () => {
   styleLibrary.unlockVersion(state.selectedStyleId);
   renderApp();
+};
+
+const deleteStyle = () => {
+  const style = styleById(state.selectedStyleId);
+  if (!style) return;
+  const versionIds = new Set(style.versions.map((version) => version.id));
+  const clipCount = state.clips.filter((clip) => clip.provenance?.styleVersionIds?.some((versionId) => versionIds.has(versionId))).length;
+  const proposalCount = project.timelineDiffs.items.filter((diff) =>
+    diff.provenance?.styleVersionIds?.some((versionId) => versionIds.has(versionId))
+    || diff.operations?.some((operation) => [operation.before, operation.after, operation.proposedClip]
+      .some((clip) => clip?.provenance?.styleVersionIds?.some((versionId) => versionIds.has(versionId))))).length;
+  const detail = clipCount || proposalCount
+    ? ` This will detach it from ${clipCount} accepted clip${clipCount === 1 ? '' : 's'} and ${proposalCount} proposal${proposalCount === 1 ? '' : 's'} without deleting media.`
+    : ' Imported and generated media will be preserved.';
+  if (!globalThis.confirm?.(`Delete “${style.name}”?${detail}`)) return;
+  try {
+    styleLibrary.remove(style.id);
+    state.isStyleModalOpen = false;
+    state.selectedStyleId = null;
+    renderApp();
+    showToast(`Deleted ${style.name}.`);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error));
+  }
 };
 
 const renameCharacter = (event) => {
@@ -2002,7 +2303,7 @@ const splitClipAtPlayhead = () => {
     showToast('Move the playhead away from the clip edge to split it.');
     return;
   }
-  state.selectedClipId = result.affectedId;
+  selectOnlyClip(result.affectedId);
   renderApp();
 };
 
@@ -2283,7 +2584,7 @@ const placeOnTimeline = ({mediaId, clipId, ghostKey, transitionType, clientX, tr
       try {
         const result = updateProject({type: 'transition/add', transitionType, fromClipId: snap.fromClipId, toClipId: snap.toClipId});
         state.selectedTransitionId = result.affectedId;
-        state.selectedClipId = null;
+        clearTimelineClipSelection();
         state.selectedGhostKey = null;
       } catch (error) {
         showToast(error instanceof Error ? error.message : String(error));
@@ -2301,12 +2602,12 @@ const placeOnTimeline = ({mediaId, clipId, ghostKey, transitionType, clientX, tr
       trackId,
       start,
     });
-    state.selectedClipId = result.affectedId;
+    selectOnlyClip(result.affectedId);
   } else if (clipId) {
     const clip = clipById(clipId);
     if (!clip) return;
     const result = updateProject({type: 'clip/move', clipId, trackId, start});
-    state.selectedClipId = result.affectedId;
+    selectOnlyClip(result.affectedId);
   } else if (ghostKey) {
     const ghost = findGhostItem(state.pendingDiffs, ghostKey);
     const diff = ghost ? diffById(ghost.diffId) : null;
@@ -2394,7 +2695,8 @@ const addFiles = async (files) => {
 
 const removeMedia = (mediaId) => {
   const clips = state.clips.filter((clip) => clip.assetId === mediaId);
-  clips.forEach((clip) => { if (clip.id === state.selectedClipId) state.selectedClipId = null; });
+  clips.forEach((clip) => state.selectedClipIds.delete(clip.id));
+  if (!state.selectedClipIds.has(state.selectedClipId)) state.selectedClipId = [...state.selectedClipIds].at(-1) || null;
   const item = mediaById(mediaId);
   if (item?.url) URL.revokeObjectURL(item.url);
   updateProject({type: 'asset/remove', assetId: mediaId});
@@ -2406,7 +2708,8 @@ const removeClip = (clipId) => {
   if (!clipId || !clipById(clipId)) return false;
   const result = updateProject({type: 'clip/remove', clipId});
   if (!result.changed) return false;
-  if (state.selectedClipId === clipId) state.selectedClipId = null;
+  state.selectedClipIds.delete(clipId);
+  if (state.selectedClipId === clipId) state.selectedClipId = [...state.selectedClipIds].at(-1) || null;
   if (state.regenerationEditorClipId === clipId) state.regenerationEditorClipId = null;
   renderApp();
   return true;
@@ -2547,6 +2850,33 @@ const buildMentionPayload = async ({prompt, modelId}) => {
     referenceImageUrls,
     characterVersionIds: resolved.map((entry) => entry.versionId),
   };
+};
+
+const resolveStyleAssetUrl = async (asset) => {
+  if (!asset?.id) throw new Error('The media asset is unavailable.');
+  if (/^https:\/\//i.test(asset.url || '')) return asset.url;
+  if (!styleAssetUploadPromises.has(asset.id)) {
+    const upload = (async () => {
+      let blob = await projectDatabase.getAsset(asset.id).catch(() => null);
+      if (!blob && asset.url) {
+        const response = await fetch(asset.url);
+        if (!response.ok) throw new Error(`Could not read ${asset.name} (${response.status}).`);
+        blob = await response.blob();
+      }
+      if (!blob) throw new Error(`Re-import ${asset.name} before applying a style.`);
+      const uploaded = await styleApplicationAdapter.uploadAsset(blob, {
+        fileName: asset.source?.fileName || asset.name || `${asset.id}.${asset.kind === 'image' ? 'png' : 'mp4'}`,
+        mimeType: asset.mimeType || blob.type,
+      });
+      if (!/^https:\/\//i.test(uploaded?.url || '')) throw new Error('fal upload did not return a secure media URL.');
+      return uploaded.url;
+    })().catch((error) => {
+      styleAssetUploadPromises.delete(asset.id);
+      throw error;
+    });
+    styleAssetUploadPromises.set(asset.id, upload);
+  }
+  return styleAssetUploadPromises.get(asset.id);
 };
 
 const persistGeneratedAsset = async (assetId) => {
@@ -3154,7 +3484,11 @@ const restoreSession = async () => {
   }));
   project = projectStore.getProject();
   state.mediaHydrated = true;
+  styleApplicationController.resume();
   renderApp();
+  if ((project.styleApplications?.batches || []).some((batch) => batch.jobs.some((job) => ['queued', 'uploading', 'trimming', 'generating'].includes(job.status)))) {
+    scheduleStyleApplicationPoll();
+  }
   void videoIndexer.resume({assets: project.mediaAssets}).catch((error) => {
     showToast(`Video indexing could not resume: ${error instanceof Error ? error.message : String(error)}`);
   });

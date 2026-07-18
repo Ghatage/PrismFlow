@@ -1,3 +1,6 @@
+import {File} from 'node:buffer';
+import {fal as falClient} from '@fal-ai/client';
+
 const FAL_RUN_ORIGIN = 'https://fal.run';
 const FAL_QUEUE_ORIGIN = 'https://queue.fal.run';
 
@@ -51,6 +54,15 @@ export const createFalAdapter = ({
 
   return {
     configured: Boolean(apiKey),
+
+    async upload(bytes, {fileName = 'asset.bin', mimeType = 'application/octet-stream'} = {}) {
+      if (!apiKey) throw new Error('FAL_API_KEY is not configured on the local server.');
+      falClient.config({credentials: apiKey});
+      const file = new File([bytes], fileName, {type: mimeType});
+      const url = await falClient.storage.upload(file);
+      if (typeof url !== 'string' || !/^https:\/\//i.test(url)) throw new Error('fal storage did not return an HTTPS URL.');
+      return url;
+    },
 
     async run(modelId, input) {
       return requestJson(`${runOrigin}/${requireModelId(modelId)}`, {

@@ -54,6 +54,11 @@ export const createStyleLibrary = ({getProject, dispatch}) => {
     styleId: requireText(styleId, 'Style id'),
   });
 
+  const remove = (styleId) => dispatch({
+    type: 'style/remove',
+    styleId: requireText(styleId, 'Style id'),
+  });
+
   const lockedVersions = () => load()
     .filter((style) => style.lockedVersionId)
     .map((style) => ({
@@ -64,5 +69,5 @@ export const createStyleLibrary = ({getProject, dispatch}) => {
     }))
     .filter((entry) => entry.version);
 
-  return {load, createDraft, rename, setStatus, recordVersion, activateVersion, lockVersion, unlockVersion, lockedVersions};
+  return {load, createDraft, rename, setStatus, recordVersion, activateVersion, lockVersion, unlockVersion, remove, lockedVersions};
 };
