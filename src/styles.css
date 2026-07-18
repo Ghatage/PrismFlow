@@ -502,6 +502,7 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 .audio-preview { align-items: center; display: none; flex-direction: column; inset: 0; justify-content: center; position: absolute; }
 .audio-preview.visible { display: flex; }
 .audio-preview > span { color: var(--muted); font-size: 11px; margin-top: 10px; }
+.preview-audio-mix { display: none; }
 .audio-orb {
   align-items: center;
   background: radial-gradient(circle at 30% 20%, #c5b8ff, #5a48b0 55%, #123c3c 130%);
@@ -645,7 +646,7 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 .timeline-actions { gap: 2px; }
 .tool-divider { background: var(--line-strong); height: 19px; margin: 0 7px; width: 1px; }
 .zoom-value { color: var(--dim); font-family: var(--mono); font-size: 9px; min-width: 34px; text-align: center; }
-.timeline-body { display: grid; grid-template-columns: 105px minmax(0, 1fr); height: calc(100% - 48px); min-height: 0; }
+.timeline-body { display: grid; grid-template-columns: 105px minmax(0, 1fr); height: calc(100% - 48px); min-height: 0; overflow-y: auto; }
 .track-labels { border-right: 1px solid var(--line); }
 .ruler-spacer { border-bottom: 1px solid var(--line); height: 29px; }
 .track-label { align-items: center; border-bottom: 1px solid var(--line); display: flex; gap: 8px; height: 74px; padding: 0 14px; }

@@ -29,6 +29,24 @@ await import('/scripts/sync-model-pricing.mjs');
 
 The server uses `FAL_API_KEY` to paginate through the active FAL model directory and batch pricing requests. The browser script stores one record per active endpoint in the persistent `modelPricing` IndexedDB object store; the API key is never sent to or stored in the browser.
 
+## Semantic model search
+
+Build the local vector index from `fal-model-pricing.json` once with:
+
+```bash
+npm run search:index
+```
+
+This embeds each model's display name, description, type, group, and tags with `Xenova/all-MiniLM-L6-v2`, stores the searchable text and vectors in the ignored `model-search-index.json`, and uses TinkerBird's HNSW index for retrieval.
+
+The HTTP endpoint is:
+
+```text
+GET /api/search/models?q=Google%20latest%20text%20to%20image&limit=10
+```
+
+It returns model metadata, pricing, the derived API documentation URL, and ranking signals. `GET /api/search/models/status` reports whether the local index is ready; `POST /api/search/models/index` rebuilds it.
+
 ## Current prototype loop
 
 - Import video, audio, and image files through the asset bin or drop zone.

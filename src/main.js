@@ -26,6 +26,7 @@ import {
   createServerTimelineGenerationAdapter,
 } from './timeline-generation.js';
 import {createClipRegenerationService} from './clip-regeneration.js';
+import {resolveTimelinePlaybackAt} from './timeline-playback.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -65,8 +66,9 @@ const state = {
   rebaseConflicts: {},
   mediaPanelOpen: true,
   mediaHydrated: false,
-  previewSourceId: null,
-  previewClipId: null,
+  previewPlaybackSignature: null,
+  timelineScrollTop: 0,
+  timelineScrollLeft: 0,
   rafId: null,
   playbackStartedAt: 0,
   playbackOrigin: 0,
@@ -181,6 +183,12 @@ const renderMediaVisual = (item) => {
 };
 
 const renderApp = () => {
+  const previousTimelineBody = app.querySelector('.timeline-body');
+  const previousTimelineScroll = app.querySelector('#timelineScroll');
+  if (previousTimelineBody) state.timelineScrollTop = previousTimelineBody.scrollTop;
+  if (previousTimelineScroll) state.timelineScrollLeft = previousTimelineScroll.scrollLeft;
+  app.querySelectorAll('#previewVideo, #previewAudioMix audio').forEach((element) => element.pause());
+
   app.innerHTML = `
     <div class="shell" data-media-hydrated="${state.mediaHydrated}">
       <header class="topbar">
@@ -224,10 +232,11 @@ const renderApp = () => {
               <video id="previewVideo" playsinline preload="metadata"></video>
               <img id="previewImage" alt="Selected timeline image" />
               <div class="audio-preview" id="audioPreview"><div class="audio-orb">${icons.audio}</div><span>Audio clip</span></div>
+              <div class="preview-audio-mix" id="previewAudioMix" aria-hidden="true"></div>
               <div class="safe-area"></div>
             </div>
             <div class="player-controls">
-              <div class="player-time"><span id="playerCurrent">00:00.00</span><span class="muted"> / </span><span id="playerDuration">00:12.00</span></div>
+              <div class="player-time"><span id="playerCurrent">${formatTime(state.currentTime)}</span><span class="muted"> / </span><span id="playerDuration">${formatTime(playbackDuration())}</span></div>
               <div class="player-buttons"><button class="round-control" data-action="step-back" title="Previous frame" type="button">${icons.skipBack}</button><button class="play-control" data-action="toggle-play" title="${state.isPlaying ? 'Pause' : 'Play'}" type="button">${state.isPlaying ? icons.pause : icons.play}</button><button class="round-control" data-action="step-forward" title="Next frame" type="button">${icons.skipForward}</button></div>
               <div class="player-right" aria-live="polite"><span class="live-dot ${state.previewDiffId ? 'proposal' : ''}"></span><span data-player-status>${state.previewDiffId ? 'Proposal preview' : 'Accepted preview'}</span><button class="toolbar-button" type="button" aria-label="Player options">${icons.more}</button></div>
             </div>
@@ -245,8 +254,7 @@ const renderApp = () => {
   `;
 
   bindEvents();
-  state.previewSourceId = null;
-  state.previewClipId = null;
+  state.previewPlaybackSignature = null;
   syncPreview(true);
 };
 
@@ -476,8 +484,9 @@ const renderContextPanel = () => {
 };
 
 const renderTimeline = () => {
-  const timelineWidth = Math.max(900, (state.timelineDuration + 3) * scale());
-  const ticks = Array.from({length: Math.ceil(state.timelineDuration) + 2}, (_, index) => index);
+  const duration = playbackDuration();
+  const timelineWidth = Math.max(900, (duration + 3) * scale());
+  const ticks = Array.from({length: Math.ceil(duration) + 2}, (_, index) => index);
   const ghosts = buildGhostItems(state.pendingDiffs);
   const pendingCount = state.pendingDiffs.length;
   const reviewQueue = reviewItems();
@@ -530,6 +539,18 @@ const renderGhostClip = (ghost) => {
 };
 
 const bindEvents = () => {
+  const timelineBody = app.querySelector('.timeline-body');
+  const timelineScroll = app.querySelector('#timelineScroll');
+  if (timelineBody) {
+    timelineBody.scrollTop = state.timelineScrollTop;
+    state.timelineScrollTop = timelineBody.scrollTop;
+    timelineBody.addEventListener('scroll', () => { state.timelineScrollTop = timelineBody.scrollTop; }, {passive: true});
+  }
+  if (timelineScroll) {
+    timelineScroll.scrollLeft = state.timelineScrollLeft;
+    state.timelineScrollLeft = timelineScroll.scrollLeft;
+    timelineScroll.addEventListener('scroll', () => { state.timelineScrollLeft = timelineScroll.scrollLeft; }, {passive: true});
+  }
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
   app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
@@ -942,14 +963,22 @@ const previewDiff = (diffId) => {
   state.previewDiffId = diffId;
   const firstChangedClip = diff.operations.find((operation) => operation.after || operation.before);
   state.currentTime = firstChangedClip?.after?.start ?? firstChangedClip?.before?.start ?? state.currentTime;
+  if (state.isPlaying) {
+    state.playbackOrigin = state.currentTime;
+    state.playbackStartedAt = performance.now();
+  }
   renderApp();
 };
 
 const exitProposalPreview = () => {
   if (!state.previewDiffId) return;
   state.previewDiffId = null;
-  state.previewSourceId = null;
-  state.previewClipId = null;
+  state.currentTime = Math.min(state.currentTime, state.timelineDuration);
+  if (state.isPlaying) {
+    state.playbackOrigin = state.currentTime;
+    state.playbackStartedAt = performance.now();
+  }
+  state.previewPlaybackSignature = null;
   renderApp();
 };
 
@@ -1332,9 +1361,14 @@ const removeMedia = (mediaId) => {
 };
 
 const deleteSelectedClip = () => {
-  updateProject({type: 'clip/remove', clipId: state.selectedClipId});
+  const clipId = state.selectedClipId;
+  if (!clipId || !clipById(clipId)) return false;
+  const result = updateProject({type: 'clip/remove', clipId});
+  if (!result.changed) return false;
   state.selectedClipId = null;
+  if (state.regenerationEditorClipId === clipId) state.regenerationEditorClipId = null;
   renderApp();
+  return true;
 };
 
 const attachCharacterToSelectedClip = () => {
@@ -1354,67 +1388,138 @@ const removeCharacterFromSelectedClip = (versionId) => {
   renderApp();
 };
 
-const activeClipAt = (time) => {
+const playbackClips = () => {
   const previewDiff = state.previewDiffId ? diffById(state.previewDiffId) : null;
-  const clips = previewDiff ? derivePreviewClips(state.clips, previewDiff) : state.clips;
-  return clips.find((clip) => time >= clip.start && time < clip.start + clip.duration);
+  return previewDiff ? derivePreviewClips(state.clips, previewDiff) : state.clips;
+};
+
+const playbackDuration = () => {
+  const clips = playbackClips();
+  const clipEnd = clips.reduce((maximum, clip) => Math.max(maximum, clip.start + clip.duration), 0);
+  return clipEnd > state.timelineDuration ? clipEnd + 2 : state.timelineDuration;
+};
+
+const playbackAt = (time) => resolveTimelinePlaybackAt({
+  time,
+  clips: playbackClips(),
+  tracks: state.tracks,
+  mediaAssets: state.media,
+});
+
+const playbackSignature = ({visual, audio}) => {
+  const visualPart = visual?.media.url ? `${visual.clip.id}:${visual.media.id}` : '';
+  const audioPart = audio
+    .filter(({media}) => Boolean(media.url))
+    .map(({clip, media}) => `${clip.id}:${media.id}`)
+    .join(',');
+  return `${visualPart}|${audioPart}`;
+};
+
+const sourceTimeAtPlayhead = (clip) => (clip.sourceStart || 0) + Math.max(0, state.currentTime - clip.start);
+
+const seekMediaElement = (element, getTime) => {
+  const applyTime = () => {
+    try {
+      element.currentTime = getTime();
+    } catch {
+      // Metadata may not be available on the first assignment.
+    }
+  };
+  applyTime();
+  if (element.readyState === 0) element.addEventListener('loadedmetadata', applyTime, {once: true});
 };
 
 const syncPreview = (forceSeek = false) => {
   const video = app.querySelector('#previewVideo');
   const image = app.querySelector('#previewImage');
-  const audio = app.querySelector('#audioPreview');
-  if (!video || !image || !audio) return;
-  const clip = activeClipAt(state.currentTime);
-  const media = clip ? mediaById(clip.assetId) : null;
-  const hasSource = Boolean(media?.url);
-  const sourceTime = clip ? (clip.sourceStart || 0) + Math.max(0, state.currentTime - clip.start) : 0;
+  const audioPreview = app.querySelector('#audioPreview');
+  const audioMix = app.querySelector('#previewAudioMix');
+  if (!video || !image || !audioPreview || !audioMix) return;
+
+  const playback = playbackAt(state.currentTime);
+  const visual = playback.visual?.media.url ? playback.visual : null;
+  const activeAudio = playback.audio.filter(({media}) => Boolean(media.url));
   const shouldShow = (element, show) => element.classList.toggle('visible', Boolean(show));
-  shouldShow(video, hasSource && media?.kind === 'video');
-  shouldShow(image, hasSource && media?.kind === 'image');
-  shouldShow(audio, hasSource && media?.kind === 'audio');
-  if (!media || !clip || !hasSource) {
-    video.pause();
-    audio.querySelector('audio')?.pause();
-    state.previewSourceId = null;
-    state.previewClipId = null;
-  } else if (state.previewSourceId !== media.id || state.previewClipId !== clip.id) {
-    state.previewSourceId = media.id;
-    state.previewClipId = clip.id;
-    if (media.kind === 'video') { video.src = media.url; video.currentTime = sourceTime; }
-    if (media.kind === 'image') image.src = media.url;
-    if (media.kind === 'audio') {
-      if (!audio.querySelector('audio')) { const element = document.createElement('audio'); element.controls = false; audio.append(element); }
-      const audioElement = audio.querySelector('audio'); audioElement.src = media.url; audioElement.currentTime = sourceTime;
+
+  shouldShow(video, visual?.media.kind === 'video');
+  shouldShow(image, visual?.media.kind === 'image');
+  shouldShow(audioPreview, !visual && activeAudio.length > 0);
+
+  if (visual?.media.kind === 'video') {
+    const sourceChanged = video.dataset.clipId !== visual.clip.id || video.dataset.mediaId !== visual.media.id;
+    if (sourceChanged) {
+      video.pause();
+      video.src = visual.media.url;
+      video.dataset.clipId = visual.clip.id;
+      video.dataset.mediaId = visual.media.id;
     }
-  } else if (forceSeek) {
-    if (media.kind === 'video') video.currentTime = sourceTime;
-    if (media.kind === 'audio') { const audioElement = audio.querySelector('audio'); if (audioElement) audioElement.currentTime = sourceTime; }
-  }
-  if (state.isPlaying && media) {
-    if (media.kind === 'video') video.play().catch(() => {});
-    if (media.kind === 'audio') audio.querySelector('audio')?.play().catch(() => {});
+    if (sourceChanged || forceSeek) seekMediaElement(video, () => sourceTimeAtPlayhead(visual.clip));
+    if (state.isPlaying) video.play().catch(() => {});
+    else video.pause();
   } else {
     video.pause();
-    audio.querySelector('audio')?.pause();
+    delete video.dataset.clipId;
+    delete video.dataset.mediaId;
   }
+
+  if (visual?.media.kind === 'image') {
+    if (image.dataset.clipId !== visual.clip.id || image.dataset.mediaId !== visual.media.id) {
+      image.src = visual.media.url;
+      image.dataset.clipId = visual.clip.id;
+      image.dataset.mediaId = visual.media.id;
+    }
+  } else {
+    image.removeAttribute('src');
+    delete image.dataset.clipId;
+    delete image.dataset.mediaId;
+  }
+
+  const existingAudio = new Map([...audioMix.querySelectorAll('audio[data-clip-id]')]
+    .map((element) => [element.dataset.clipId, element]));
+  activeAudio.forEach(({clip, media}) => {
+    let element = existingAudio.get(clip.id);
+    const sourceChanged = !element || element.dataset.mediaId !== media.id;
+    if (!element) {
+      element = document.createElement('audio');
+      element.preload = 'auto';
+      element.dataset.clipId = clip.id;
+      audioMix.append(element);
+    }
+    existingAudio.delete(clip.id);
+    if (sourceChanged) {
+      element.pause();
+      element.src = media.url;
+      element.dataset.mediaId = media.id;
+    }
+    if (sourceChanged || forceSeek) {
+      seekMediaElement(element, () => sourceTimeAtPlayhead(clip));
+    }
+    if (state.isPlaying) element.play().catch(() => {});
+    else element.pause();
+  });
+  existingAudio.forEach((element) => {
+    element.pause();
+    element.remove();
+  });
+
+  state.previewPlaybackSignature = playbackSignature(playback);
 };
 
 const updatePlaybackFrame = () => {
   if (!state.isPlaying) return;
+  const duration = playbackDuration();
   const elapsed = (performance.now() - state.playbackStartedAt) / 1000;
-  state.currentTime = Math.min(state.timelineDuration, state.playbackOrigin + elapsed);
+  state.currentTime = Math.min(duration, state.playbackOrigin + elapsed);
   const playhead = app.querySelector('#playhead');
   if (playhead) playhead.style.left = `${state.currentTime * scale()}px`;
   const current = app.querySelector('#playerCurrent');
   if (current) current.textContent = formatTime(state.currentTime);
-  const clip = activeClipAt(state.currentTime);
-  if (clip && (clip.id !== state.previewClipId || mediaById(clip.assetId)?.id !== state.previewSourceId)) syncPreview(true);
-  if (state.currentTime >= state.timelineDuration) {
+  const playback = playbackAt(state.currentTime);
+  if (playbackSignature(playback) !== state.previewPlaybackSignature) syncPreview(true);
+  if (state.currentTime >= duration) {
     state.isPlaying = false;
     state.currentTime = 0;
-    state.previewSourceId = null;
-    state.previewClipId = null;
+    state.previewPlaybackSignature = null;
     renderApp();
     return;
   }
@@ -1425,23 +1530,24 @@ const togglePlay = () => {
   if (state.isPlaying) {
     state.isPlaying = false;
     cancelAnimationFrame(state.rafId);
-    syncPreview();
     renderApp();
   } else {
-    if (state.currentTime >= state.timelineDuration) state.currentTime = 0;
+    if (state.currentTime >= playbackDuration()) state.currentTime = 0;
     state.isPlaying = true;
     state.playbackOrigin = state.currentTime;
     state.playbackStartedAt = performance.now();
-    syncPreview(true);
     renderApp();
     state.rafId = requestAnimationFrame(updatePlaybackFrame);
   }
 };
 
 const seekTo = (time) => {
-  state.currentTime = Math.max(0, Math.min(state.timelineDuration, time));
-  state.previewSourceId = null;
-  state.previewClipId = null;
+  state.currentTime = Math.max(0, Math.min(playbackDuration(), time));
+  if (state.isPlaying) {
+    state.playbackOrigin = state.currentTime;
+    state.playbackStartedAt = performance.now();
+  }
+  state.previewPlaybackSignature = null;
   renderApp();
 };
 
@@ -1480,7 +1586,24 @@ const showToast = (message) => {
 };
 
 fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fileInput.value = ''; });
+const isKeyboardEditingTarget = (target) => target instanceof Element && Boolean(target.closest(
+  'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+));
 document.addEventListener('keydown', (event) => {
+  if (
+    event.key === 'Backspace'
+    && !event.defaultPrevented
+    && !event.isComposing
+    && !event.metaKey
+    && !event.ctrlKey
+    && !event.altKey
+    && !event.shiftKey
+    && !isKeyboardEditingTarget(event.target)
+    && deleteSelectedClip()
+  ) {
+    event.preventDefault();
+    return;
+  }
   if (event.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement?.tagName)) { event.preventDefault(); togglePlay(); }
 });
 

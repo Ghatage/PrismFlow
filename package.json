@@ -6,10 +6,15 @@
   "scripts": {
     "dev": "node --env-file=.env server.mjs",
     "start": "node --env-file=.env server.mjs",
+    "search:index": "node --env-file=.env scripts/index-model-search.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "tinylm": "^0.0.6",
+    "tinkerbird": "^0.0.7"
   },
   "devDependencies": {
     "playwright": "^1.61.1"

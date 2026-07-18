@@ -145,6 +145,69 @@ const dragFixture = {
   timelineDiffs: {schemaVersion: 1, items: [structuredClone(fixture.timelineDiffs.items[0])]},
 };
 
+const createPlaybackFixture = (origin) => {
+  const project = structuredClone(regenerationFixture);
+  project.project.name = 'Layered playback smoke';
+  project.mediaAssets = [
+    {id: 'visual-top', name: 'Top visual', kind: 'image', mimeType: 'image/svg+xml', duration: 4, remoteUrl: `${origin}/test-media/top.svg`},
+    {id: 'visual-lower', name: 'Lower visual', kind: 'image', mimeType: 'image/svg+xml', duration: 4, remoteUrl: `${origin}/test-media/lower.svg`},
+    {id: 'audio-dialogue', name: 'Dialogue', kind: 'audio', mimeType: 'audio/wav', duration: 3, remoteUrl: `${origin}/test-media/dialogue.wav`},
+    {id: 'audio-music', name: 'Music', kind: 'audio', mimeType: 'audio/wav', duration: 3, remoteUrl: `${origin}/test-media/music.wav`},
+  ];
+  project.timeline.tracks = [
+    {id: 'V2', name: 'Video 2', kind: 'video', order: 0},
+    {id: 'V1', name: 'Video 1', kind: 'video', order: 1},
+    {id: 'A1', name: 'Audio 1', kind: 'audio', order: 2},
+    {id: 'A2', name: 'Audio 2', kind: 'audio', order: 3},
+  ];
+  project.timeline.clips = [
+    {id: 'clip-lower', assetId: 'visual-lower', sceneId: 'scene-browser', trackId: 'V1', start: 0, duration: 3},
+    {id: 'clip-top', assetId: 'visual-top', sceneId: 'scene-browser', trackId: 'V2', start: 0, duration: 1},
+    {id: 'clip-dialogue', assetId: 'audio-dialogue', sceneId: 'scene-browser', trackId: 'A1', start: 0, duration: 2},
+    {id: 'clip-music', assetId: 'audio-music', sceneId: 'scene-browser', trackId: 'A2', start: 0.5, duration: 2.5},
+  ];
+  return project;
+};
+
+const extendedProposalFixture = (() => {
+  const project = structuredClone(regenerationFixture);
+  const proposedClip = {...acceptedClip, id: 'clip-proposed-tail', start: 14, duration: 2};
+  project.project.name = 'Extended proposal smoke';
+  project.timelineDiffs.items = [{
+    id: 'diff-proposed-tail',
+    baseRevision: 0,
+    status: 'pending',
+    source: 'agent',
+    summary: 'Add an ending beyond the accepted timeline',
+    operations: [{type: 'add', clipId: proposedClip.id, proposedClip, before: null, after: proposedClip}],
+    provenance: {},
+    createdAt: '2026-07-16T20:00:03.000Z',
+    updatedAt: '2026-07-16T20:00:03.000Z',
+  }];
+  return project;
+})();
+
+const createSilentWav = (seconds = 4) => {
+  const sampleRate = 8000;
+  const bytesPerSample = 2;
+  const dataSize = sampleRate * bytesPerSample * seconds;
+  const wav = Buffer.alloc(44 + dataSize);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(36 + dataSize, 4);
+  wav.write('WAVE', 8);
+  wav.write('fmt ', 12);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sampleRate, 24);
+  wav.writeUInt32LE(sampleRate * bytesPerSample, 28);
+  wav.writeUInt16LE(bytesPerSample, 32);
+  wav.writeUInt16LE(bytesPerSample * 8, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(dataSize, 40);
+  return wav;
+};
+
 const waitForHydration = (page) => page.locator('[data-media-hydrated="true"]').waitFor();
 
 const readPersistedProject = (page) => page.evaluate(() => new Promise((resolve, reject) => {
@@ -235,7 +298,7 @@ test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30
   assert.deepEqual(browserErrors, []);
 });
 
-test('selecting a clip does not render a context panel over the player', {timeout: 30_000}, async (context) => {
+test('selecting a clip preserves the player and Backspace deletes it', {timeout: 30_000}, async (context) => {
   const port = await reservePort();
   const origin = `http://127.0.0.1:${port}`;
   const server = spawn(process.execPath, ['server.mjs'], {
@@ -264,6 +327,8 @@ test('selecting a clip does not render a context panel over the player', {timeou
 
   await page.goto(`${origin}/?timelineAdapter=fake`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
+  await page.keyboard.press('Backspace');
+  assert.equal(await page.locator('.timeline-clip').count(), 1);
   const before = await page.locator('.preview-frame').evaluate((element) => {
     const box = element.getBoundingClientRect();
     return {width: box.width, height: box.height};
@@ -276,6 +341,141 @@ test('selecting a clip does not render a context panel over the player', {timeou
     return {width: box.width, height: box.height};
   });
   assert.deepEqual(after, before);
+
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.id = 'keyboard-editing-test';
+    input.value = 'draft';
+    document.body.append(input);
+  });
+  await page.locator('#keyboard-editing-test').focus();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Backspace');
+  assert.equal(await page.locator('#keyboard-editing-test').inputValue(), 'draf');
+  assert.equal(await page.locator('.timeline-clip').count(), 1);
+  await page.locator('#keyboard-editing-test').evaluate((element) => element.remove());
+
+  await page.locator('[data-clip-id="clip-browser"]').click();
+  await page.keyboard.press('Backspace');
+  await page.locator('[data-clip-id="clip-browser"]').waitFor({state: 'detached'});
+  const saved = await readPersistedProject(page);
+  assert.deepEqual(saved.timeline.clips, []);
+  assert.equal(saved.timeline.revision, 1);
+  assert.deepEqual(browserErrors, []);
+});
+
+test('plays the topmost visual and mixes every active audio track', {timeout: 30_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
+  await page.route(`${origin}/test-media/**`, async (route) => {
+    const url = route.request().url();
+    if (url.endsWith('.wav')) {
+      await route.fulfill({status: 200, contentType: 'audio/wav', body: createSilentWav()});
+      return;
+    }
+    const color = url.endsWith('top.svg') ? '#ff7d9c' : '#3ee6c2';
+    await route.fulfill({
+      status: 200,
+      contentType: 'image/svg+xml',
+      body: `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="${color}"/></svg>`,
+    });
+  });
+  await page.addInitScript((project) => {
+    localStorage.setItem('prismflow.project', JSON.stringify(project));
+    const nativePlay = HTMLMediaElement.prototype.play;
+    HTMLMediaElement.prototype.play = function play() {
+      this.dataset.playRequested = 'true';
+      return nativePlay.call(this);
+    };
+  }, createPlaybackFixture(origin));
+
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  await waitForHydration(page);
+  assert.equal(await page.locator('#previewImage').getAttribute('src'), `${origin}/test-media/top.svg`);
+  assert.deepEqual(await page.locator('#previewAudioMix audio').evaluateAll((elements) => elements.map((element) => element.dataset.clipId)), ['clip-dialogue']);
+
+  await page.locator('#timelineRuler').click({position: {x: 0.75 * 88, y: 10}});
+  assert.equal(await page.locator('#previewImage').getAttribute('src'), `${origin}/test-media/top.svg`);
+  assert.deepEqual(await page.locator('#previewAudioMix audio').evaluateAll((elements) => elements.map((element) => element.dataset.clipId)), ['clip-dialogue', 'clip-music']);
+
+  await page.locator('[data-action="toggle-play"]').click();
+  assert.deepEqual(await page.locator('#previewAudioMix audio').evaluateAll((elements) => elements.map((element) => element.dataset.playRequested)), ['true', 'true']);
+  await page.waitForFunction(() => {
+    const audio = [...document.querySelectorAll('#previewAudioMix audio')];
+    return audio.length === 2 && audio.every((element) => !element.paused);
+  });
+  await page.waitForFunction((lowerUrl) => document.querySelector('#previewImage')?.src === lowerUrl, `${origin}/test-media/lower.svg`);
+  await page.waitForFunction(() => {
+    const audio = [...document.querySelectorAll('#previewAudioMix audio')];
+    return audio.length === 1 && audio[0].dataset.clipId === 'clip-music';
+  });
+  await page.locator('#timelineRuler').click({position: {x: 5 * 88, y: 10}});
+  await page.waitForTimeout(120);
+  assert.match(await page.locator('#playerCurrent').textContent(), /^00:05\./);
+  await page.locator('[data-action="toggle-play"]').click();
+
+  await page.locator('#timelineRuler').click({position: {x: 1.5 * 88, y: 10}});
+  assert.equal(await page.locator('#previewImage').getAttribute('src'), `${origin}/test-media/lower.svg`);
+  assert.equal(await page.locator('#previewAudioMix audio').count(), 2);
+
+  await page.locator('#timelineRuler').click({position: {x: 2.25 * 88, y: 10}});
+  assert.deepEqual(await page.locator('#previewAudioMix audio').evaluateAll((elements) => elements.map((element) => element.dataset.clipId)), ['clip-music']);
+
+  await page.locator('#timelineRuler').click({position: {x: 3.5 * 88, y: 10}});
+  assert.equal(await page.locator('#previewAudioMix audio').count(), 0);
+  assert.equal(await page.locator('#previewImage').evaluate((element) => getComputedStyle(element).display), 'none');
+  assert.equal(await page.locator('#previewVideo').evaluate((element) => getComputedStyle(element).display), 'none');
+  assert.deepEqual(browserErrors, []);
+});
+
+test('extends playback duration for a proposal beyond the accepted timeline', {timeout: 30_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
+  await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), extendedProposalFixture);
+
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  await waitForHydration(page);
+  await page.locator('[data-action="select-first-diff"]').click();
+  await page.getByRole('button', {name: 'Preview proposal'}).click();
+  assert.equal(await page.locator('#playerCurrent').textContent(), '00:14.00');
+  assert.equal(await page.locator('#playerDuration').textContent(), '00:18.00');
+
+  await page.locator('[data-action="toggle-play"]').click();
+  await page.waitForTimeout(120);
+  assert.match(await page.locator('#playerCurrent').textContent(), /^00:14\./);
+  await page.locator('[data-action="toggle-play"]').click();
   assert.deepEqual(browserErrors, []);
 });
 
@@ -479,6 +679,7 @@ test('keeps the player blank until a playable timeline clip is active', {timeout
   assert.equal(await page.locator('#previewImage').evaluate((element) => getComputedStyle(element).display), 'block');
 
   assert.equal(await page.locator('.track-lane').count(), 2);
+  assert.equal(await page.locator('.timeline-body').evaluate((element) => element.scrollHeight <= element.clientHeight), true);
   await page.locator('[data-action="add-track"]').click();
   assert.equal(await page.getByRole('menu').count(), 1);
   await page.getByRole('menuitem', {name: 'Video'}).click();
@@ -489,6 +690,30 @@ test('keeps the player blank until a playable timeline clip is active', {timeout
   await page.getByRole('menuitem', {name: 'Audio'}).click();
   assert.equal(await page.locator('.track-lane').count(), 4);
   assert.equal(await page.locator('.track-lane').last().getAttribute('data-track-id'), 'A2');
+  const trackScroll = await page.locator('.timeline-body').evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    const body = element.getBoundingClientRect();
+    const label = element.querySelector('.track-label:last-child').getBoundingClientRect();
+    const lanes = element.querySelectorAll('.track-lane');
+    const lane = lanes[lanes.length - 1].getBoundingClientRect();
+    return {
+      overflowY: getComputedStyle(element).overflowY,
+      hasOverflow: element.scrollHeight > element.clientHeight,
+      scrollTop: element.scrollTop,
+      lastTrackVisible: label.bottom <= body.bottom + 1 && lane.bottom <= body.bottom + 1,
+      aligned: Math.abs(label.top - lane.top) < 1 && Math.abs(label.bottom - lane.bottom) < 1,
+    };
+  });
+  assert.equal(trackScroll.overflowY, 'auto');
+  assert.equal(trackScroll.hasOverflow, true);
+  assert.equal(trackScroll.lastTrackVisible, true);
+  assert.equal(trackScroll.aligned, true);
+  assert.ok(trackScroll.scrollTop > 0);
+
+  await page.locator('[data-track-id="A2"]').click({position: {x: 400, y: 30}});
+  const restoredScrollTop = await page.locator('.timeline-body').evaluate((element) => element.scrollTop);
+  assert.ok(Math.abs(restoredScrollTop - trackScroll.scrollTop) < 1);
+  assert.notEqual(await page.locator('#playerCurrent').textContent(), '00:00.00');
 
   assert.deepEqual(browserErrors, []);
 });

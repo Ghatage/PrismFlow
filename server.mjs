@@ -7,6 +7,7 @@ import {createFalAdapter} from './server/fal-adapter.mjs';
 import {createFalCharacterSheetAdapter} from './server/character-sheet-adapter.mjs';
 import {createFalTimelineGenerationAdapter} from './server/timeline-generation-adapter.mjs';
 import {createFalModelPricingAdapter, writeModelPricingCsv} from './server/model-pricing.mjs';
+import {createModelSearchAdapter} from './server/model-search.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -14,6 +15,10 @@ const fal = createFalAdapter();
 const characterSheets = createFalCharacterSheetAdapter({fal});
 const timelineGenerations = createFalTimelineGenerationAdapter({fal});
 const modelPricing = createFalModelPricingAdapter();
+const modelSearch = createModelSearchAdapter({
+  catalogPath: join(rootDir, 'fal-model-pricing.json'),
+  indexPath: join(rootDir, 'model-search-index.json'),
+});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -95,6 +100,36 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, result);
     } catch (error) {
       sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/search/models' && request.method === 'GET') {
+    try {
+      const query = url.searchParams.get('q') || url.searchParams.get('query') || '';
+      const result = await modelSearch.search(query, {limit: url.searchParams.get('limit')});
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, error.statusCode || 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/search/models/index' && request.method === 'POST') {
+    try {
+      const result = await modelSearch.buildIndex();
+      sendJson(response, 200, result);
+    } catch (error) {
+      sendJson(response, error.statusCode || 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/search/models/status' && request.method === 'GET') {
+    try {
+      sendJson(response, 200, await modelSearch.status());
+    } catch (error) {
+      sendJson(response, 500, {error: error instanceof Error ? error.message : String(error)});
     }
     return;
   }
