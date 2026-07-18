@@ -79,6 +79,7 @@ test('attaches multiple locked versions, persists them, and resolves exact sheet
       seed: null,
       params: {},
       parentAssetId: null,
+      parentAssetIds: [],
       derivedMetadata: null,
       characterVersionIds: ['fox-v1', 'owl-v1'],
       resolvedCharacterVersions: [

@@ -5,11 +5,13 @@ import {extname, join, normalize, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createFalAdapter} from './server/fal-adapter.mjs';
 import {createFalCharacterSheetAdapter} from './server/character-sheet-adapter.mjs';
+import {createFalTimelineGenerationAdapter} from './server/timeline-generation-adapter.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
 const fal = createFalAdapter();
 const characterSheets = createFalCharacterSheetAdapter({fal});
+const timelineGenerations = createFalTimelineGenerationAdapter({fal});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -93,6 +95,24 @@ const server = createServer(async (request, response) => {
   const characterJobMatch = url.pathname.match(/^\/api\/characters\/jobs\/([^/]+)$/);
   if (characterJobMatch && request.method === 'GET') {
     const result = await characterSheets.getCharacterSheetJob(decodeURIComponent(characterJobMatch[1]));
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === '/api/timeline/generate' && request.method === 'POST') {
+    try {
+      const body = await readJson(request);
+      const result = await timelineGenerations.submitTimelineGeneration(body);
+      sendJson(response, 202, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const timelineJobMatch = url.pathname.match(/^\/api\/timeline\/jobs\/([^/]+)$/);
+  if (timelineJobMatch && request.method === 'GET') {
+    const result = await timelineGenerations.getTimelineGenerationJob(decodeURIComponent(timelineJobMatch[1]));
     sendJson(response, 200, result);
     return;
   }

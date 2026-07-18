@@ -49,12 +49,16 @@ const normalizeProvenance = (value) => {
   const provenance = isRecord(value) ? value : {};
   const seed = typeof provenance.seed === 'string' || Number.isFinite(provenance.seed) ? provenance.seed : null;
   const derivedMetadata = provenance.derivedMetadata || provenance.derived;
+  const parentAssetIds = normalizeStringIds(provenance.parentAssetIds);
+  const parentAssetId = asNullableString(provenance.parentAssetId) || parentAssetIds[0] || null;
+  if (parentAssetId && !parentAssetIds.includes(parentAssetId)) parentAssetIds.unshift(parentAssetId);
   return {
     prompt: asNullableString(provenance.prompt),
     modelId: asNullableString(provenance.modelId),
     seed,
     params: isRecord(provenance.params) ? sanitizeJson(provenance.params) || {} : {},
-    parentAssetId: asNullableString(provenance.parentAssetId),
+    parentAssetId,
+    parentAssetIds,
     derivedMetadata: isRecord(derivedMetadata) ? sanitizeJson(derivedMetadata) || {} : null,
     characterVersionIds: normalizeStringIds(provenance.characterVersionIds),
   };

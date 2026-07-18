@@ -77,6 +77,7 @@ test('persists project structure and provenance without runtime URLs or secrets'
     seed: 42,
     params: {steps: 28},
     parentAssetId: 'media-parent',
+    parentAssetIds: ['media-parent'],
     derivedMetadata: {operation: 'upscale'},
     characterVersionIds: [],
   });
@@ -119,6 +120,7 @@ test('recovers from malformed or unavailable browser storage', () => {
     seed: null,
     params: {},
     parentAssetId: null,
+    parentAssetIds: [],
     derivedMetadata: null,
     characterVersionIds: [],
   });
