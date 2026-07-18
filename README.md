@@ -30,6 +30,13 @@ The local server reads `.env` and keeps `FAL_API_KEY` server-side. Character gen
 
 The editor now persists character versions and generation provenance while keeping final rendering as a separate future layer.
 
+## Ghost timeline review contract
+
+- Accepted clips remain the playback source until `Preview proposal` is explicitly entered; `Exit preview` or Escape returns to accepted playback.
+- Pending and stale proposals are ordered by creation time and exposed as keyboard-selectable ghost buttons. A move renders origin and destination ghosts but remains one review action.
+- Accept and reject advance to the next available proposal. Stale proposals must be rebased conservatively or rejected; a rebase preserves the stale record and creates a new pending history record.
+- Review regression tests use deterministic fixtures and the fake generation adapter, so they do not make paid provider requests.
+
 ## Deterministic character testing
 
 Open [http://localhost:4173/?characterAdapter=fake](http://localhost:4173/?characterAdapter=fake) to run the character composer without a FAL key or network request. Include `[fail]` in the visual prompt to exercise the failed and retrying states. The default route uses the server-side Nano Banana 2 queue adapter.

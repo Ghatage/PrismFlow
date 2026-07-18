@@ -139,6 +139,12 @@ const staleConflictFixture = {
   },
 };
 
+const dragFixture = {
+  ...structuredClone(fixture),
+  project: {...fixture.project, name: 'Ghost drag smoke'},
+  timelineDiffs: {schemaVersion: 1, items: [structuredClone(fixture.timelineDiffs.items[0])]},
+};
+
 test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30_000}, async (context) => {
   const port = await reservePort();
   const origin = `http://127.0.0.1:${port}`;
@@ -179,6 +185,13 @@ test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30
   assert.equal(await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('prismflow.project')).timeline.clips)), acceptedBeforeExit);
   await page.getByRole('button', {name: 'Previous proposal'}).click();
   assert.equal(await page.locator('[data-review-position]').textContent(), '1 of 2');
+  await page.getByRole('button', {name: 'Preview proposal'}).click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('[data-player-status]').textContent(), 'Accepted preview');
+  await page.reload({waitUntil: 'networkidle'});
+  assert.equal(await page.locator('[data-review-position]').textContent(), '1 of 2');
+  await page.locator('[data-ghost-key]').first().focus();
+  await page.keyboard.press('Enter');
   await page.getByText('Before provenance').waitFor();
   await page.getByText('After provenance').waitFor();
   await page.locator('[data-action="reject-diff"]').click();
@@ -246,6 +259,38 @@ test('compares fake variants and selects one through a replacement diff', {timeo
   assert.deepEqual(saved.timeline.clips[0].provenance.parentAssetIds, ['asset-browser', 'asset-parent']);
   assert.deepEqual(saved.timeline.clips[0].provenance.characterVersionIds, ['fox-v1']);
   assert.equal(saved.mediaAssets.length, 3);
+  assert.deepEqual(browserErrors, []);
+});
+
+test('revises a dragged ghost into a new proposal without moving accepted clips', {timeout: 30_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage();
+  const browserErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
+  await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), dragFixture);
+
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  const acceptedBeforeDrag = await page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('prismflow.project')).timeline.clips));
+  await page.locator('[data-ghost-key]').first().dragTo(page.locator('.video-lane'), {targetPosition: {x: 300, y: 30}});
+
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('prismflow.project')));
+  assert.equal(JSON.stringify(saved.timeline.clips), acceptedBeforeDrag);
+  assert.deepEqual(saved.timelineDiffs.items.map((diff) => diff.status), ['rejected', 'pending']);
+  assert.equal(saved.timelineDiffs.items[1].provenance.revisedFromDiffId, 'diff-browser-move');
   assert.deepEqual(browserErrors, []);
 });
 

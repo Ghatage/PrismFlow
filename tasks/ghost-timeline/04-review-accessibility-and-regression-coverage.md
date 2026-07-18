@@ -1,6 +1,6 @@
 # Ghost timeline accessibility and regression coverage
 
-Status: planned
+Status: complete
 
 ## Goal
 

@@ -179,7 +179,7 @@ test('marks old proposals stale and prevents silent acceptance after accepted ed
 });
 
 test('rebases compatible stale proposals into new pending history and is idempotent', () => {
-  const {store, diffs, clipIds} = createFixture();
+  const {storage, store, diffs, clipIds} = createFixture();
   diffs.createProposal({
     id: 'diff-rebase-compatible',
     operations: [{type: 'move', clipId: clipIds[0], after: {start: 9}}],
@@ -196,6 +196,11 @@ test('rebases compatible stale proposals into new pending history and is idempot
   assert.equal(first.project.timelineDiffs.items.find((diff) => diff.id === 'diff-rebase-compatible').status, 'stale');
   assert.equal(JSON.stringify(first.project.timeline.clips), acceptedAfterConcurrentEdit);
 
+  const reopened = createProjectStore({storage, ...createDependencies()});
+  const reopenedDiffs = createTimelineDiffs(reopened).listPending();
+  assert.deepEqual(reopenedDiffs.map((diff) => diff.status), ['stale', 'pending']);
+  assert.equal(reopenedDiffs[1].provenance.reconciliation.rebasedFromDiffId, 'diff-rebase-compatible');
+
   const repeated = diffs.rebase('diff-rebase-compatible');
   assert.equal(repeated.changed, false);
   assert.equal(repeated.affectedId, first.affectedId);
@@ -204,6 +209,22 @@ test('rebases compatible stale proposals into new pending history and is idempot
   const accepted = diffs.accept(first.affectedId);
   assert.equal(accepted.project.timelineDiffs.items.find((diff) => diff.id === first.affectedId).status, 'accepted');
   assert.equal(accepted.project.timeline.clips.find((clip) => clip.id === clipIds[0]).start, 9);
+});
+
+test('round-trips accepted, rejected, stale, and rebased proposal history', () => {
+  const {storage, store, diffs, clipIds} = createFixture();
+  diffs.createProposal({id: 'history-accepted', operations: [{type: 'move', clipId: clipIds[0], after: {start: 1}}]});
+  diffs.accept('history-accepted');
+  diffs.createProposal({id: 'history-rejected', operations: [{type: 'trim', clipId: clipIds[1], after: {duration: 1}}]});
+  diffs.reject('history-rejected');
+  diffs.createProposal({id: 'history-stale', operations: [{type: 'move', clipId: clipIds[0], after: {start: 6}}]});
+  store.dispatch({type: 'clip/move', clipId: clipIds[1], trackId: 'V1', start: 8});
+  const rebased = diffs.rebase('history-stale');
+  assert.deepEqual(rebased.project.timelineDiffs.items.map((diff) => diff.status), ['accepted', 'rejected', 'stale', 'pending']);
+
+  const reopened = createProjectStore({storage, ...createDependencies()}).getProject();
+  assert.deepEqual(reopened.timelineDiffs.items.map((diff) => diff.status), ['accepted', 'rejected', 'stale', 'pending']);
+  assert.equal(reopened.timelineDiffs.items[3].provenance.reconciliation.rebasedFromDiffId, 'history-stale');
 });
 
 test('reports stale rebase conflicts without changing accepted clips or the stale record', () => {

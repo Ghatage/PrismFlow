@@ -434,7 +434,7 @@ const renderGhostInspector = (ghost) => {
   const actionLabel = ghost.type[0].toUpperCase() + ghost.type.slice(1);
   return `
     <div class="diff-review-card ${diff.status}">
-      <div class="diff-review-heading"><span>${actionLabel}</span><strong>${escapeHtml(diff.summary)}</strong><small>Base revision ${diff.baseRevision} · ${escapeHtml(diff.source)}</small></div>
+      <div class="diff-review-heading"><span>${actionLabel}</span><strong>${escapeHtml(diff.summary)}</strong><small data-review-status>${diff.status === 'stale' ? 'Stale proposal' : 'Pending proposal'} · Base revision ${diff.baseRevision} · ${escapeHtml(diff.source)}</small></div>
       <div class="diff-review-timing">
         <div><span>Before</span><strong>${ghost.before ? `${formatTime(ghost.before.start)} · ${formatTime(ghost.before.duration)}` : 'New clip'}</strong><small>${escapeHtml(beforeMedia?.name || 'No accepted source')}</small></div>
         <div><span>After</span><strong>${ghost.after ? `${formatTime(ghost.after.start)} · ${formatTime(ghost.after.duration)}` : 'Removed'}</strong><small>${escapeHtml(afterMedia?.name || 'No proposed source')}</small></div>
@@ -507,9 +507,11 @@ const renderGhostClip = (ghost) => {
   if (!clip) return '';
   const media = mediaById(clip.assetId);
   const width = Math.max(clip.duration * scale(), 66);
-  const label = ghost.role === 'origin' ? 'Original position' : ghost.type === 'remove' ? 'Remove' : `${ghost.type} proposal`;
+  const statusLabel = ghost.status === 'stale' ? 'Stale' : 'Pending';
+  const roleLabel = ghost.role === 'origin' ? 'original position' : ghost.role === 'destination' ? 'destination' : ghost.role === 'removal' ? 'removal' : 'proposal';
+  const label = `${statusLabel} ${ghost.type} ${roleLabel}: ${ghost.summary}`;
   const draggable = ghost.role !== 'origin' && ghost.type !== 'remove';
-  return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${formatTime(clip.duration)}</small></button>`;
+  return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" data-ghost-status="${escapeHtml(ghost.status)}" data-ghost-role="${escapeHtml(ghost.role)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}" aria-pressed="${ghost.key === state.selectedGhostKey}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${statusLabel} · ${formatTime(clip.duration)}</small></button>`;
 };
 
 const bindEvents = () => {
