@@ -32,7 +32,7 @@ import {
 import {createClipRegenerationService} from './clip-regeneration.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
 import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
-import {expandMentionPrompt, imageInputFor, resolveMentionedVersions} from './prompt-mentions.js';
+import {expandMentionPrompt, findMentions, imageInputFor, resolveMentionedVersions} from './prompt-mentions.js';
 import {attachMentionAutocomplete} from './mention-autocomplete.js';
 import {toUploadableUrl} from './asset-data-url.js';
 import {createAgentWorkspace} from './agent-workspace.js';
@@ -52,6 +52,18 @@ import {
   defaultStyleInstruction,
   styleApplicationEligibility,
 } from './style-application.js';
+import {getNarrativeStyle, narrativeStyles} from './data/narrative-styles.js';
+import {dismissSplash, renderSplash} from './splash.js';
+import {patchStylePickerSelection, renderStylePicker} from './style-picker.js';
+import {renderStoryboard, buildStoryboardFromStyle, refreshStoryboardChrome} from './storyboard.js';
+import {
+  actForViewTime,
+  orderedScenes,
+  toLocalStart,
+  toViewStart,
+  visibleAssetIds,
+  visibleClips,
+} from './act-view.js';
 
 const legacyStorage = {
   getItem: (key) => {
@@ -67,7 +79,14 @@ const projectDatabase = createBrowserDatabase();
 let projectStore = createProjectStore({storage: legacyStorage});
 let project = projectStore.getProject();
 
+const initialView = (() => {
+  const requested = new URLSearchParams(globalThis.location?.search || '').get('view');
+  return ['splash', 'picker', 'storyboard', 'editor'].includes(requested) ? requested : 'splash';
+})();
+
 const state = {
+  view: initialView,
+  selectedNarrativeStyleId: null,
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get styles() { return project.styles; },
@@ -78,6 +97,7 @@ const state = {
   get customTransitions() { return project.customTransitions; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
+  activeActId: 'all',
   selectedClipId: null,
   selectedClipIds: new Set(),
   selectedTransitionId: null,
@@ -186,6 +206,11 @@ const agentTools = createAgentTools({
   projectContext,
   videoIndexer,
   database: projectDatabase,
+  getSearchScope: () => ({
+    activeSceneId: activeActSceneId(),
+    assetIds: [...scopedAssetIds()],
+    characterIds: charactersForAct().map((character) => character.id),
+  }),
 });
 const callLlm = async ({messages, tools, signal}) => {
   const response = await fetch('/api/agent/llm', {
@@ -331,7 +356,7 @@ const selectTimelineClip = (clipId, event = {}) => {
   if (event.shiftKey && state.selectedClipId) {
     const anchor = clipById(state.selectedClipId);
     if (anchor?.trackId === clip.trackId) {
-      const trackClips = state.clips
+      const trackClips = viewClips()
         .filter((candidate) => candidate.trackId === clip.trackId)
         .sort((left, right) => left.start - right.start || left.id.localeCompare(right.id));
       const anchorIndex = trackClips.findIndex((candidate) => candidate.id === anchor.id);
@@ -371,7 +396,45 @@ const styleById = (id) => state.styles.find((style) => style.id === id);
 const styleVersion = (style) => style?.versions.find((version) => version.id === (style.lockedVersionId || style.activeVersionId)) || null;
 const styleReferenceImageIds = (style) => (styleVersion(style)?.referenceAssetIds || [])
   .filter((assetId) => mediaById(assetId)?.kind === 'image');
-const activeScene = () => project.scenes.find((scene) => scene.id === project.timeline.activeSceneId) || project.scenes[0];
+const activeScene = () => project.scenes.find((scene) => scene.id === (
+  state.activeActId !== 'all' ? state.activeActId : project.timeline.activeSceneId
+)) || project.scenes[0];
+const activeActSceneId = () => state.activeActId === 'all' ? null : activeScene()?.id || null;
+const viewClips = (clips = state.clips) => visibleClips(project, state.activeActId, clips);
+const viewClipById = (id) => viewClips().find((clip) => clip.id === id) || null;
+const viewClip = (clip) => {
+  if (!clip || (state.activeActId !== 'all' && clip.sceneId !== state.activeActId)) return null;
+  return state.activeActId === 'all'
+    ? {...clip, start: toViewStart(project, state.activeActId, clip.sceneId, clip.start)}
+    : clip;
+};
+const scopedAssetIds = () => visibleAssetIds(project, state.activeActId);
+const scopedMedia = () => {
+  const ids = scopedAssetIds();
+  return state.media.filter((asset) => ids.has(asset.id));
+};
+const mentionedCharacterIds = (sceneId = null) => new Set((project.storyboard?.nodes || [])
+  .filter((node) => node.kind === 'act' && (!sceneId || node.sceneId === sceneId))
+  .flatMap((node) => (node.beats || []).flatMap((beat) => Object.values(beat.mentions || {})))
+  .filter((id) => typeof id === 'string'));
+const charactersForAct = (sceneId = activeActSceneId()) => {
+  if (!sceneId) return characterLibrary.load();
+  const inAct = mentionedCharacterIds(sceneId);
+  const mentionedAnywhere = mentionedCharacterIds();
+  return characterLibrary.load().filter((character) => inAct.has(character.id) || !mentionedAnywhere.has(character.id));
+};
+const scopedMessages = () => state.activeActId === 'all'
+  ? state.agentWorkspace.messages
+  : state.agentWorkspace.messages.filter((message) => message.sceneId === null || message.sceneId === state.activeActId);
+const placementForViewStart = (viewStart, sceneId = null) => {
+  const owningSceneId = state.activeActId === 'all'
+    ? sceneId || actForViewTime(project, viewStart)
+    : state.activeActId;
+  return {
+    sceneId: owningSceneId || activeScene()?.id || null,
+    start: toLocalStart(project, state.activeActId, owningSceneId, viewStart),
+  };
+};
 const scale = () => 88 * state.zoom;
 
 const renderMediaVisual = (item) => {
@@ -381,8 +444,203 @@ const renderMediaVisual = (item) => {
   return `<div class="offline-thumb">${kindIcon(item.kind)}<span>offline</span></div>`;
 };
 
+const setView = (view) => {
+  state.view = view;
+  renderApp();
+};
+
+let storyboardWorking = null; // mutable board the storyboard view edits before persisting
+
+const persistStoryboardNow = () => {
+  if (storyboardWorking) updateProject({type: 'storyboard/update', storyboard: storyboardWorking});
+};
+
+const ensureStoryboardSeeded = (style) => {
+  if (project.storyboard?.styleId === style.id && project.storyboard.nodes.length) return;
+  const board = buildStoryboardFromStyle(style);
+  board.nodes.filter((node) => node.kind === 'act').forEach((node) => {
+    let scene = project.scenes.find((candidate) => candidate.metadata?.actNumber === node.actNumber);
+    if (!scene && node.actNumber === 1) scene = project.scenes[0];
+    if (scene) {
+      updateProject({type: 'scene/update', sceneId: scene.id, patch: {name: node.title, metadata: {actNumber: node.actNumber}}});
+      node.sceneId = scene.id;
+    } else {
+      node.sceneId = updateProject({type: 'scene/add', scene: {name: node.title, metadata: {actNumber: node.actNumber}}}).affectedId;
+    }
+  });
+  updateProject({type: 'storyboard/update', storyboard: board});
+  storyboardWorking = null;
+};
+
+const openStoryboardFromPicker = () => {
+  const style = getNarrativeStyle(state.selectedNarrativeStyleId);
+  if (!style) return;
+  ensureStoryboardSeeded(style);
+  setView('storyboard');
+};
+
+const beatMentionMap = (node) => Object.assign({}, state.promptMentionMap,
+  ...node.beats.map((beat) => beat.mentions || {}));
+
+const generateActStill = async (node) => {
+  const promptText = [node.summary?.trim(), ...node.beats.map((beat) => beat.text)].filter(Boolean).join('\n');
+  if (!promptText) { showToast('Add a summary or beats before generating a still.'); return; }
+  const {resolved} = resolveMentionedVersions({text: promptText, mentionMap: beatMentionMap(node), project});
+  const referenceAssetIds = [...new Set(resolved.map((entry) => entry.sheetAssetId).filter(Boolean))];
+  const expanded = resolved.length ? expandMentionPrompt({text: promptText, resolved}) : promptText;
+  const still = {
+    id: `sb-still-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 8)}`,
+    assetId: null,
+    beatIds: node.beats.map((beat) => beat.id),
+    prompt: expanded,
+    status: 'generating',
+  };
+  node.stills.push(still);
+  refreshStoryboardChrome();
+  persistStoryboardNow();
+
+  const finish = (status, error = null) => {
+    still.status = status;
+    refreshStoryboardChrome();
+    persistStoryboardNow();
+    if (status === 'failed') showToast(error ? `Still generation failed: ${error}` : 'Still generation failed.');
+  };
+  const controller = createCharacterGenerationController({
+    adapter: characterGenerationAdapter,
+    onCompleted: async (result) => {
+      const imported = updateProject({
+        type: 'asset/import',
+        asset: {
+          name: `${node.title} still`,
+          kind: 'image',
+          mimeType: result.asset.mimeType,
+          size: 0,
+          duration: 5,
+          url: result.asset.url,
+          sceneId: node.sceneId,
+          source: {type: 'generated', fileName: `${node.title}-still`, lastModified: 0},
+          metadata: {
+            actStill: true,
+            actNumber: node.actNumber,
+            provider: result.source?.provider || 'local',
+            providerJobId: result.source?.jobId || null,
+            providerModelId: result.source?.modelId || result.modelId || null,
+          },
+        },
+      });
+      still.assetId = imported.affectedId;
+      await persistGeneratedAsset(imported.affectedId);
+    },
+  });
+  try {
+    const submitted = await controller.submit({
+      kind: 'scene-still',
+      name: node.title,
+      prompt: expanded,
+      referenceAssetIds,
+      styleNotes: storyboardWorking?.styleTitle ? `Narrative style: ${storyboardWorking.styleTitle}` : '',
+    });
+    if (submitted.status === 'failed') { finish('failed', submitted.error); return; }
+    const pollLoop = async () => {
+      const job = await controller.poll();
+      if (job.status === 'generating' || job.status === 'retrying') { setTimeout(pollLoop, 300); return; }
+      finish(job.status === 'ready' ? 'ready' : 'failed', job.error);
+    };
+    setTimeout(pollLoop, 300);
+  } catch (error) {
+    finish('failed', error instanceof Error ? error.message : String(error));
+  }
+};
+
+const storyboardOptions = () => ({
+  storyboard: storyboardWorking,
+  onChange: (board) => updateProject({type: 'storyboard/update', storyboard: board}),
+  onJumpToEditor: () => setView('editor'),
+  onBackToPicker: () => setView('picker'),
+  characters: () => project.characters,
+  renderCharacterVisual,
+  assetById: mediaById,
+  onCreateCharacter: createCharacter,
+  onOpenCharacter: openCharacter,
+  onActRename: (node) => {
+    if (node.sceneId) updateProject({type: 'scene/update', sceneId: node.sceneId, patch: {name: node.title}});
+  },
+  resolveMentions: (text) => Object.fromEntries(
+    findMentions(text, project.characters, state.promptMentionMap)
+      .map((mention) => [mention.name, mention.characterId])),
+  attachMentionInput: (textarea) => attachMentionAutocomplete(textarea, {
+    getCharacters: () => project.characters,
+    onInsert: ({characterId, name}) => { state.promptMentionMap[name] = characterId; },
+  }),
+  onGenerateStill: generateActStill,
+});
+
+const characterModalLayer = () => {
+  let layer = document.querySelector('#modalLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'modalLayer';
+    document.body.append(layer);
+  }
+  return layer;
+};
+
+const renderCharacterModalLayer = () => {
+  const layer = characterModalLayer();
+  const modalAllowed = state.view === 'storyboard' || state.view === 'editor';
+  layer.innerHTML = modalAllowed && state.isCharacterModalOpen ? renderCharacterModal() : '';
+};
+
 const renderApp = () => {
-  const acceptedClipIds = new Set(state.clips.map((clip) => clip.id));
+  if (state.view === 'splash') { renderCharacterModalLayer(); renderSplash(app); return; }
+  if (state.view === 'picker') {
+    renderCharacterModalLayer();
+    renderStylePicker(app, {
+      styles: narrativeStyles,
+      selectedId: state.selectedNarrativeStyleId,
+      onSelect: (styleId) => {
+        state.selectedNarrativeStyleId = styleId;
+        patchStylePickerSelection(app, narrativeStyles, styleId);
+      },
+      onNext: (target) => {
+        if (target === 'editor') { setView('editor'); return; }
+        openStoryboardFromPicker();
+      },
+    });
+    return;
+  }
+  if (state.view === 'storyboard') {
+    if (!project.storyboard) {
+      if (!state.mediaHydrated) {
+        // A direct storyboard deep link can arrive before IndexedDB has
+        // restored the project. Do not redirect based on the temporary default
+        // project; restoreSession will render the persisted board momentarily.
+        app.innerHTML = '';
+        return;
+      }
+      state.view = 'picker';
+      renderApp();
+      return;
+    }
+    if (!storyboardWorking || storyboardWorking.styleId !== project.storyboard.styleId) {
+      storyboardWorking = project.storyboard;
+    }
+    renderStoryboard(app, storyboardOptions());
+    refreshStoryboardChrome();
+    renderCharacterModalLayer();
+    if (state.isCharacterModalOpen) bindCharacterModalEvents(characterModalLayer());
+    return;
+  }
+  renderEditorApp();
+};
+
+const renderEditorApp = () => {
+  if (state.activeActId !== 'all' && !project.scenes.some((scene) => scene.id === state.activeActId)) {
+    state.activeActId = project.scenes.some((scene) => scene.id === project.timeline.activeSceneId)
+      ? project.timeline.activeSceneId
+      : 'all';
+  }
+  const acceptedClipIds = new Set(viewClips().map((clip) => clip.id));
   state.selectedClipIds = new Set([...state.selectedClipIds].filter((clipId) => acceptedClipIds.has(clipId)));
   if (state.selectedClipId && !acceptedClipIds.has(state.selectedClipId)) state.selectedClipId = [...state.selectedClipIds].at(-1) || null;
   const previousTimelineBody = app.querySelector('.timeline-body');
@@ -425,8 +683,8 @@ const renderApp = () => {
         ${renderAgentRunCard()}
         <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'}">
           <div class="panel-tabs">
-            <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
-            <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
+            <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${scopedMedia().length || ''}</span></button>
+            <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${charactersForAct().length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'styles' ? 'active' : ''}" data-tab="styles" type="button">Styles <span class="tab-count">${state.styles.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'transitions' ? 'active' : ''}" data-tab="transitions" type="button">Transitions</button>
             <button class="panel-tab ${state.activeTab === 'script' ? 'active' : ''}" data-tab="script" type="button">Script <span class="tab-count">${state.agentWorkspace.script.beats.length || ''}</span></button>
@@ -466,9 +724,10 @@ const renderApp = () => {
         ${renderTimeline()}
       </section>
     </div>
-    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.styleApplicationModal ? renderStyleApplicationModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? renderCharacterModal() : state.isStyleModalOpen ? renderStyleModal() : state.isTransitionComposerOpen ? renderTransitionComposerModal() : ''}
+    ${state.agentPromptModalOpen ? renderAgentPromptModal() : state.styleApplicationModal ? renderStyleApplicationModal() : state.generateVideoModal ? renderGenerateVideoModal() : state.isCharacterModalOpen ? '' : state.isStyleModalOpen ? renderStyleModal() : state.isTransitionComposerOpen ? renderTransitionComposerModal() : ''}
   `;
 
+  renderCharacterModalLayer();
   bindEvents();
   state.previewPlaybackSignature = null;
   syncPreview(true);
@@ -481,7 +740,7 @@ const renderApp = () => {
 
 const renderMediaPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">ASSET BIN</span><h2>Media</h2></div></div>
-  <div class="media-library" data-dropzone="media"><div class="media-list">${state.media.map(renderMediaCard).join('')}<button class="media-add-card" data-action="open-file" type="button" aria-label="Import media">${icons.plus}</button></div>${renderVideoSearchResults()}</div>
+  <div class="media-library" data-dropzone="media"><div class="media-list">${scopedMedia().map(renderMediaCard).join('')}<button class="media-add-card" data-action="open-file" type="button" aria-label="Import media">${icons.plus}</button></div>${renderVideoSearchResults()}</div>
   <div class="panel-footnote"><span>Drag assets onto the timeline to start editing.</span></div>
 `;
 
@@ -514,10 +773,12 @@ const searchVideoFrames = async (query) => {
   state.videoSearchLoading = true;
   state.videoSearchError = '';
   try {
-    const results = await videoIndexer.search(normalizedQuery, {limit: 10});
-    state.videoSearchResults = results;
+    const assetIds = scopedAssetIds();
+    const requestedLimit = state.activeActId === 'all' ? 10 : 30;
+    const results = await videoIndexer.search(normalizedQuery, {limit: requestedLimit});
+    state.videoSearchResults = results.filter((result) => assetIds.has(result.videoAssetId)).slice(0, 10);
     state.selectedFrameResult = null;
-    return results;
+    return state.videoSearchResults;
   } catch (error) {
     state.videoSearchError = error instanceof Error ? error.message : String(error);
     throw error;
@@ -555,7 +816,7 @@ const renderCharactersPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">IDENTITY LIBRARY</span><h2>Characters</h2></div></div>
   <div class="character-grid">
     <button class="character-card character-add-card" data-action="create-character" type="button"><span>${icons.plus}</span><strong>New character</strong></button>
-    ${characterLibrary.load().map((character) => `<button class="character-card" data-character-id="${character.id}" type="button"><div class="character-sheet">${renderCharacterVisual(character)}</div><div class="character-card-copy"><strong>${escapeHtml(character.name)}</strong><span>${character.lockedVersionId ? 'Locked' : character.status} · ${character.versions.length} ${character.versions.length === 1 ? 'version' : 'versions'}</span></div>${character.lockedVersionId ? '<span class="character-lock">LOCKED</span>' : ''}</button>`).join('')}
+    ${charactersForAct().map((character) => `<button class="character-card" data-character-id="${character.id}" type="button"><div class="character-sheet">${renderCharacterVisual(character)}</div><div class="character-card-copy"><strong>${escapeHtml(character.name)}</strong><span>${character.lockedVersionId ? 'Locked' : character.status} · ${character.versions.length} ${character.versions.length === 1 ? 'version' : 'versions'}</span></div>${character.lockedVersionId ? '<span class="character-lock">LOCKED</span>' : ''}</button>`).join('')}
   </div>
   ${state.characters.length ? '' : '<div class="panel-empty"><span>Create reusable identities without adding clips to the timeline.</span></div>'}
   <div class="panel-footnote"><span class="fal-dot"></span><span>Versioned references</span><span class="status-pill">local</span></div>
@@ -792,7 +1053,7 @@ const renderScriptPanel = () => {
 };
 
 const renderAgentPane = () => {
-  const workspace = state.agentWorkspace;
+  const messages = scopedMessages();
   const entries = projectContext.getIndex().entries;
   const entryById = new Map(entries.map((entry) => [entry.id, entry]));
   const renderFrameResults = (frameIds) => (frameIds || []).map((id) => {
@@ -801,7 +1062,7 @@ const renderAgentPane = () => {
       ? `<button type="button" class="agent-result frame-result" data-video-frame-id="${escapeHtml(id)}"><strong>${escapeHtml(result.videoName || result.videoAssetId)}</strong><small>${formatTime(result.time)} · ${escapeHtml(result.annotation || '')}</small></button>`
       : `<span class="agent-result-missing">Frame ${escapeHtml(id)} is indexed in the local video catalog.</span>`;
   }).join('');
-  return `<aside class="agent-pane ${state.agentPaneOpen ? '' : 'is-hidden'}" aria-label="Agent workspace"><div class="agent-pane-head"><div><span class="eyebrow">PROJECT AGENT</span><h2>Agent</h2></div><button class="small-icon-button" data-action="toggle-agent-pane" aria-label="Close agent" type="button">${icons.close}</button></div><div class="agent-messages">${workspace.messages.length ? workspace.messages.map((message) => `<article class="agent-message ${message.role}"><span>${escapeHtml(message.role)}</span><p>${escapeHtml(message.text)}</p>${message.resultIds.length || message.frameIds?.length ? `<div class="agent-results">${message.resultIds.map((id) => { const entry = entryById.get(id); return entry ? `<button type="button" class="agent-result" data-agent-result-id="${escapeHtml(id)}"><strong>${escapeHtml(entry.description || entry.text)}</strong><small>${escapeHtml(entry.type)}${entry.start !== undefined ? ` · ${formatTime(entry.start)}` : ''}</small></button>` : ''; }).join('')}${renderFrameResults(message.frameIds)}</div>` : ''}</article>`).join('') : '<div class="agent-empty"><span>${icons.magic}</span><p>Ask about shots, characters, scenes, or provenance.</p><small>Search is grounded in this project’s accepted timeline and local video-frame annotations.</small></div>'}</div><form class="agent-form" data-agent-form><textarea name="query" rows="3" placeholder="Find the shot where the fox jumps…" required></textarea><button class="button primary" type="submit">Search project</button></form></aside>`;
+  return `<aside class="agent-pane ${state.agentPaneOpen ? '' : 'is-hidden'}" aria-label="Agent workspace"><div class="agent-pane-head"><div><span class="eyebrow">PROJECT AGENT</span><h2>Agent</h2></div><button class="small-icon-button" data-action="toggle-agent-pane" aria-label="Close agent" type="button">${icons.close}</button></div><div class="agent-messages">${messages.length ? messages.map((message) => `<article class="agent-message ${message.role}"><span>${escapeHtml(message.role)}</span><p>${escapeHtml(message.text)}</p>${message.resultIds.length || message.frameIds?.length ? `<div class="agent-results">${message.resultIds.map((id) => { const entry = entryById.get(id); return entry ? `<button type="button" class="agent-result" data-agent-result-id="${escapeHtml(id)}"><strong>${escapeHtml(entry.description || entry.text)}</strong><small>${escapeHtml(entry.type)}${entry.start !== undefined ? ` · ${formatTime(entry.start)}` : ''}</small></button>` : ''; }).join('')}${renderFrameResults(message.frameIds)}</div>` : ''}</article>`).join('') : '<div class="agent-empty"><span>${icons.magic}</span><p>Ask about shots, characters, scenes, or provenance.</p><small>Search is grounded in this project’s accepted timeline and local video-frame annotations.</small></div>'}</div><form class="agent-form" data-agent-form><textarea name="query" rows="3" placeholder="Find the shot where the fox jumps…" required></textarea><button class="button primary" type="submit">Search project</button></form></aside>`;
 };
 
 const RUN_STATUS_LABELS = {running: 'Running', completed: 'Done', failed: 'Failed', cancelled: 'Stopped'};
@@ -998,7 +1259,11 @@ const startEditorAgent = (prompt) => {
   })
     .then((result) => {
       agentRuns.setStatus(run.id, 'completed', {summary: result.summary});
-      if (result.summary) agentWorkspace.addMessage({role: 'assistant', text: `Editing agent: ${result.summary}`});
+      if (result.summary) agentWorkspace.addMessage({
+        role: 'assistant',
+        text: `Editing agent: ${result.summary}`,
+        sceneId: activeActSceneId(),
+      });
     })
     .catch((error) => {
       agentRuns.setStatus(
@@ -1152,15 +1417,27 @@ const submitAgentQuery = async (event) => {
   const form = event.currentTarget;
   const query = String(new FormData(form).get('query') || '').trim();
   if (!query) return;
-  agentWorkspace.addMessage({role: 'user', text: query});
+  const sceneId = activeActSceneId();
+  agentWorkspace.addMessage({role: 'user', text: query, sceneId});
   try {
-    const results = projectContext.search(query, {limit: 5});
+    const allowedAssets = scopedAssetIds();
+    const allowedCharacters = new Set(charactersForAct().map((character) => character.id));
+    const results = projectContext.search(query, {limit: state.activeActId === 'all' ? 5 : 30})
+      .filter((entry) => {
+        if (state.activeActId === 'all') return true;
+        if (entry.type === 'clip') return entry.sceneId === state.activeActId || allowedAssets.has(entry.metadata?.assetId);
+        if (entry.type === 'scene') return entry.sceneId === state.activeActId;
+        if (entry.type === 'character') return allowedCharacters.has(entry.characterId);
+        return true;
+      })
+      .slice(0, 5);
     const videoResults = await searchVideoFrames(query).catch(() => []);
     state.videoSearchResults = videoResults;
     state.selectedFrameResult = null;
     const resultCount = results.length + videoResults.length;
     agentWorkspace.addMessage({
       role: 'assistant',
+      sceneId,
       text: resultCount
         ? `Found ${resultCount} matching ${resultCount === 1 ? 'project record' : 'project records'}${videoResults.length ? `, including ${videoResults.length} video frame ${videoResults.length === 1 ? 'hit' : 'hits'}.` : '.'}`
         : 'No matching project records or annotated video frames yet.',
@@ -1208,7 +1485,7 @@ const selectAgentResult = (entryId) => {
     selectOnlyClip(entry.clipId);
     state.selectedGhostKey = null;
     state.previewDiffId = null;
-    state.currentTime = entry.start || 0;
+    state.currentTime = viewClip(clipById(entry.clipId))?.start ?? entry.start ?? 0;
   }
   renderApp();
 };
@@ -1219,7 +1496,7 @@ const selectVideoSearchResult = (frameId) => {
   state.selectedFrameResult = result;
   state.selectedGhostKey = null;
   state.previewDiffId = null;
-  const matchingClips = state.clips.filter((clip) => clip.assetId === result.videoAssetId);
+  const matchingClips = viewClips().filter((clip) => clip.assetId === result.videoAssetId);
   const clip = matchingClips.find((candidate) => {
     const sourceStart = candidate.sourceStart || 0;
     return result.time >= sourceStart && result.time <= sourceStart + candidate.duration;
@@ -1239,7 +1516,11 @@ const renderTimeline = () => {
   const duration = playbackDuration();
   const timelineWidth = Math.max(900, (duration + 3) * scale());
   const ticks = Array.from({length: Math.ceil(duration) + 2}, (_, index) => index);
-  const ghosts = buildGhostItems(state.pendingDiffs);
+  const timelineClips = viewClips();
+  const timelineClipIds = new Set(timelineClips.map((clip) => clip.id));
+  const ghosts = buildGhostItems(state.pendingDiffs)
+    .map((ghost) => ({...ghost, clip: viewClip(ghost.clip)}))
+    .filter((ghost) => ghost.clip);
   const trackLayouts = state.tracks.map((track) => {
     const styleGhosts = ghosts.filter((ghost) => ghost.source === 'style-application' && ghost.clip?.trackId === track.id);
     const hasStyleRail = styleGhosts.length > 0;
@@ -1255,18 +1536,23 @@ const renderTimeline = () => {
     <button class="toolbar-button review-nav" data-action="previous-diff" type="button" aria-label="Previous proposal" ${reviewPosition <= 1 ? 'disabled' : ''}>‹</button>
     <button class="toolbar-button review-nav" data-action="next-diff" type="button" aria-label="Next proposal" ${reviewPosition >= pendingCount ? 'disabled' : ''}>›</button>` : '';
   const trackMenu = state.trackMenuOpen ? `<div class="track-menu" role="menu"><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="video"><span class="track-color video"></span>Video</button><button type="button" role="menuitem" data-action="add-track-kind" data-track-kind="audio"><span class="track-color audio"></span>Audio</button></div>` : '';
+  const actOptions = orderedScenes(project)
+    .map((scene) => `<option value="${escapeHtml(scene.id)}" ${state.activeActId === scene.id ? 'selected' : ''}>${escapeHtml(scene.name)}</option>`)
+    .join('');
   return `
-    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><button class="toolbar-button agent-launch" data-action="open-agent-prompt" title="AI editing agent" aria-label="Launch AI editing agent" type="button">${icons.robot} Agent</button><span class="sequence-chip">${escapeHtml(activeScene()?.name || 'Scene 01')}</span>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
+    <div class="timeline-toolbar"><div class="timeline-title"><span class="eyebrow">EDIT</span><div><h2>Timeline</h2><button class="toolbar-button agent-launch" data-action="open-agent-prompt" title="AI editing agent" aria-label="Launch AI editing agent" type="button">${icons.robot} Agent</button><select class="sequence-chip" data-action="select-act" aria-label="Timeline act"><option value="all" ${state.activeActId === 'all' ? 'selected' : ''}>All</option>${actOptions}</select>${pendingCount ? `<button class="diff-badge" data-action="select-first-diff" type="button" aria-label="Select pending proposal ${reviewPosition} of ${pendingCount}"><strong>${pendingCount}</strong> pending · ${escapeHtml(state.pendingDiffs[0].summary)}</button>${reviewControls}` : ''}</div></div><div class="timeline-actions">${pendingCount > 1 ? '<button class="toolbar-button reject-all" data-action="reject-all-diffs" type="button">Reject all</button><button class="toolbar-button accept-all" data-action="accept-all-diffs" type="button">Accept all</button><span class="tool-divider"></span>' : ''}<button class="toolbar-button" data-action="split" type="button">${icons.scissors} Split</button><div class="track-menu-wrap"><button class="toolbar-button" data-action="add-track" type="button" aria-expanded="${state.trackMenuOpen}">${icons.plus} Track</button>${trackMenu}</div><span class="tool-divider"></span><button class="toolbar-button" data-action="zoom-out" type="button" aria-label="Zoom out">−</button><span class="zoom-value">${Math.round(state.zoom * 100)}%</span><button class="toolbar-button" data-action="zoom-in" type="button" aria-label="Zoom in">+</button></div></div>
     <div class="timeline-body">
       <div class="track-labels"><div class="ruler-spacer"></div>${trackLayouts.map(({track, height, hasStyleRail}) => `<div class="track-label ${track.kind}-label ${hasStyleRail ? 'has-style-rail' : ''}" style="height:${height}px"><span class="track-color ${track.kind}"></span><div><strong>${escapeHtml(track.name)}</strong><span>${escapeHtml(track.id)}</span>${hasStyleRail ? '<small>STYLE REVIEW</small>' : ''}</div></div>`).join('')}</div>
       <div class="timeline-scroll" id="timelineScroll"><div class="timeline-content" id="timelineContent" style="height:${contentHeight}px;width:${timelineWidth}px">
         <div class="ruler" id="timelineRuler">${ticks.map((tick) => `<div class="tick ${tick % 5 === 0 ? 'major' : ''}" style="left:${tick * scale()}px"><span>${formatTime(tick).slice(0, 5)}</span></div>`).join('')}</div>
         ${trackLayouts.map(({track, height, acceptedTop, hasStyleRail}) => {
-          const clips = state.clips.filter((clip) => clip.trackId === track.id);
+          const clips = timelineClips.filter((clip) => clip.trackId === track.id);
           const trackGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === track.id);
-          const generating = pendingAddGeneration();
-          const trackTransitions = state.transitions.filter((transition) => transition.trackId === track.id);
-          const content = `${hasStyleRail ? '<div class="style-review-rail-label">Styled candidates</div><div class="style-review-rail-line"></div>' : ''}${clips.map((clip) => renderClip(clip, {top: acceptedTop})).join('')}${trackTransitions.map((transition) => renderTransitionMarker(transition, {top: acceptedTop + 17})).join('')}${trackGhosts.map((ghost) => renderGhostClip(ghost, {top: ghost.source === 'style-application' ? 9 : acceptedTop})).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating, {top: acceptedTop}) : ''}`;
+          const generating = pendingGenerationForView();
+          const trackTransitions = state.transitions.filter((transition) => transition.trackId === track.id
+            && (!transition.fromClipId || timelineClipIds.has(transition.fromClipId))
+            && (!transition.toClipId || timelineClipIds.has(transition.toClipId)));
+          const content = `${hasStyleRail ? '<div class="style-review-rail-label">Styled candidates</div><div class="style-review-rail-line"></div>' : ''}${clips.map((clip) => renderClip(clip, {top: acceptedTop})).join('')}${trackTransitions.map((transition) => renderTransitionMarker(transition, {top: acceptedTop + 17}, timelineClips)).join('')}${trackGhosts.map((ghost) => renderGhostClip(ghost, {top: ghost.source === 'style-application' ? 9 : acceptedTop})).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating, {top: acceptedTop}) : ''}`;
           return `<div class="track-lane ${track.kind}-lane ${hasStyleRail ? 'has-style-rail' : ''}" data-track-id="${escapeHtml(track.id)}" style="height:${height}px">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
         }).join('')}
         <div class="timeline-drag-guide" id="timelineDragGuide" hidden></div>
@@ -1288,8 +1574,8 @@ const renderClip = (clip, {top = 9} = {}) => {
   return `<div class="timeline-clip ${media.kind} ${state.selectedClipIds.has(clip.id) ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''} ${styleApplying ? 'style-applying' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px;top:${top}px">${renderClipContents(media, clip.duration)}</div>`;
 };
 
-const renderTransitionMarker = (transition, {top = 26} = {}) => {
-  const edgeTime = transitionEdgeTime(transition, state.clips);
+const renderTransitionMarker = (transition, {top = 26} = {}, clips = viewClips()) => {
+  const edgeTime = transitionEdgeTime(transition, clips);
   if (!Number.isFinite(edgeTime)) return '';
   const definition = getTransitionDefinition(transition.type, state.customTransitions);
   const label = definition?.label || transition.type;
@@ -1374,6 +1660,21 @@ const bindEvents = () => {
   }
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
+  app.querySelector('[data-action="select-act"]')?.addEventListener('change', (event) => {
+    const nextActId = event.target.value;
+    if (nextActId !== 'all' && !project.scenes.some((scene) => scene.id === nextActId)) return;
+    state.activeActId = nextActId;
+    if (nextActId !== 'all') updateProject({type: 'timeline/set-active-scene', sceneId: nextActId});
+    state.currentTime = 0;
+    state.isPlaying = false;
+    clearTimelineClipSelection();
+    state.selectedTransitionId = null;
+    state.selectedGhostKey = null;
+    state.previewDiffId = null;
+    state.videoSearchResults = state.videoSearchResults.filter((result) => scopedAssetIds().has(result.videoAssetId));
+    state.selectedFrameResult = null;
+    renderApp();
+  });
   app.querySelector('[data-action="toggle-media-panel"]')?.addEventListener('click', () => { state.mediaPanelOpen = !state.mediaPanelOpen; renderApp(); });
   app.querySelectorAll('[data-action="toggle-agent-pane"]').forEach((button) => button.addEventListener('click', () => { state.agentPaneOpen = !state.agentPaneOpen; renderApp(); }));
   app.querySelector('[data-agent-form]')?.addEventListener('submit', submitAgentQuery);
@@ -1415,7 +1716,7 @@ const bindEvents = () => {
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
   app.querySelector('[data-action="create-style"]')?.addEventListener('click', createStyle);
   app.querySelectorAll('[data-style-id]').forEach((button) => button.addEventListener('click', () => openStyle(button.dataset.styleId)));
-  app.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
+  bindCharacterModalEvents(characterModalLayer());
   app.querySelectorAll('[data-action="close-style-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleModal(); }));
   app.querySelectorAll('[data-action="close-style-application-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeStyleApplicationModal(); }));
   app.querySelector('[data-style-application-form]')?.addEventListener('submit', submitStyleApplication);
@@ -1447,7 +1748,6 @@ const bindEvents = () => {
   app.querySelector('[data-generate-video-form]')?.addEventListener('submit', submitGenerateVideoForm);
   attachPromptMentions('#generateVideoPrompt');
   attachPromptMentions('#regenerationPrompt');
-  attachPromptMentions('#composerPrompt');
   app.querySelector('#generateVideoPrompt')?.addEventListener('input', (event) => { if (state.generateVideoModal) state.generateVideoModal.prompt = event.target.value; });
   app.querySelector('#generateVideoModel')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.modelId = event.target.value; renderApp(); } });
   app.querySelector('#generateVideoCategory')?.addEventListener('change', (event) => {
@@ -1459,9 +1759,7 @@ const bindEvents = () => {
     renderApp();
   });
   app.querySelector('#generateVideoDuration')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.duration = event.target.value ? Number(event.target.value) : null; renderApp(); } });
-  app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
   app.querySelector('[data-style-name-form]')?.addEventListener('submit', renameStyle);
-  app.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
   app.querySelector('[data-action="open-transition-composer"]')?.addEventListener('click', openTransitionComposer);
   app.querySelectorAll('[data-action="close-transition-composer"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeTransitionComposer(); }));
   app.querySelector('[data-transition-composer-form]')?.addEventListener('submit', submitTransitionComposer);
@@ -1471,12 +1769,6 @@ const bindEvents = () => {
     button.addEventListener('pointerdown', (event) => event.stopPropagation());
     button.addEventListener('click', (event) => { event.stopPropagation(); deleteTransitionDefinition(button.dataset.transitionKey); });
   });
-  app.querySelector('[data-action="retry-character-generation"]')?.addEventListener('click', retryCharacterComposer);
-  app.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
-  app.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
-  app.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
-  app.querySelector('[data-action="delete-character"]')?.addEventListener('click', deleteCharacter);
-  app.querySelectorAll('[data-action="activate-character-version"]').forEach((button) => button.addEventListener('click', () => activateCharacterVersion(button.dataset.versionId)));
   app.querySelector('[data-action="record-style-version"]')?.addEventListener('click', recordStyleVersion);
   app.querySelector('[data-action="lock-style"]')?.addEventListener('click', lockStyle);
   app.querySelector('[data-action="unlock-style"]')?.addEventListener('click', unlockStyle);
@@ -1566,7 +1858,7 @@ const bindEvents = () => {
   app.querySelectorAll('[data-clip-id]').forEach((clipElement) => {
     clipElement.addEventListener('click', (event) => { selectTimelineClip(clipElement.dataset.clipId, event); renderApp(); });
     clipElement.addEventListener('dragstart', (event) => {
-      const clip = clipById(clipElement.dataset.clipId);
+      const clip = viewClipById(clipElement.dataset.clipId);
       state.dragPayload = {type: 'clip', id: clipElement.dataset.clipId, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/clip-id', clipElement.dataset.clipId);
@@ -1587,7 +1879,7 @@ const bindEvents = () => {
     });
     if (ghostElement.draggable) {
       ghostElement.addEventListener('dragstart', (event) => {
-        const clip = findGhostItem(state.pendingDiffs, ghostElement.dataset.ghostKey)?.clip;
+        const clip = viewClip(findGhostItem(state.pendingDiffs, ghostElement.dataset.ghostKey)?.clip);
         state.dragPayload = {type: 'ghost', id: ghostElement.dataset.ghostKey, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
         event.dataTransfer.effectAllowed = 'move';
         event.dataTransfer.setData('text/ghost-key', ghostElement.dataset.ghostKey);
@@ -1697,6 +1989,27 @@ const bindEvents = () => {
   checkFalStatus();
 };
 bindEvents.escapeReviewHandlerBound = false;
+
+// Character modal (composer + detail) bindings, shared by the editor render
+// and the storyboard modal layer.
+const bindCharacterModalEvents = (root) => {
+  root.querySelectorAll('[data-action="close-character-modal"]').forEach((element) => element.addEventListener('click', (event) => { if (event.currentTarget === event.target || event.currentTarget.tagName === 'BUTTON') closeCharacterModal(); }));
+  root.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
+  root.querySelector('[data-character-composer-form]')?.addEventListener('submit', submitCharacterComposer);
+  root.querySelector('[data-action="retry-character-generation"]')?.addEventListener('click', retryCharacterComposer);
+  root.querySelector('[data-action="record-character-version"]')?.addEventListener('click', recordCharacterVersion);
+  root.querySelector('[data-action="lock-character"]')?.addEventListener('click', lockCharacter);
+  root.querySelector('[data-action="unlock-character"]')?.addEventListener('click', unlockCharacter);
+  root.querySelector('[data-action="delete-character"]')?.addEventListener('click', deleteCharacter);
+  root.querySelectorAll('[data-action="activate-character-version"]').forEach((button) => button.addEventListener('click', () => activateCharacterVersion(button.dataset.versionId)));
+  const composerPrompt = root.querySelector('#composerPrompt');
+  if (composerPrompt) {
+    attachMentionAutocomplete(composerPrompt, {
+      getCharacters: () => project.characters,
+      onInsert: ({characterId, name}) => { state.promptMentionMap[name] = characterId; },
+    });
+  }
+};
 
 const createCharacter = () => {
   state.selectedCharacterId = null;
@@ -1967,7 +2280,7 @@ const deleteCharacter = () => {
 };
 
 const composerInputFromForm = () => {
-  const form = app.querySelector('[data-character-composer-form]');
+  const form = characterModalLayer().querySelector('[data-character-composer-form]');
   if (!form) throw new Error('Character composer is unavailable.');
   const data = new FormData(form);
   const prompt = data.get('prompt');
@@ -1990,13 +2303,14 @@ const composerInputFromForm = () => {
 const createComposerController = (characterId) => createCharacterGenerationController({
   adapter: characterGenerationAdapter,
   onCompleted: async (result, input) => {
-    recordCharacterSheetVersion({
+    const recorded = recordCharacterSheetVersion({
       dispatch: updateProject,
       library: characterLibrary,
       characterId,
       input,
       result,
     });
+    await persistGeneratedAsset(recorded.assetId);
   },
 });
 
@@ -2235,7 +2549,8 @@ const previewDiff = (diffId) => {
   if (item) selectReviewItem(item);
   state.previewDiffId = diffId;
   const firstChangedClip = diff.operations.find((operation) => operation.after || operation.before);
-  state.currentTime = firstChangedClip?.after?.start ?? firstChangedClip?.before?.start ?? state.currentTime;
+  const changedClip = firstChangedClip?.after || firstChangedClip?.before || null;
+  state.currentTime = viewClip(changedClip)?.start ?? state.currentTime;
   if (state.isPlaying) {
     state.playbackOrigin = state.currentTime;
     state.playbackStartedAt = performance.now();
@@ -2246,7 +2561,7 @@ const previewDiff = (diffId) => {
 const exitProposalPreview = () => {
   if (!state.previewDiffId) return;
   state.previewDiffId = null;
-  state.currentTime = Math.min(state.currentTime, state.timelineDuration);
+  state.currentTime = Math.min(state.currentTime, playbackDuration());
   if (state.isPlaying) {
     state.playbackOrigin = state.currentTime;
     state.playbackStartedAt = performance.now();
@@ -2293,12 +2608,16 @@ const rejectAllDiffs = () => {
 };
 
 const splitClipAtPlayhead = () => {
-  const clip = state.clips.find((candidate) => state.currentTime >= candidate.start && state.currentTime < candidate.start + candidate.duration);
+  const clip = viewClips().find((candidate) => state.currentTime >= candidate.start && state.currentTime < candidate.start + candidate.duration);
   if (!clip) {
     showToast('Place the playhead over a clip to split it.');
     return;
   }
-  const result = updateProject({type: 'clip/split', clipId: clip.id, time: state.currentTime});
+  const result = updateProject({
+    type: 'clip/split',
+    clipId: clip.id,
+    time: toLocalStart(project, state.activeActId, clip.sceneId, state.currentTime),
+  });
   if (!result.changed) {
     showToast('Move the playhead away from the clip edge to split it.');
     return;
@@ -2332,13 +2651,14 @@ const dropOnTimeline = (event, trackId) => {
 // Snaps a transition drop to the nearest clip edge on a video track, preferring
 // the hovered lane, and classifies the edge as between-clips or a lone edge.
 const snapTransitionDrop = (time, preferredTrackId = null) => {
+  const clips = viewClips();
   const videoTrackIds = new Set(state.tracks.filter((track) => track.kind === 'video').map((track) => track.id));
   const candidateTrackIds = preferredTrackId && videoTrackIds.has(preferredTrackId)
-    && state.clips.some((clip) => clip.trackId === preferredTrackId)
+    && clips.some((clip) => clip.trackId === preferredTrackId)
     ? new Set([preferredTrackId])
     : videoTrackIds;
   let best = null;
-  state.clips.forEach((clip) => {
+  clips.forEach((clip) => {
     if (!candidateTrackIds.has(clip.trackId)) return;
     [clip.start, clip.start + clip.duration].forEach((edge) => {
       const distance = Math.abs(edge - time);
@@ -2346,7 +2666,7 @@ const snapTransitionDrop = (time, preferredTrackId = null) => {
     });
   });
   if (!best) return null;
-  const clipsOnTrack = state.clips.filter((clip) => clip.trackId === best.trackId);
+  const clipsOnTrack = clips.filter((clip) => clip.trackId === best.trackId);
   const fromClip = clipsOnTrack.find((clip) => Math.abs(clip.start + clip.duration - best.edgeTime) <= TRANSITION_EDGE_EPSILON) || null;
   const toClip = clipsOnTrack.find((clip) => Math.abs(clip.start - best.edgeTime) <= TRANSITION_EDGE_EPSILON) || null;
   return {...best, fromClipId: fromClip?.id || null, toClipId: toClip?.id || null};
@@ -2421,7 +2741,8 @@ const clearNativeDrag = () => {
 
 const startTrimDrag = (event, clipId, edge) => {
   if (event.button !== 0) return;
-  const clip = clipById(clipId);
+  const acceptedClip = clipById(clipId);
+  const clip = viewClip(acceptedClip);
   const element = event.currentTarget.closest('.timeline-clip');
   if (!clip || !element) return;
   event.preventDefault();
@@ -2484,7 +2805,7 @@ const startTrimDrag = (event, clipId, edge) => {
         type: 'clip/trim',
         clipId,
         edge,
-        start: payload.currentStart,
+        start: toLocalStart(project, state.activeActId, acceptedClip.sceneId, payload.currentStart),
         duration: payload.currentDuration,
       });
     }
@@ -2502,9 +2823,9 @@ const startPointerDrag = (event, type, id) => {
   if (event.button !== 0) return;
   event.preventDefault();
   const source = type === 'clip'
-    ? clipById(id)
+    ? viewClipById(id)
     : type === 'ghost'
-      ? findGhostItem(state.pendingDiffs, id)?.clip
+      ? viewClip(findGhostItem(state.pendingDiffs, id)?.clip)
       : type === 'transition'
         ? null
         : mediaById(id);
@@ -2575,9 +2896,9 @@ const startPointerDrag = (event, type, id) => {
 };
 
 const placeOnTimeline = ({mediaId, clipId, ghostKey, transitionType, clientX, trackId, start: requestedStart}) => {
-  const start = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : timeFromClientX(clientX);
+  const viewStart = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : timeFromClientX(clientX);
   if (transitionType) {
-    const snap = snapTransitionDrop(start, trackId);
+    const snap = snapTransitionDrop(viewStart, trackId);
     if (!snap) {
       showToast('Add clips to a video track before dropping a transition.');
     } else {
@@ -2596,24 +2917,28 @@ const placeOnTimeline = ({mediaId, clipId, ghostKey, transitionType, clientX, tr
   if (mediaId) {
     const media = mediaById(mediaId);
     if (!media) return;
+    const placement = placementForViewStart(viewStart);
     const result = updateProject({
       type: 'clip/add',
       assetId: mediaId,
       trackId,
-      start,
+      start: placement.start,
+      sceneId: placement.sceneId,
     });
     selectOnlyClip(result.affectedId);
   } else if (clipId) {
     const clip = clipById(clipId);
     if (!clip) return;
-    const result = updateProject({type: 'clip/move', clipId, trackId, start});
+    const placement = placementForViewStart(viewStart, clip.sceneId);
+    const result = updateProject({type: 'clip/move', clipId, trackId, start: placement.start});
     selectOnlyClip(result.affectedId);
   } else if (ghostKey) {
     const ghost = findGhostItem(state.pendingDiffs, ghostKey);
     const diff = ghost ? diffById(ghost.diffId) : null;
     if (!ghost || !diff || ghost.role === 'origin' || ghost.type === 'remove') return;
     try {
-      const revised = reviseGhostProposal(diff, ghost.operationIndex, {start, trackId});
+      const placement = placementForViewStart(viewStart, ghost.clip?.sceneId || null);
+      const revised = reviseGhostProposal(diff, ghost.operationIndex, {start: placement.start, trackId});
       const result = timelineDiffs.createProposal({...revised, baseRevision: project.timeline.revision});
       timelineDiffs.reject(diff.id);
       selectReviewItem(reviewItemForDiff(result.affectedId));
@@ -2659,6 +2984,7 @@ const addFiles = async (files) => {
         mimeType: file.type,
         size: file.size,
         duration: kind === 'image' ? 5 : 0,
+        sceneId: activeActSceneId(),
         url: URL.createObjectURL(file),
         source: {type: 'local-file', fileName: file.name, lastModified: file.lastModified},
         metadata: {},
@@ -2881,7 +3207,7 @@ const resolveStyleAssetUrl = async (asset) => {
 
 const persistGeneratedAsset = async (assetId) => {
   const asset = project.mediaAssets.find((entry) => entry.id === assetId);
-  if (!asset?.url || asset.url.startsWith('blob:') || asset.url.startsWith('data:')) return;
+  if (!asset?.url) return;
   try {
     const response = await fetch(asset.url);
     if (!response.ok) throw new Error(`Asset download failed (${response.status}).`);
@@ -2896,6 +3222,16 @@ const persistGeneratedAsset = async (assetId) => {
 const pendingAddGeneration = () => {
   const job = timelineAddGeneration.snapshot();
   return ['queued', 'running', 'retrying'].includes(job.status) && job.input ? job.input : null;
+};
+
+const pendingGenerationForView = () => {
+  const input = pendingAddGeneration();
+  if (!input) return null;
+  return viewClip({
+    ...input,
+    sceneId: input.sceneId || project.timeline.activeSceneId,
+    duration: input.duration || 5,
+  });
 };
 
 const modelOptionLabel = (model) => {
@@ -2921,11 +3257,15 @@ const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', 
   const sourceClip = mode === 'regenerate' ? clipById(clipId) : null;
   if (mode === 'regenerate' && !sourceClip?.provenance?.prompt) { showToast('Only generated clips can be regenerated.'); return; }
   const provenance = sourceClip?.provenance || null;
+  const placement = sourceClip
+    ? {sceneId: sourceClip.sceneId, start: sourceClip.start}
+    : placementForViewStart(start);
   state.generateVideoModal = {
     mode,
     clipId,
     trackId: sourceClip?.trackId || trackId,
-    start: sourceClip?.start ?? start,
+    start: placement.start,
+    sceneId: placement.sceneId,
     prompt: provenance?.prompt || '',
     modelId: null,
     models: [],
@@ -3023,7 +3363,7 @@ const submitGenerateVideoForm = async (event) => {
       modelId: modal.modelId,
       trackId: modal.trackId,
       start: modal.start,
-      sceneId: activeScene()?.id || null,
+      sceneId: modal.sceneId || activeScene()?.id || null,
       ...(modal.duration ? {duration: modal.duration, params: {duration: String(modal.duration)}} : {}),
       ...(model?.unitPrice !== null && model ? {
         unitPrice: model.unitPrice,
@@ -3081,13 +3421,18 @@ const removeCharacterFromSelectedClip = (versionId) => {
 
 const playbackClips = () => {
   const previewDiff = state.previewDiffId ? diffById(state.previewDiffId) : null;
-  return previewDiff ? derivePreviewClips(state.clips, previewDiff) : state.clips;
+  const clips = previewDiff ? derivePreviewClips(state.clips, previewDiff) : state.clips;
+  return visibleClips(project, state.activeActId, clips);
 };
 
 const playbackDuration = () => {
   const clips = playbackClips();
   const clipEnd = clips.reduce((maximum, clip) => Math.max(maximum, clip.start + clip.duration), 0);
-  return clipEnd > state.timelineDuration ? clipEnd + 2 : state.timelineDuration;
+  if (state.activeActId === 'all' && project.scenes.length > 1) return clipEnd;
+  const baseDuration = state.activeActId === 'all'
+    ? state.timelineDuration
+    : activeScene()?.duration || state.timelineDuration;
+  return clipEnd > baseDuration ? clipEnd + 2 : baseDuration;
 };
 
 const playbackAt = (time) => resolveTimelinePlaybackAt({
@@ -3112,8 +3457,9 @@ const playbackSignature = ({visual, audio}) => {
 // outgoing clip's tail (or the incoming clip's head for fade-from-black), so
 // the blend happens while the main layer still shows the outgoing clip.
 const activeTransitionAt = (time) => {
+  const clips = playbackClips();
   for (const transition of state.transitions) {
-    const edge = transitionEdgeTime(transition, state.clips);
+    const edge = transitionEdgeTime(transition, clips);
     if (!Number.isFinite(edge)) continue;
     const duration = transition.duration;
     if (transition.fromClipId && transition.toClipId && getTransitionDefinition(transition.type, state.customTransitions)?.mode === 'dip') {
@@ -3122,7 +3468,7 @@ const activeTransitionAt = (time) => {
       }
     } else if (transition.fromClipId && transition.toClipId) {
       if (time >= edge - duration && time < edge) {
-        return {transition, progress: (time - (edge - duration)) / duration, incomingClip: clipById(transition.toClipId), mode: 'blend'};
+        return {transition, progress: (time - (edge - duration)) / duration, incomingClip: clips.find((clip) => clip.id === transition.toClipId) || null, mode: 'blend'};
       }
     } else if (transition.fromClipId) {
       if (time >= edge - duration && time < edge) {
@@ -3463,9 +3809,11 @@ document.addEventListener('keydown', (event) => {
 const restoreSession = async () => {
   const legacyProject = project;
   let persistedProject = null;
+  let databaseAvailable = false;
   try {
     await projectDatabase.requestPersistence();
     persistedProject = await projectDatabase.loadProject();
+    databaseAvailable = true;
   } catch {
     // Fall back to the legacy bootstrap project if IndexedDB is unavailable.
   }
@@ -3475,6 +3823,16 @@ const restoreSession = async () => {
     initialProject: persistedProject || legacyProject,
     onCommit: (savedProject) => projectDatabase.saveProject(savedProject),
   });
+  if (databaseAvailable) {
+    // IndexedDB is the source of truth from here on; drop the legacy
+    // localStorage copy once the project is confirmed saved.
+    try {
+      await projectDatabase.saveProject(projectStore.getProject());
+      globalThis.localStorage?.removeItem('prismflow.project');
+    } catch {
+      // Keep the legacy copy if the database write could not be confirmed.
+    }
+  }
   project = projectStore.getProject();
 
   await Promise.all(project.mediaAssets.map(async (asset) => {
@@ -3518,7 +3876,14 @@ const restoreSession = async () => {
 };
 
 renderApp();
-void restoreSession().catch(() => {
+const sessionReady = restoreSession().catch(() => {
   state.mediaHydrated = true;
   renderApp();
 });
+if (state.view === 'splash') {
+  const minimumSplashTime = new Promise((resolve) => setTimeout(resolve, 2200));
+  void Promise.all([sessionReady, minimumSplashTime]).then(() => {
+    if (state.view !== 'splash') return;
+    dismissSplash(app, () => setView('picker'));
+  });
+}

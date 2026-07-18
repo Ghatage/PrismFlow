@@ -357,3 +357,98 @@ test('transitions are rejected on audio tracks', () => {
     /video tracks/,
   );
 });
+
+test('round-trips storyboard state, scene tags on assets and agent messages', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const sceneAdd = store.dispatch({type: 'scene/add', scene: {name: 'Act 2', metadata: {actNumber: 2}}});
+  const actSceneId = sceneAdd.affectedId;
+
+  store.dispatch({
+    type: 'storyboard/update',
+    storyboard: {
+      styleId: 'style-1',
+      styleTitle: 'Three act',
+      pan: {x: -40, y: 12},
+      zoom: 1.4,
+      nextZ: 12,
+      nodes: [
+        {id: 'n1', kind: 'act', actNumber: 2, sceneId: actSceneId, title: 'Act 2', summary: 'Rising action',
+          beats: ['legacy string beat', {id: 'b2', text: 'Hero meets @Mara', mentions: {Mara: 'character-1'}}],
+          stills: [{id: 's1', assetId: null, beatIds: ['b2'], prompt: 'still prompt', status: 'generating'}],
+          x: 90, y: 200, w: 380, z: 11},
+        {id: 'n2', kind: 'note', text: 'a note', x: -20, y: 40, w: 280, z: 12},
+      ],
+    },
+  });
+  const imported = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'clip.mp4', kind: 'video', mimeType: 'video/mp4', sceneId: actSceneId},
+  });
+  store.dispatch({type: 'agent/message-add', text: 'scoped message', role: 'user', sceneId: actSceneId});
+
+  const reloaded = createProjectStore({storage, ...createDependencies()}).getProject();
+  const storyboard = reloaded.storyboard;
+  assert.equal(storyboard.styleId, 'style-1');
+  assert.equal(storyboard.zoom, 1.4);
+  assert.deepEqual(storyboard.pan, {x: -40, y: 12});
+  const act = storyboard.nodes.find((node) => node.kind === 'act');
+  assert.equal(act.sceneId, actSceneId);
+  assert.equal(act.beats.length, 2);
+  assert.equal(act.beats[0].text, 'legacy string beat');
+  assert.deepEqual(act.beats[1].mentions, {Mara: 'character-1'});
+  assert.equal(act.stills[0].status, 'generating');
+  assert.equal(reloaded.mediaAssets.find((asset) => asset.id === imported.affectedId).sceneId, actSceneId);
+  assert.equal(reloaded.agentWorkspace.messages.at(-1).sceneId, actSceneId);
+});
+
+test('scene/add, timeline/set-active-scene, and scene/remove reassign scoped content', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const defaultSceneId = store.getProject().scenes[0].id;
+  const actSceneId = store.dispatch({type: 'scene/add', scene: {name: 'Act 2'}}).affectedId;
+
+  store.dispatch({type: 'timeline/set-active-scene', sceneId: actSceneId});
+  assert.equal(store.getProject().timeline.activeSceneId, actSceneId);
+
+  const assetId = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'clip.mp4', kind: 'video', mimeType: 'video/mp4', sceneId: actSceneId},
+  }).affectedId;
+  const clipId = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 0, duration: 4}).affectedId;
+  assert.equal(store.getProject().timeline.clips.find((clip) => clip.id === clipId).sceneId, actSceneId);
+
+  store.dispatch({type: 'scene/remove', sceneId: actSceneId});
+  const project = store.getProject();
+  assert.equal(project.scenes.length, 1);
+  assert.equal(project.timeline.activeSceneId, defaultSceneId);
+  assert.equal(project.timeline.clips.find((clip) => clip.id === clipId).sceneId, defaultSceneId);
+  assert.equal(project.mediaAssets.find((asset) => asset.id === assetId).sceneId, defaultSceneId);
+  assert.throws(() => store.dispatch({type: 'scene/remove', sceneId: defaultSceneId}), /at least one scene/);
+});
+
+test('clip/add accepts an explicit act and removing a later act falls back to the previous act', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const act1 = store.getProject().scenes[0].id;
+  const act2 = store.dispatch({type: 'scene/add', scene: {name: 'Act 2', metadata: {actNumber: 2}}}).affectedId;
+  const act3 = store.dispatch({type: 'scene/add', scene: {name: 'Act 3', metadata: {actNumber: 3}}}).affectedId;
+  store.dispatch({type: 'timeline/set-active-scene', sceneId: act3});
+  const assetId = store.dispatch({type: 'asset/import', asset: {name: 'global.png', kind: 'image'}}).affectedId;
+  const clipId = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 1, sceneId: act1}).affectedId;
+  assert.equal(store.getProject().timeline.clips.find((clip) => clip.id === clipId).sceneId, act1);
+
+  store.dispatch({
+    type: 'storyboard/update',
+    storyboard: {
+      nodes: [
+        {id: 'act-node-1', kind: 'act', actNumber: 1, sceneId: act1, title: 'Act 1'},
+        {id: 'act-node-2', kind: 'act', actNumber: 2, sceneId: act2, title: 'Act 2'},
+        {id: 'act-node-3', kind: 'act', actNumber: 3, sceneId: act3, title: 'Act 3'},
+      ],
+    },
+  });
+  store.dispatch({type: 'scene/remove', sceneId: act3});
+  const project = store.getProject();
+  assert.equal(project.timeline.activeSceneId, act2);
+  assert.deepEqual(project.storyboard.nodes.filter((node) => node.kind === 'act').map((node) => node.sceneId), [act1, act2]);
+});

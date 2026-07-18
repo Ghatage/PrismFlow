@@ -268,7 +268,7 @@ test('keeps the agent rail visible and toggles a run pane from its icon', {timeo
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, regenerationFixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   const rail = page.locator('.agent-rail');
   assert.equal(await rail.isVisible(), true);
@@ -319,7 +319,7 @@ test('reviews, rejects, and accepts ghosts without browser errors', {timeout: 30
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, fixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   assert.equal(await hasModelPricingStore(page), true);
   await page.locator('[data-action="select-first-diff"]').click();
@@ -382,7 +382,7 @@ test('selecting a clip preserves the player and Backspace deletes it', {timeout:
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, regenerationFixture);
 
-  await page.goto(`${origin}/?timelineAdapter=fake`, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?timelineAdapter=fake&view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   await page.keyboard.press('Backspace');
   assert.equal(await page.locator('.timeline-clip').count(), 1);
@@ -462,7 +462,7 @@ test('plays the topmost visual and mixes every active audio track', {timeout: 30
     };
   }, createPlaybackFixture(origin));
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   assert.equal(await page.locator('#previewImage').getAttribute('src'), `${origin}/test-media/top.svg`);
   assert.deepEqual(await page.locator('#previewAudioMix audio').evaluateAll((elements) => elements.map((element) => element.dataset.clipId)), ['clip-dialogue']);
@@ -522,7 +522,7 @@ test('extends playback duration for a proposal beyond the accepted timeline', {t
   page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
   await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), extendedProposalFixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   await page.locator('[data-action="select-first-diff"]').click();
   await page.getByRole('button', {name: 'Preview proposal'}).click();
@@ -557,7 +557,7 @@ test('revises a dragged ghost into a new proposal without moving accepted clips'
   page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
   await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), dragFixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   const acceptedBeforeDrag = JSON.stringify((await readPersistedProject(page)).timeline.clips);
   await page.locator('[data-ghost-key]').first().dragTo(page.locator('.video-lane'), {targetPosition: {x: 300, y: 30}});
@@ -590,7 +590,7 @@ test('rebases a compatible stale proposal and preserves its review history', {ti
   page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
   await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), staleFixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   await page.locator('[data-action="select-first-diff"]').click();
   await page.getByRole('button', {name: 'Rebase proposal'}).click();
@@ -625,7 +625,7 @@ test('explains an incompatible stale proposal and allows rejection', {timeout: 3
   page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
   await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), staleConflictFixture);
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   await page.locator('[data-action="select-first-diff"]').click();
   await page.getByRole('button', {name: 'Rebase proposal'}).click();
@@ -660,7 +660,7 @@ test('keeps the player blank until a playable timeline clip is active', {timeout
   page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
   page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await waitForHydration(page);
   assert.equal(await page.locator('#emptyPreview').count(), 0);
   assert.equal(await page.locator('.media-dropzone').count(), 0);

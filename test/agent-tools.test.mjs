@@ -93,6 +93,38 @@ test('read tools return compact project data', async () => {
   assert.equal(framesFound[0].sourceTime, 10);
 });
 
+test('search tools filter project and frame results to the active act scope', async () => {
+  const tools = createAgentTools({
+    getProject: () => ({timeline: {clips: []}, mediaAssets: [], customTransitions: []}),
+    dispatch: () => ({changed: false}),
+    getState: () => ({currentTime: 0}),
+    setState: () => {},
+    projectContext: {search: () => [
+      {id: 'clip:allowed', type: 'clip', clipId: 'allowed', sceneId: 'act-2', metadata: {assetId: 'asset-allowed'}, description: 'allowed'},
+      {id: 'clip:excluded', type: 'clip', clipId: 'excluded', sceneId: 'act-1', metadata: {assetId: 'asset-excluded'}, description: 'excluded'},
+      {id: 'scene:allowed', type: 'scene', sceneId: 'act-2', description: 'act 2'},
+      {id: 'scene:excluded', type: 'scene', sceneId: 'act-1', description: 'act 1'},
+      {id: 'character:allowed', type: 'character', characterId: 'character-global', description: 'global character'},
+      {id: 'character:excluded', type: 'character', characterId: 'character-other', description: 'other character'},
+    ]},
+    videoIndexer: {search: async () => [
+      {id: 'frame-allowed', videoAssetId: 'asset-allowed', time: 1, annotation: 'allowed frame'},
+      {id: 'frame-excluded', videoAssetId: 'asset-excluded', time: 2, annotation: 'excluded frame'},
+    ]},
+    database: {getVideoFrames: async () => []},
+    getSearchScope: () => ({
+      activeSceneId: 'act-2',
+      assetIds: ['asset-allowed'],
+      characterIds: ['character-global'],
+    }),
+  });
+
+  const contextResults = await tools.execute('search_project', {query: 'match'});
+  assert.deepEqual(contextResults.map((entry) => entry.id), ['clip:allowed', 'scene:allowed', 'character:allowed']);
+  const frameResults = await tools.execute('search_video_frames', {query: 'match'});
+  assert.deepEqual(frameResults.map((entry) => entry.frameId), ['frame-allowed']);
+});
+
 test('write tools mutate the timeline and report ok/affectedId', async () => {
   const {tools, getProject, clipId, assetId, state} = setup();
 

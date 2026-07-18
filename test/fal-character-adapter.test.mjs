@@ -221,3 +221,31 @@ test('browser adapter converts blob references to uploadable data uris', async (
   const body = JSON.parse(requests[0].options.body);
   assert.deepEqual(body.referenceUrls, ['data:image/png;base64,AAAA', 'https://assets.example.test/ref.png']);
 });
+
+test('scene-still requests use cinematic framing, 16:9, and the edit model with references', () => {
+  const withRefs = buildNanoBananaCharacterRequest({
+    kind: 'scene-still',
+    name: 'Act 2 · The Chase',
+    prompt: 'Mara sprints across the rooftop at dusk',
+    referenceUrls: ['https://fal.media/mara-sheet.png'],
+  }, 7);
+  assert.equal(withRefs.modelId, NANO_BANANA_2_EDIT_MODEL_ID);
+  assert.equal(withRefs.payload.aspect_ratio, '16:9');
+  assert.match(withRefs.payload.prompt, /cinematic scene still/i);
+  assert.match(withRefs.payload.prompt, /identities and designs consistent/i);
+  assert.doesNotMatch(withRefs.payload.prompt, /character reference sheet/i);
+  assert.deepEqual(withRefs.payload.image_urls, ['https://fal.media/mara-sheet.png']);
+  assert.equal(withRefs.provenance.params.kind, 'scene-still');
+
+  const withoutRefs = buildNanoBananaCharacterRequest({
+    kind: 'scene-still',
+    name: 'Act 1',
+    prompt: 'An empty harbor at dawn',
+  }, 7);
+  assert.equal(withoutRefs.modelId, NANO_BANANA_2_MODEL_ID);
+  assert.equal(withoutRefs.payload.aspect_ratio, '16:9');
+
+  const sheet = buildNanoBananaCharacterRequest({name: 'Mara', prompt: 'A rooftop runner'}, 7);
+  assert.equal(sheet.payload.aspect_ratio, '4:3');
+  assert.match(sheet.payload.prompt, /character reference sheet/i);
+});

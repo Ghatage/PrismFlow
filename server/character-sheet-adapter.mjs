@@ -13,24 +13,35 @@ const normalizeUrls = (value) => [...new Set((Array.isArray(value) ? value : [])
 const errorMessage = (error) => error instanceof Error ? error.message : String(error);
 
 export const buildNanoBananaCharacterRequest = (input, seed) => {
-  const name = requiredText(input?.name, 'Character name');
+  const kind = input?.kind === 'scene-still' ? 'scene-still' : 'character-sheet';
+  const name = requiredText(input?.name, kind === 'scene-still' ? 'Scene name' : 'Character name');
   const visualPrompt = requiredText(input?.prompt, 'Visual prompt');
   const styleNotes = typeof input?.styleNotes === 'string' ? input.styleNotes.trim() : '';
   const referenceUrls = normalizeUrls(input?.referenceUrls);
-  const prompt = [
-    'Create one polished character reference sheet for consistent future visual generation.',
-    `Character name: ${name}.`,
-    `Visual brief: ${visualPrompt}.`,
-    styleNotes ? `Style direction: ${styleNotes}.` : '',
-    'Show the same identity in multiple useful views and expressions on a clean, unified contact sheet.',
-    'Do not add unrelated characters or presentation mockups.',
-  ].filter(Boolean).join(' ');
+  const prompt = (kind === 'scene-still'
+    ? [
+      'Create one cinematic scene still frame.',
+      `Scene: ${name}.`,
+      `Visual brief: ${visualPrompt}.`,
+      styleNotes ? `Style direction: ${styleNotes}.` : '',
+      referenceUrls.length ? 'Keep the referenced characters\' identities and designs consistent with the supplied reference sheets.' : '',
+      'Compose a single film frame — no contact sheets, panels, or presentation mockups.',
+    ]
+    : [
+      'Create one polished character reference sheet for consistent future visual generation.',
+      `Character name: ${name}.`,
+      `Visual brief: ${visualPrompt}.`,
+      styleNotes ? `Style direction: ${styleNotes}.` : '',
+      'Show the same identity in multiple useful views and expressions on a clean, unified contact sheet.',
+      'Do not add unrelated characters or presentation mockups.',
+    ]).filter(Boolean).join(' ');
   const modelId = referenceUrls.length ? NANO_BANANA_2_EDIT_MODEL_ID : NANO_BANANA_2_MODEL_ID;
+  const aspectRatio = kind === 'scene-still' ? '16:9' : '4:3';
   const payload = {
     prompt,
     num_images: 1,
     seed,
-    aspect_ratio: '4:3',
+    aspect_ratio: aspectRatio,
     output_format: 'png',
     safety_tolerance: '4',
     sync_mode: false,
@@ -46,9 +57,10 @@ export const buildNanoBananaCharacterRequest = (input, seed) => {
       modelId,
       seed,
       params: {
+        kind,
         styleNotes,
         numImages: 1,
-        aspectRatio: '4:3',
+        aspectRatio,
         outputFormat: 'png',
         safetyTolerance: '4',
         resolution: '1K',

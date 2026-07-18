@@ -142,6 +142,7 @@ export const normalizeGenerationResult = ({job, output, sourceClip = null, proje
     mimeType: output.asset.mimeType,
     size: Number.isFinite(output.asset.size) ? output.asset.size : 0,
     duration,
+    sceneId: acceptedSource?.sceneId || input.sceneId || project.timeline.activeSceneId,
     url: output.asset.url,
     source: {
       type: 'generated',

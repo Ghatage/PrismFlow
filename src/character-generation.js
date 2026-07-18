@@ -19,6 +19,7 @@ const stableSeed = (value) => {
 };
 
 export const normalizeCharacterGenerationInput = (input = {}) => ({
+  kind: input.kind === 'scene-still' ? 'scene-still' : 'character-sheet',
   name: requiredText(input.name, 'Character name'),
   prompt: requiredText(input.prompt, 'Visual prompt'),
   referenceAssetIds: [...new Set((Array.isArray(input.referenceAssetIds) ? input.referenceAssetIds : [])

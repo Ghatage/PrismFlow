@@ -137,3 +137,30 @@ Plan: ~/.claude/plans/adaptive-gathering-summit.md (approved)
 - Custom transitions live on project.customTransitions (characters/styles pattern): persisted to IndexedDB via the existing onCommit, pruned self-healingly if a definition disappears, deleted definitions take their timeline instances with them.
 - LLM flow reuses /api/agent/llm + /api/agent/status; a malformed model reply (bad JSON or schema violation) surfaces the exact validator error in the modal with inputs preserved — verified in the browser test debug run.
 - Lone-edge (to/from black) fades remain fixed behavior regardless of definition, as before.
+
+# Splash → narrative style picker → storyboard canvas (2026-07-18)
+
+Plan: ~/.claude/plans/i-want-to-create-shimmering-turing.md (approved)
+
+- [x] src/data/narrative-styles.js — full dataset from drawing.svg (~33 storyline types, titles = structure name, authors in tagline, ≤4 acts with beats + notes)
+- [x] main.js — view dispatch (splash | picker | storyboard | editor), ?view= param, splash dismissal wiring
+- [x] src/splash.js + CSS — scaled brand-mark prism, bloom glow, "Prism" wordmark, fade-out
+- [x] src/style-picker.js + CSS — card grid, Custom first, selection + Next
+- [x] src/storyboard.js + CSS — comfy-ui canvas: seeded act boxes + outside notes, pan, node drag, Jump to editor
+- [x] Verify: npm run dev + browser pass; existing tests still green
+
+## Review
+
+- New pre-editor flow: splash (scaled .brand-mark prism + bloom glow + "Prism" wordmark, min 2.2s, fades once IndexedDB session restore settles) → structure picker (33 cards: Custom + every row of the drawing.svg story-structure chart, card title = storyline type, authors in the sub-tagline) → storyboard canvas (pannable dotted grid, draggable act boxes with beats as chips + amber note cards seeded outside the act row, double-click-to-edit summaries, Jump to editor → top right).
+- main.js touched minimally: renderApp is now a 4-way view dispatcher over the untouched renderEditorApp; ?view=editor|picker|storyboard|splash deep-links any view (browser tests use it).
+- Storyboard state is its own module (pointer-move mutations write transforms directly, never renderApp); dataset is an ESM module src/data/narrative-styles.js, all strings HTML-escaped at render.
+- Verified via Playwright script: splash/picker/storyboard/editor screenshots, drag + pan, act counts per structure (Hero's Journey=4, Two-Act Musical=2), zero console errors; full npm test suite 155/155 green.
+
+# Light theme ("prism light on a white wall") (2026-07-18)
+
+- [x] :root tokens flipped to light (white bg, ink text, dark-alpha surfaces/lines, darkened cyan/teal/amber/rose for contrast)
+- [x] body::before/::after — the only rainbow left: faint blurred spectral streaks on white that drift and breathe on two unsynced clocks (47s/61s drift, 19s/27s glow), reduced-motion safe
+- [x] --spectral / -soft / -faint redefined to a single blue accent → all UI rails, strips, borders, act headers lost the rainbow at the token level
+- [x] Full-file audit: ~80 hardcoded dark-theme colors converted (glass inputs → white, black shadows → soft navy, light-gray strongs → ink, chromatic cyan/pink rings → single accent, playhead/drag guides → ink, primary button → solid ink, modal scrim → light veil, storyboard notes → amber-on-cream)
+- [x] Kept dark deliberately: video mattes/thumbnails (+ pinned light text inside them), type badges, prism logo glass faces
+- [x] Verified: screenshots of splash/picker/storyboard/editor, npm test 155/155 green

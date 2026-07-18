@@ -124,6 +124,7 @@ const outputAsset = ({batch, job, output}) => {
     mimeType: candidate.mimeType,
     size: Number.isFinite(candidate.size) ? candidate.size : 0,
     duration: kind === 'image' ? job.sourceClip.duration : (candidate.duration || job.sourceClip.duration),
+    sceneId: job.sourceClip.sceneId || null,
     url: candidate.url,
     source: {type: 'generated', fileName: candidate.fileName || `${safeId(job.id)}.${kind === 'image' ? 'png' : 'mp4'}`, lastModified: 0},
     metadata: {

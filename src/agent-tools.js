@@ -33,6 +33,7 @@ export const createAgentTools = ({
   projectContext,
   videoIndexer,
   database,
+  getSearchScope = () => ({}),
 }) => {
   const requireClip = (clipId) => {
     const clip = getProject().timeline.clips.find((candidate) => candidate.id === clipId);
@@ -43,6 +44,25 @@ export const createAgentTools = ({
   const writeResult = (result, reason) => result?.changed
     ? {ok: true, affectedId: result.affectedId || null}
     : {ok: false, reason};
+
+  const searchScope = () => {
+    const value = getSearchScope?.() || {};
+    return {
+      activeSceneId: typeof value.activeSceneId === 'string' ? value.activeSceneId : null,
+      assetIds: new Set(Array.isArray(value.assetIds) ? value.assetIds : []),
+      characterIds: new Set(Array.isArray(value.characterIds) ? value.characterIds : []),
+    };
+  };
+
+  const contextEntryInScope = (entry, scope) => {
+    if (!scope.activeSceneId) return true;
+    if (entry.type === 'clip') {
+      return entry.sceneId === scope.activeSceneId || scope.assetIds.has(entry.metadata?.assetId);
+    }
+    if (entry.type === 'scene') return entry.sceneId === scope.activeSceneId;
+    if (entry.type === 'character') return scope.characterIds.has(entry.characterId);
+    return true;
+  };
 
   const definitions = [
     tool('get_project_overview', 'Get a compact overview of the project: timeline duration, playhead, tracks, clip and asset counts, scenes.'),
@@ -206,25 +226,35 @@ export const createAgentTools = ({
     },
 
     search_project({query, type, limit}) {
-      return projectContext.search(query, {type: type || null, limit}).map((entry) => ({
-        id: entry.id,
-        type: entry.type,
-        clipId: entry.clipId || null,
-        start: entry.start !== undefined ? round(entry.start) : null,
-        duration: entry.duration !== undefined ? round(entry.duration) : null,
-        description: entry.description,
-      }));
+      const scope = searchScope();
+      const requestedLimit = scope.activeSceneId ? Math.max(30, limit || 0) : limit;
+      return projectContext.search(query, {type: type || null, limit: requestedLimit})
+        .filter((entry) => contextEntryInScope(entry, scope))
+        .slice(0, limit || 10)
+        .map((entry) => ({
+          id: entry.id,
+          type: entry.type,
+          clipId: entry.clipId || null,
+          start: entry.start !== undefined ? round(entry.start) : null,
+          duration: entry.duration !== undefined ? round(entry.duration) : null,
+          description: entry.description,
+        }));
     },
 
     async search_video_frames({query, limit}) {
-      const results = await videoIndexer.search(query, {limit: limit || 10});
-      return results.map((result) => ({
-        frameId: result.id,
-        assetId: result.videoAssetId,
-        videoName: result.videoName || null,
-        sourceTime: round(result.time),
-        annotation: result.annotation || '',
-      }));
+      const scope = searchScope();
+      const requestedLimit = scope.activeSceneId ? Math.max(30, limit || 0) : limit || 10;
+      const results = await videoIndexer.search(query, {limit: requestedLimit});
+      return results
+        .filter((result) => !scope.activeSceneId || scope.assetIds.has(result.videoAssetId))
+        .slice(0, limit || 10)
+        .map((result) => ({
+          frameId: result.id,
+          assetId: result.videoAssetId,
+          videoName: result.videoName || null,
+          sourceTime: round(result.time),
+          annotation: result.annotation || '',
+        }));
     },
 
     move_clip({clipId, start, trackId}) {

@@ -5,6 +5,7 @@ export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
 export const PROJECT_USAGE_SCHEMA_VERSION = 1;
 export const AGENT_WORKSPACE_SCHEMA_VERSION = 1;
 export const STYLE_APPLICATION_SCHEMA_VERSION = 1;
+export const STORYBOARD_SCHEMA_VERSION = 1;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -68,6 +69,7 @@ const normalizeAgentWorkspace = (value, {now, createId}) => {
       id: asString(message.id, createId('agent-message')),
       role: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'assistant',
       text: asString(message.text),
+      sceneId: asNullableString(message.sceneId),
       resultIds: normalizeStringIds(message.resultIds),
       frameIds: normalizeStringIds(message.frameIds),
       createdAt: asTimestamp(message.createdAt, now()),
@@ -82,6 +84,65 @@ const normalizeAgentWorkspace = (value, {now, createId}) => {
       metadata: isRecord(script.metadata) ? sanitizeJson(script.metadata) || {} : {},
       beats,
     },
+  };
+};
+
+const asCoordinate = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
+
+const normalizeStoryboardBeat = (value, {createId}) => {
+  if (typeof value === 'string') {
+    return value.trim() ? {id: createId('sb-beat'), text: value, mentions: {}} : null;
+  }
+  if (!isRecord(value)) return null;
+  const text = asString(value.text);
+  if (!text) return null;
+  return {
+    id: asString(value.id, createId('sb-beat')),
+    text,
+    mentions: isRecord(value.mentions) ? sanitizeJson(value.mentions) || {} : {},
+  };
+};
+
+const normalizeStoryboard = (value, {createId}) => {
+  if (!isRecord(value) || !Array.isArray(value.nodes)) return null;
+  const nodes = value.nodes.filter(isRecord).map((node) => {
+    const base = {
+      id: asString(node.id, createId('sbnode')),
+      x: asCoordinate(node.x),
+      y: asCoordinate(node.y),
+      w: asNumber(node.w, 280, 120),
+      z: asNumber(node.z, 1),
+    };
+    if (node.kind === 'act') {
+      return {
+        ...base,
+        kind: 'act',
+        actNumber: Math.round(asNumber(node.actNumber, 1, 1)),
+        sceneId: asNullableString(node.sceneId),
+        title: asString(node.title, `Act ${Math.round(asNumber(node.actNumber, 1, 1))}`),
+        summary: asString(node.summary),
+        beats: (Array.isArray(node.beats) ? node.beats : [])
+          .map((beat) => normalizeStoryboardBeat(beat, {createId}))
+          .filter(Boolean),
+        stills: (Array.isArray(node.stills) ? node.stills : []).filter(isRecord).map((still) => ({
+          id: asString(still.id, createId('sb-still')),
+          assetId: asNullableString(still.assetId),
+          beatIds: normalizeStringIds(still.beatIds),
+          prompt: asString(still.prompt),
+          status: ['generating', 'ready', 'failed'].includes(still.status) ? still.status : 'ready',
+        })),
+      };
+    }
+    return {...base, kind: 'note', text: asString(node.text)};
+  }).filter((node) => node.kind === 'act' || node.text);
+  return {
+    schemaVersion: STORYBOARD_SCHEMA_VERSION,
+    styleId: asNullableString(value.styleId),
+    styleTitle: asString(value.styleTitle),
+    pan: {x: asCoordinate(value.pan?.x), y: asCoordinate(value.pan?.y)},
+    zoom: Number.isFinite(value.zoom) ? Math.min(2.5, Math.max(0.25, value.zoom)) : 1,
+    nextZ: asNumber(value.nextZ, 10),
+    nodes,
   };
 };
 
@@ -297,6 +358,7 @@ const createDefaultProject = ({now, createId}) => {
     usage: {schemaVersion: PROJECT_USAGE_SCHEMA_VERSION, estimatedUsd: 0, credits: 0, generationCount: 0, updatedAt: timestamp, entries: []},
     agentWorkspace: {schemaVersion: AGENT_WORKSPACE_SCHEMA_VERSION, updatedAt: timestamp, messages: [], script: {title: 'Untitled story', metadata: {}, beats: []}},
     contextIndex: {schemaVersion: PROJECT_CONTEXT_SCHEMA_VERSION, sourceRevision: 0, generatedAt: timestamp, entries: []},
+    storyboard: null,
     mediaAssets: [],
     timeline: {
       revision: 0,
@@ -321,6 +383,7 @@ const normalizeAsset = (value, {now, createId}) => {
     mimeType: asString(asset.mimeType || asset.type, 'application/octet-stream'),
     size: asNumber(asset.size),
     duration: asNumber(asset.duration, kind === 'image' ? 5 : 0),
+    sceneId: asNullableString(asset.sceneId),
     remoteUrl: asRemoteUrl(asset.remoteUrl || asset.url),
     createdAt: asTimestamp(asset.createdAt, now()),
     source: {
@@ -690,6 +753,7 @@ const normalizeProject = (value, dependencies) => {
     usage,
     agentWorkspace,
     contextIndex,
+    storyboard: normalizeStoryboard(value.storyboard, dependencies),
     mediaAssets,
     timeline: {revision, activeSceneId, duration, tracks, clips, transitions},
     timelineDiffs: {schemaVersion: TIMELINE_DIFF_SCHEMA_VERSION, items: timelineDiffs},
@@ -720,6 +784,7 @@ const toPersistedProject = (project) => ({
     generatedAt: project.contextIndex?.generatedAt,
     entries: sanitizeJson(project.contextIndex?.entries || []),
   },
+  storyboard: project.storyboard ? sanitizeJson(project.storyboard) : null,
   mediaAssets: project.mediaAssets.map((asset) => ({
     id: asset.id,
     name: asset.name,
@@ -727,6 +792,7 @@ const toPersistedProject = (project) => ({
     mimeType: asset.mimeType,
     size: asset.size,
     duration: asset.duration,
+    sceneId: asset.sceneId ?? null,
     remoteUrl: asset.remoteUrl,
     createdAt: asset.createdAt,
     source: sanitizeJson(asset.source),
@@ -1002,7 +1068,9 @@ export const createProjectStore = ({
         const clip = {
           id: createId('clip'),
           assetId: asset.id,
-          sceneId: project.timeline.activeSceneId,
+          sceneId: project.scenes.some((scene) => scene.id === command.sceneId)
+            ? command.sceneId
+            : project.timeline.activeSceneId,
           trackId,
           start: asNumber(command.start),
           duration: asNumber(command.duration, asset.kind === 'image' ? 5 : Math.max(0.1, asset.duration || 5), 0.1),
@@ -1318,6 +1386,54 @@ export const createProjectStore = ({
           changed = true;
         }
       }
+    } else if (command.type === 'scene/add') {
+      const input = isRecord(command.scene) ? command.scene : command;
+      const scene = {
+        id: asString(input.id, createId('scene')),
+        name: asString(input.name, `Scene ${String(project.scenes.length + 1).padStart(2, '0')}`),
+        duration: asNumber(input.duration, DEFAULT_TIMELINE_DURATION, 0.1),
+        metadata: isRecord(input.metadata) ? sanitizeJson(input.metadata) || {} : {},
+      };
+      if (project.scenes.some((candidate) => candidate.id === scene.id)) {
+        throw new Error(`Scene already exists: ${scene.id}`);
+      }
+      project.scenes.push(scene);
+      affectedId = scene.id;
+      changed = true;
+    } else if (command.type === 'scene/remove') {
+      const scene = project.scenes.find((candidate) => candidate.id === command.sceneId);
+      if (scene) {
+        if (project.scenes.length <= 1) throw new Error('Projects must keep at least one scene.');
+        const sceneIndex = project.scenes.findIndex((candidate) => candidate.id === scene.id);
+        const reassignTo = project.scenes.find((candidate) => candidate.id === command.reassignToSceneId && candidate.id !== scene.id)
+          || project.scenes[sceneIndex - 1]
+          || project.scenes[sceneIndex + 1];
+        const movedClips = project.timeline.clips.some((clip) => clip.sceneId === scene.id);
+        project.timeline.clips.forEach((clip) => { if (clip.sceneId === scene.id) clip.sceneId = reassignTo.id; });
+        project.mediaAssets.forEach((asset) => { if (asset.sceneId === scene.id) asset.sceneId = reassignTo.id; });
+        project.agentWorkspace.messages.forEach((message) => { if (message.sceneId === scene.id) message.sceneId = reassignTo.id; });
+        if (project.storyboard) {
+          project.storyboard.nodes = project.storyboard.nodes.filter((node) => node.kind !== 'act' || node.sceneId !== scene.id);
+        }
+        project.scenes = project.scenes.filter((candidate) => candidate.id !== scene.id);
+        if (project.timeline.activeSceneId === scene.id) project.timeline.activeSceneId = reassignTo.id;
+        affectedId = scene.id;
+        changed = true;
+        acceptedTimelineChanged = movedClips;
+      }
+    } else if (command.type === 'timeline/set-active-scene') {
+      const scene = project.scenes.find((candidate) => candidate.id === command.sceneId);
+      if (scene && project.timeline.activeSceneId !== scene.id) {
+        project.timeline.activeSceneId = scene.id;
+        affectedId = scene.id;
+        changed = true;
+      }
+    } else if (command.type === 'storyboard/update') {
+      const storyboard = normalizeStoryboard(command.storyboard, dependencies);
+      if (!storyboard) throw new Error('Storyboard updates require a nodes array.');
+      project.storyboard = storyboard;
+      affectedId = 'storyboard';
+      changed = true;
     } else if (command.type === 'scene/update') {
       const scene = project.scenes.find((candidate) => candidate.id === command.sceneId);
       if (scene && isRecord(command.patch)) {
@@ -1379,6 +1495,7 @@ export const createProjectStore = ({
         id: asString(command.message?.id, createId('agent-message')),
         role,
         text,
+        sceneId: asNullableString(command.message?.sceneId ?? command.sceneId),
         resultIds: normalizeStringIds(command.message?.resultIds ?? command.resultIds),
         frameIds: normalizeStringIds(command.message?.frameIds ?? command.frameIds),
         createdAt: asTimestamp(command.message?.createdAt, now()),

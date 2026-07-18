@@ -110,7 +110,7 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
   }));
   await page.addInitScript((project) => localStorage.setItem('prismflow.project', JSON.stringify(project)), createFixture(origin));
 
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await page.locator('[data-media-hydrated="true"]').waitFor();
   await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
   await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').click({modifiers: ['Shift']});

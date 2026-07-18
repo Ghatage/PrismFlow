@@ -110,7 +110,7 @@ test('renders a custom transition in the preview and creates one from a prompt',
   await page.addInitScript((project) => {
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, createFixture(origin));
-  await page.goto(origin, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await page.locator('[data-media-hydrated="true"]').waitFor();
 
   // Panel: built-ins, the fixture's custom card, and the AI add card.

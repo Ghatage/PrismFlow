@@ -35,6 +35,7 @@ test('validates composer input and prevents duplicate active submissions', async
   assert.throws(() => normalizeCharacterGenerationInput({...input, name: ' '}), /Character name is required/);
   assert.throws(() => normalizeCharacterGenerationInput({...input, prompt: ''}), /Visual prompt is required/);
   assert.deepEqual(normalizeCharacterGenerationInput(input).referenceAssetIds, ['reference-1', 'reference-2']);
+  assert.equal(normalizeCharacterGenerationInput({...input, kind: 'scene-still'}).kind, 'scene-still');
 
   const controller = createCharacterGenerationController({adapter: createFakeCharacterGenerationAdapter()});
   const submitted = await controller.submit(input);

@@ -1,0 +1,239 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {createServer} from 'node:net';
+import test from 'node:test';
+
+import {chromium} from 'playwright';
+
+const reservePort = async () => new Promise((resolve, reject) => {
+  const server = createServer();
+  server.once('error', reject);
+  server.listen(0, '127.0.0.1', () => {
+    const {port} = server.address();
+    server.close((error) => error ? reject(error) : resolve(port));
+  });
+});
+
+const waitForServer = async (url) => {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    try {
+      if ((await fetch(url)).ok) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`Local PrismFlow server did not start: ${url}`);
+};
+
+const readPersistedProject = (page) => page.evaluate(() => new Promise((resolve, reject) => {
+  const openRequest = indexedDB.open('prismflow.project');
+  openRequest.onerror = () => reject(openRequest.error || new Error('Could not open PrismFlow database.'));
+  openRequest.onsuccess = () => {
+    const database = openRequest.result;
+    const request = database.transaction('projects', 'readonly').objectStore('projects').get('current');
+    request.onerror = () => reject(request.error || new Error('Could not read PrismFlow project.'));
+    request.onsuccess = () => {
+      database.close();
+      resolve(request.result?.project || null);
+    };
+  };
+}));
+
+const fixture = (origin) => ({
+  schemaVersion: 1,
+  updatedAt: '2026-07-18T20:00:00.000Z',
+  project: {
+    id: 'project-storyboard-browser',
+    name: 'Act workspace smoke',
+    createdAt: '2026-07-18T20:00:00.000Z',
+    metadata: {aspectRatio: '16:9', frameRate: 30},
+  },
+  scenes: [
+    {id: 'scene-act-1', name: 'Act One', duration: 12, metadata: {actNumber: 1}},
+    {id: 'scene-act-2', name: 'Act Two', duration: 12, metadata: {actNumber: 2}},
+  ],
+  characters: [],
+  styles: [],
+  mediaAssets: [
+    {id: 'asset-act-1', name: 'Act One plate', kind: 'image', mimeType: 'image/svg+xml', duration: 2, sceneId: 'scene-act-1', remoteUrl: `${origin}/test-media/act-1.svg`},
+    {id: 'asset-act-2', name: 'Act Two plate', kind: 'image', mimeType: 'image/svg+xml', duration: 3, sceneId: 'scene-act-2', remoteUrl: `${origin}/test-media/act-2.svg`},
+  ],
+  agentWorkspace: {
+    schemaVersion: 1,
+    updatedAt: '2026-07-18T20:00:00.000Z',
+    messages: [
+      {id: 'message-global', role: 'assistant', text: 'Global production note', sceneId: null, resultIds: [], frameIds: [], createdAt: '2026-07-18T20:00:00.000Z'},
+      {id: 'message-act-1', role: 'assistant', text: 'Act one note', sceneId: 'scene-act-1', resultIds: [], frameIds: [], createdAt: '2026-07-18T20:00:00.000Z'},
+      {id: 'message-act-2', role: 'assistant', text: 'Act two note', sceneId: 'scene-act-2', resultIds: [], frameIds: [], createdAt: '2026-07-18T20:00:00.000Z'},
+    ],
+    script: {title: 'Act workspace smoke', metadata: {}, beats: []},
+  },
+  storyboard: {
+    schemaVersion: 1,
+    styleId: 'browser-test-style',
+    styleTitle: 'Browser Test Structure',
+    pan: {x: 0, y: 0},
+    zoom: 1,
+    nextZ: 10,
+    nodes: [
+      {id: 'node-act-1', kind: 'act', actNumber: 1, sceneId: 'scene-act-1', title: 'Act One', summary: 'The story begins.', beats: [], stills: [], x: 300, y: 170, w: 380, z: 11},
+      {id: 'node-act-2', kind: 'act', actNumber: 2, sceneId: 'scene-act-2', title: 'Act Two', summary: 'The story turns.', beats: [], stills: [], x: 760, y: 170, w: 380, z: 12},
+    ],
+  },
+  timeline: {
+    revision: 0,
+    activeSceneId: 'scene-act-1',
+    duration: 12,
+    tracks: [
+      {id: 'V1', name: 'Video', kind: 'video', order: 0},
+      {id: 'A1', name: 'Audio', kind: 'audio', order: 1},
+    ],
+    clips: [
+      {id: 'clip-act-1', assetId: 'asset-act-1', sceneId: 'scene-act-1', trackId: 'V1', start: 0, duration: 2},
+      {id: 'clip-act-2', assetId: 'asset-act-2', sceneId: 'scene-act-2', trackId: 'V1', start: 0, duration: 3},
+    ],
+    transitions: [],
+  },
+  timelineDiffs: {schemaVersion: 1, items: []},
+});
+
+const logicalX = async (locator) => locator.evaluate((element) => {
+  const match = element.style.transform.match(/translate\(([-\d.]+)px/);
+  return Number(match?.[1]);
+});
+
+test('storyboard work persists and the editor scopes and concatenates acts', {timeout: 45_000}, async (context) => {
+  const port = await reservePort();
+  const origin = `http://127.0.0.1:${port}`;
+  const server = spawn(process.execPath, ['server.mjs'], {
+    cwd: process.cwd(),
+    env: {...process.env, PORT: String(port)},
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  context.after(() => server.kill('SIGTERM'));
+  await waitForServer(origin);
+
+  const browser = await chromium.launch({headless: true});
+  context.after(() => browser.close());
+  const page = await browser.newPage({viewport: {width: 1440, height: 1000}});
+  const browserErrors = [];
+  page.on('console', (message) => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('requestfailed', (request) => browserErrors.push(`requestfailed: ${request.url()} ${request.failure()?.errorText || ''}`));
+  page.on('response', (response) => { if (response.status() >= 400) browserErrors.push(`response: ${response.status()} ${response.url()}`); });
+  await page.route(`${origin}/test-media/**`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#667799"/></svg>',
+  }));
+  await page.route(`**/api/search/video**`, (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({results: [
+      {id: 'frame-act-1', videoAssetId: 'asset-act-1', videoName: 'Act One plate', time: 1, annotation: 'first act frame'},
+      {id: 'frame-act-2', videoAssetId: 'asset-act-2', videoName: 'Act Two plate', time: 1, annotation: 'second act frame'},
+    ]}),
+  }));
+  await page.addInitScript((project) => {
+    if (sessionStorage.getItem('storyboard-fixture-seeded')) return;
+    sessionStorage.setItem('storyboard-fixture-seeded', '1');
+    localStorage.setItem('prismflow.project', JSON.stringify(project));
+  }, fixture(origin));
+
+  await page.goto(`${origin}/?view=storyboard&characterAdapter=fake`, {waitUntil: 'networkidle'});
+  await page.locator('.storyboard').waitFor();
+  await page.waitForFunction(() => localStorage.getItem('prismflow.project') === null);
+
+  // Create a reusable cast identity from the storyboard's fixed cast rail.
+  await page.locator('[data-action="cast-create"]').click();
+  await page.locator('#composerName').fill('Marlow');
+  await page.locator('#composerPrompt').fill('A curious red fox in a blue field jacket');
+  await page.locator('[data-character-composer-form]').evaluate((form) => form.requestSubmit());
+  await page.getByRole('heading', {name: 'Marlow'}).waitFor();
+  await page.locator('[data-action="close-character-modal"].small-icon-button').click();
+  await page.locator('[data-cast-character-id]').filter({hasText: 'Marlow'}).waitFor();
+
+  // Mention autocomplete records the character id in the persisted beat map.
+  const firstAct = page.locator('[data-node-id="node-act-1"]');
+  const beatInput = firstAct.locator('[data-beat-input]');
+  await beatInput.fill('Marlow enters @Mar');
+  await page.locator('.mention-menu button').filter({hasText: 'Marlow'}).waitFor();
+  await beatInput.press('Enter');
+  await beatInput.press('Enter');
+  await firstAct.locator('.board-beat').filter({hasText: '@Marlow'}).waitFor();
+
+  // Cursor-anchored zoom updates the scale, and node motion is divided by it.
+  await page.locator('#boardViewport').dispatchEvent('wheel', {
+    deltaY: -20,
+    deltaX: 0,
+    ctrlKey: true,
+    clientX: 700,
+    clientY: 450,
+  });
+  await page.waitForFunction(() => document.querySelector('#storyboardZoom')?.textContent !== '100%');
+  const zoom = Number((await page.locator('#storyboardZoom').textContent()).replace('%', '')) / 100;
+  assert.ok(zoom > 1);
+  const xBefore = await logicalX(firstAct);
+  const dragHandle = firstAct.locator('.board-act-header');
+  const handleBox = await dragHandle.boundingBox();
+  await page.mouse.move(handleBox.x + 20, handleBox.y + 12);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + 100, handleBox.y + 12, {steps: 5});
+  await page.mouse.up();
+  const xAfter = await logicalX(firstAct);
+  assert.ok(Math.abs((xAfter - xBefore) - (80 / zoom)) < 4);
+
+  // The act still reuses the fake character-generation pipeline and lands as scoped media.
+  await firstAct.locator('[data-action="generate-still"]').click();
+  await firstAct.locator('.board-still img').waitFor();
+
+  await page.locator('[data-action="jump-to-editor"]').click();
+  await page.locator('[data-media-hydrated="true"]').waitFor();
+  const actSelect = page.locator('[data-action="select-act"]');
+  assert.deepEqual(await actSelect.locator('option').allTextContents(), ['All', 'Act One', 'Act Two']);
+
+  // All concatenates the second act after the first act's two-second extent.
+  assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-1"]').evaluate((element) => parseFloat(element.style.left)), 0);
+  assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-2"]').evaluate((element) => parseFloat(element.style.left)), 176);
+
+  // Act two hides act-one clips/media/history; the act-one-only character is not global.
+  await actSelect.selectOption('scene-act-2');
+  assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-1"]').count(), 0);
+  assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-2"]').count(), 1);
+  assert.equal(await page.locator('.media-card[data-media-id="asset-act-1"]').count(), 0);
+  assert.equal(await page.locator('.media-card[data-media-id="asset-act-2"]').count(), 1);
+  await page.locator('[data-video-search-form] input').fill('plate');
+  await page.locator('[data-video-search-form]').evaluate((form) => form.requestSubmit());
+  await page.locator('.video-search-result').waitFor();
+  assert.deepEqual(await page.locator('.video-search-result strong').allTextContents(), ['Act Two plate']);
+  await page.locator('[data-tab="characters"]').click();
+  assert.equal(await page.locator('.character-card[data-character-id]').count(), 0);
+  await page.getByRole('button', {name: 'Agent', exact: true}).click();
+  const agentText = await page.locator('.agent-messages').textContent();
+  assert.match(agentText, /Global production note/);
+  assert.match(agentText, /Act two note/);
+  assert.doesNotMatch(agentText, /Act one note/);
+
+  // Dragging in All maps the absolute position back to the owning act's local time.
+  await page.locator('[data-action="select-act"]').selectOption('all');
+  await page.locator('.timeline-clip[data-clip-id="clip-act-2"]').dragTo(page.locator('.video-lane'), {targetPosition: {x: 396, y: 35}});
+  await page.waitForTimeout(100);
+  const afterDrag = await readPersistedProject(page);
+  const movedClip = afterDrag.timeline.clips.find((clip) => clip.id === 'clip-act-2');
+  assert.ok(Math.abs(movedClip.start - 1) < 0.15, `expected act-local start near 1s, got ${movedClip.start}`);
+
+  // Reload returns to the storyboard URL and restores zoom, movement, beat, still, and cast from IDB.
+  await page.reload({waitUntil: 'networkidle'});
+  await page.locator('.storyboard').waitFor();
+  assert.notEqual(await page.locator('#storyboardZoom').textContent(), '100%');
+  assert.ok(await logicalX(page.locator('[data-node-id="node-act-1"]')) > 300);
+  await page.locator('[data-node-id="node-act-1"] .board-beat').filter({hasText: '@Marlow'}).waitFor();
+  await page.locator('[data-node-id="node-act-1"] .board-still img').waitFor();
+  await page.locator('[data-cast-character-id]').filter({hasText: 'Marlow'}).waitFor();
+
+  const persisted = await readPersistedProject(page);
+  const persistedBeat = persisted.storyboard.nodes.find((node) => node.id === 'node-act-1').beats.at(-1);
+  assert.equal(persistedBeat.mentions.Marlow, persisted.characters[0].id);
+  assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.actStill).sceneId, 'scene-act-1');
+  assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.providerModelId === 'local/fake-character-sheet-v1').sceneId, null);
+  assert.deepEqual(browserErrors, []);
+});
