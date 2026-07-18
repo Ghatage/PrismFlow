@@ -1,4 +1,5 @@
 import {describeClip} from './project-context.js';
+import {TRANSITION_TYPES, transitionEdgeTime} from './project-store.js';
 
 const round = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
@@ -90,6 +91,16 @@ export const createAgentTools = ({
     tool('add_track', 'Add a new video or audio track to the timeline.', {
       kind: {type: 'string', enum: ['video', 'audio']},
     }, ['kind']),
+    tool('list_transitions', 'List all transitions on the timeline with ids, type, attached clips, duration, and the clip-edge time they sit on.'),
+    tool('add_transition', 'Add a transition at a clip edge. Give both fromClipId and toClipId for a clip-to-clip transition (the clips must be adjacent on the same video track), or only one of them for a fade to/from black at that clip\'s free edge. Replaces any existing transition at the same edge.', {
+      type: {type: 'string', enum: Object.keys(TRANSITION_TYPES)},
+      fromClipId: {type: 'string', description: 'Clip the transition leads out of (its end edge).'},
+      toClipId: {type: 'string', description: 'Clip the transition leads into (its start edge).'},
+      duration: {type: 'number', description: 'Transition length in seconds (clamped to half the shortest attached clip).'},
+    }, ['type']),
+    tool('remove_transition', 'Remove a transition from the timeline.', {
+      transitionId: {type: 'string'},
+    }, ['transitionId']),
     tool('select_clip', 'Select a clip in the editor UI so the user can see which clip is being worked on.', {
       clipId: {type: 'string'},
     }, ['clipId']),
@@ -148,9 +159,25 @@ export const createAgentTools = ({
       const clip = requireClip(clipId);
       const project = getProject();
       const asset = project.mediaAssets.find((candidate) => candidate.id === clip.assetId);
-      const frames = await database.getVideoFrames(clip.assetId);
       const sourceStart = clip.sourceStart || 0;
       const sourceEnd = sourceStart + clip.duration;
+      if (asset?.kind === 'audio') {
+        const spoken = (asset.metadata?.transcription?.segments || [])
+          .filter((segment) => segment.start >= sourceStart && segment.start < sourceEnd)
+          .sort((a, b) => a.start - b.start)
+          .map((segment) => ({
+            sourceTime: round(segment.start),
+            timelineTime: round(clip.start + (segment.start - sourceStart)),
+            annotation: segment.text || '',
+          }));
+        const audioStatus = asset.metadata?.audioIndex?.status || 'none';
+        return {
+          clipId,
+          segments: spoken,
+          ...(audioStatus !== 'complete' ? {indexing: audioStatus === 'none' ? 'not-indexed' : 'incomplete'} : {}),
+        };
+      }
+      const frames = await database.getVideoFrames(clip.assetId);
       const segments = (frames || [])
         .filter((frame) => frame.time >= sourceStart && frame.time < sourceEnd)
         .sort((a, b) => a.time - b.time)
@@ -241,6 +268,38 @@ export const createAgentTools = ({
 
     add_track({kind}) {
       return writeResult(dispatch({type: 'track/add', kind}), 'kind must be "video" or "audio".');
+    },
+
+    list_transitions() {
+      const project = getProject();
+      return project.timeline.transitions.map((transition) => ({
+        transitionId: transition.id,
+        type: transition.type,
+        trackId: transition.trackId,
+        fromClipId: transition.fromClipId,
+        toClipId: transition.toClipId,
+        duration: round(transition.duration),
+        edgeTime: round(transitionEdgeTime(transition, project.timeline.clips)),
+      }));
+    },
+
+    add_transition({type, fromClipId, toClipId, duration} = {}) {
+      if (!TRANSITION_TYPES[type]) {
+        throw new Error(`type must be one of: ${Object.keys(TRANSITION_TYPES).join(', ')}.`);
+      }
+      if (!fromClipId && !toClipId) throw new Error('Provide fromClipId, toClipId, or both. Call list_timeline_clips for valid ids.');
+      if (fromClipId) requireClip(fromClipId);
+      if (toClipId) requireClip(toClipId);
+      const command = {type: 'transition/add', transitionType: type, fromClipId, toClipId};
+      if (duration !== undefined) command.duration = duration;
+      return writeResult(dispatch(command), 'Transition was not added.');
+    },
+
+    remove_transition({transitionId}) {
+      if (!getProject().timeline.transitions.some((transition) => transition.id === transitionId)) {
+        throw new Error(`No transition with id ${transitionId}. Call list_transitions for valid ids.`);
+      }
+      return writeResult(dispatch({type: 'transition/remove', transitionId}), 'Transition was not removed.');
     },
 
     select_clip({clipId}) {

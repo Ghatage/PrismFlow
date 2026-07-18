@@ -148,3 +148,65 @@ test('errors come back as {error} instead of throwing', async () => {
   const badEdge = await tools.execute('trim_clip', {clipId: 'clip-nope', edge: 'left', time: 1});
   assert.match(badEdge.error, /No timeline clip/);
 });
+
+test('get_clip_transcription slices spoken segments for detached audio clips', async () => {
+  const {tools, dispatch} = setup();
+  const audioAssetId = dispatch({
+    type: 'asset/import',
+    asset: {
+      name: 'shot.mp4 (audio)',
+      kind: 'audio',
+      duration: 30,
+      metadata: {
+        detachedFrom: {assetId: 'media-video', clipId: 'clip-video'},
+        audioIndex: {status: 'complete'},
+        transcription: {segments: [
+          {start: 1, end: 4, text: 'before the clip window'},
+          {start: 6, end: 9, text: 'inside the clip window'},
+          {start: 16, end: 18, text: 'after the clip window'},
+        ]},
+      },
+    },
+  }).affectedId;
+  const audioClipId = dispatch({type: 'clip/add', assetId: audioAssetId, trackId: 'A1', start: 2, duration: 10, sourceStart: 5}).affectedId;
+
+  const transcript = await tools.execute('get_clip_transcription', {clipId: audioClipId});
+  assert.equal(transcript.segments.length, 1);
+  assert.equal(transcript.segments[0].annotation, 'inside the clip window');
+  assert.equal(transcript.segments[0].sourceTime, 6);
+  assert.equal(transcript.segments[0].timelineTime, 3);
+  assert.equal(transcript.indexing, undefined);
+});
+
+test('transition tools add, list, and remove transitions', async () => {
+  const {tools, dispatch, getProject, assetId, clipId} = setup();
+  const secondId = dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 12, duration: 8}).affectedId;
+
+  const invalidType = await tools.execute('add_transition', {type: 'sparkle', fromClipId: clipId, toClipId: secondId});
+  assert.match(invalidType.error, /type must be one of/);
+
+  const noClips = await tools.execute('add_transition', {type: 'crossfade'});
+  assert.match(noClips.error, /Provide fromClipId/);
+
+  const added = await tools.execute('add_transition', {type: 'crossfade', fromClipId: clipId, toClipId: secondId, duration: 1.2});
+  assert.equal(added.ok, true);
+
+  const listed = await tools.execute('list_transitions', {});
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].transitionId, added.affectedId);
+  assert.equal(listed[0].fromClipId, clipId);
+  assert.equal(listed[0].toClipId, secondId);
+  assert.equal(listed[0].edgeTime, 12);
+  assert.equal(listed[0].duration, 1.2);
+
+  const fade = await tools.execute('add_transition', {type: 'dip-to-black', toClipId: clipId});
+  assert.equal(fade.ok, true);
+  assert.equal((await tools.execute('list_transitions', {})).length, 2);
+
+  const removed = await tools.execute('remove_transition', {transitionId: added.affectedId});
+  assert.equal(removed.ok, true);
+  assert.equal(getProject().timeline.transitions.length, 1);
+
+  const missing = await tools.execute('remove_transition', {transitionId: 'transition-nope'});
+  assert.match(missing.error, /No transition with id/);
+});

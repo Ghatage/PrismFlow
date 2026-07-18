@@ -187,3 +187,127 @@ test('adds video tracks above the video stack and audio tracks below the audio s
     {id: 'A2', kind: 'audio'},
   ]);
 });
+
+test('clip/detach-audio splits audio to the audio track and mutes the source clip', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const videoAssetId = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'shot.mp4', kind: 'video', mimeType: 'video/mp4', duration: 20, url: 'blob:http://localhost/shot'},
+  }).affectedId;
+  const clipId = store.dispatch({type: 'clip/add', assetId: videoAssetId, trackId: 'V1', start: 3, duration: 8, sourceStart: 2}).affectedId;
+
+  const detached = store.dispatch({
+    type: 'clip/detach-audio',
+    clipId,
+    audioAsset: {
+      id: 'media-detached-1',
+      name: 'shot.mp4 (audio)',
+      kind: 'audio',
+      mimeType: 'audio/wav',
+      duration: 20,
+      url: 'blob:http://localhost/shot-audio',
+      source: {type: 'detached-audio', fileName: 'shot.mp4'},
+    },
+  });
+  assert.equal(detached.changed, true);
+
+  const project = detached.project;
+  const audioAsset = project.mediaAssets.find((asset) => asset.id === 'media-detached-1');
+  assert.equal(audioAsset.kind, 'audio');
+  assert.equal(audioAsset.url, 'blob:http://localhost/shot-audio');
+  assert.deepEqual(audioAsset.metadata.detachedFrom, {assetId: videoAssetId, clipId});
+
+  const audioClip = project.timeline.clips.find((clip) => clip.id === detached.affectedId);
+  assert.equal(audioClip.trackId, 'A1');
+  assert.equal(audioClip.assetId, 'media-detached-1');
+  assert.equal(audioClip.start, 3);
+  assert.equal(audioClip.duration, 8);
+  assert.equal(audioClip.sourceStart, 2);
+  assert.equal(audioClip.provenance.parentAssetId, videoAssetId);
+  assert.equal(audioClip.provenance.derivedMetadata.type, 'detached-audio');
+
+  const videoClip = project.timeline.clips.find((clip) => clip.id === clipId);
+  assert.equal(videoClip.audioDetached, true);
+
+  const again = store.dispatch({type: 'clip/detach-audio', clipId, audioAsset: {id: 'media-detached-2', kind: 'audio'}});
+  assert.equal(again.changed, false);
+  assert.equal(again.project.mediaAssets.some((asset) => asset.id === 'media-detached-2'), false);
+});
+
+test('clip/detach-audio ignores non-video clips and persists the detached flag', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const imageAssetId = store.dispatch({type: 'asset/import', asset: {name: 'still.png', kind: 'image', duration: 5}}).affectedId;
+  const imageClipId = store.dispatch({type: 'clip/add', assetId: imageAssetId, trackId: 'V1', start: 0}).affectedId;
+  assert.equal(store.dispatch({type: 'clip/detach-audio', clipId: imageClipId, audioAsset: {id: 'media-x', kind: 'audio'}}).changed, false);
+
+  const videoAssetId = store.dispatch({type: 'asset/import', asset: {name: 'shot.mp4', kind: 'video', duration: 10}}).affectedId;
+  const clipId = store.dispatch({type: 'clip/add', assetId: videoAssetId, trackId: 'V1', start: 0, duration: 4}).affectedId;
+  store.dispatch({type: 'clip/detach-audio', clipId, audioAsset: {id: 'media-detached-1', name: 'a', kind: 'audio', duration: 10}});
+
+  const reloaded = createProjectStore({storage, ...createDependencies()});
+  const clips = reloaded.getProject().timeline.clips;
+  assert.equal(clips.find((clip) => clip.id === clipId).audioDetached, true);
+  assert.equal(clips.find((clip) => clip.assetId === 'media-detached-1').trackId, 'A1');
+});
+
+test('transitions attach to clip edges, clamp duration, replace at junctions, and prune when invalid', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const assetId = store.dispatch({type: 'asset/import', asset: {name: 'a.mp4', kind: 'video', duration: 30}}).affectedId;
+  const first = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 0, duration: 5}).affectedId;
+  const second = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 5, duration: 5}).affectedId;
+
+  const added = store.dispatch({type: 'transition/add', transitionType: 'crossfade', fromClipId: first, toClipId: second, duration: 9});
+  const transition = added.project.timeline.transitions[0];
+  assert.equal(transition.type, 'crossfade');
+  assert.equal(transition.trackId, 'V1');
+  assert.equal(transition.duration, 2.5);
+
+  store.dispatch({type: 'transition/add', transitionType: 'wipe-left', fromClipId: first, toClipId: second});
+  let project = store.getProject();
+  assert.equal(project.timeline.transitions.length, 1);
+  assert.equal(project.timeline.transitions[0].type, 'wipe-left');
+
+  const fade = store.dispatch({type: 'transition/add', transitionType: 'dip-to-black', fromClipId: second});
+  assert.equal(fade.changed, true);
+  assert.equal(store.getProject().timeline.transitions.length, 2);
+
+  const third = store.dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 20, duration: 5}).affectedId;
+  assert.throws(
+    () => store.dispatch({type: 'transition/add', transitionType: 'crossfade', fromClipId: first, toClipId: third}),
+    /adjacent/,
+  );
+  assert.throws(
+    () => store.dispatch({type: 'transition/add', transitionType: 'sparkle', fromClipId: first}),
+    /Unknown transition type/,
+  );
+
+  const reloaded = createProjectStore({storage, ...createDependencies()});
+  assert.equal(reloaded.getProject().timeline.transitions.length, 2);
+
+  store.dispatch({type: 'clip/move', clipId: second, start: 12});
+  project = store.getProject();
+  assert.equal(project.timeline.transitions.length, 1);
+  assert.equal(project.timeline.transitions[0].fromClipId, second);
+  assert.equal(project.timeline.transitions[0].toClipId, null);
+
+  store.dispatch({type: 'clip/remove', clipId: second});
+  assert.equal(store.getProject().timeline.transitions.length, 0);
+
+  const again = store.dispatch({type: 'transition/add', transitionType: 'crossfade', fromClipId: first});
+  const removed = store.dispatch({type: 'transition/remove', transitionId: again.affectedId});
+  assert.equal(removed.changed, true);
+  assert.equal(store.getProject().timeline.transitions.length, 0);
+});
+
+test('transitions are rejected on audio tracks', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const audioAssetId = store.dispatch({type: 'asset/import', asset: {name: 'a.wav', kind: 'audio', duration: 10}}).affectedId;
+  const audioClipId = store.dispatch({type: 'clip/add', assetId: audioAssetId, trackId: 'A1', start: 0, duration: 5}).affectedId;
+  assert.throws(
+    () => store.dispatch({type: 'transition/add', transitionType: 'crossfade', fromClipId: audioClipId}),
+    /video tracks/,
+  );
+});

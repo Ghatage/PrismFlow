@@ -1,4 +1,4 @@
-import {createProjectStore} from './project-store.js';
+import {createProjectStore, TRANSITION_EDGE_EPSILON, TRANSITION_TYPES, transitionEdgeTime} from './project-store.js';
 import {createBrowserDatabase} from './browser-database.js';
 import {createCharacterLibrary} from './character-library.js';
 import {createStyleLibrary} from './style-library.js';
@@ -37,6 +37,8 @@ import {toUploadableUrl} from './asset-data-url.js';
 import {createAgentWorkspace} from './agent-workspace.js';
 import {createProjectContextService} from './project-context.js';
 import {createVideoFrameIndexer} from './video-indexing.js';
+import {createAudioTranscriptionIndexer} from './audio-indexing.js';
+import {AudioExtractError, extractAudioFromBlob} from './audio-extract.js';
 import {createAgentRunStore} from './agent-runs.js';
 import {createAgentTools} from './agent-tools.js';
 import {AgentCancelledError, runEditorAgent} from './editor-agent.js';
@@ -62,9 +64,11 @@ const state = {
   get agentWorkspace() { return project.agentWorkspace; },
   get clips() { return project.timeline.clips; },
   get tracks() { return project.timeline.tracks; },
+  get transitions() { return project.timeline.transitions; },
   get pendingDiffs() { return listReviewableDiffs(project.timelineDiffs.items); },
   get timelineDuration() { return project.timeline.duration; },
   selectedClipId: null,
+  selectedTransitionId: null,
   selectedGhostKey: null,
   previewDiffId: null,
   regenerationEditorClipId: null,
@@ -148,6 +152,13 @@ const videoIndexer = createVideoFrameIndexer({
         updatedAt: manifest.updatedAt,
       }}},
     });
+  },
+});
+const audioIndexer = createAudioTranscriptionIndexer({
+  getProject: () => project,
+  updateAsset: (assetId, metadata) => {
+    updateProject({type: 'asset/update', assetId, patch: {metadata}});
+    renderApp();
   },
 });
 const agentRuns = createAgentRunStore();
@@ -346,10 +357,10 @@ const renderApp = () => {
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${state.media.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${state.characters.length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'styles' ? 'active' : ''}" data-tab="styles" type="button">Styles <span class="tab-count">${state.styles.length || ''}</span></button>
-            <button class="panel-tab ${state.activeTab === 'scenes' ? 'active' : ''}" data-tab="scenes" type="button">Scenes</button>
+            <button class="panel-tab ${state.activeTab === 'transitions' ? 'active' : ''}" data-tab="transitions" type="button">Transitions</button>
             <button class="panel-tab ${state.activeTab === 'script' ? 'active' : ''}" data-tab="script" type="button">Script <span class="tab-count">${state.agentWorkspace.script.beats.length || ''}</span></button>
           </div>
-          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : state.activeTab === 'styles' ? renderStylesPanel() : state.activeTab === 'script' ? renderScriptPanel() : renderScenesPanel()}
+          ${state.activeTab === 'media' ? renderMediaPanel() : state.activeTab === 'characters' ? renderCharactersPanel() : state.activeTab === 'styles' ? renderStylesPanel() : state.activeTab === 'script' ? renderScriptPanel() : renderTransitionsPanel()}
         </aside>
 
         <section class="stage">
@@ -361,6 +372,9 @@ const renderApp = () => {
             <div class="preview-frame" id="previewFrame">
               <video id="previewVideo" playsinline preload="metadata"></video>
               <img id="previewImage" alt="Selected timeline image" />
+              <video id="previewVideoB" playsinline preload="metadata" muted aria-hidden="true"></video>
+              <img id="previewImageB" alt="" aria-hidden="true" />
+              <div class="preview-fade" id="previewFade" aria-hidden="true"></div>
               <div class="audio-preview" id="audioPreview"><div class="audio-orb">${icons.audio}</div><span>Audio clip</span></div>
               <div class="preview-audio-mix" id="previewAudioMix" aria-hidden="true"></div>
               <div class="safe-area"></div>
@@ -590,10 +604,19 @@ const renderCharacterComposerModal = () => {
   `;
 };
 
-const renderScenesPanel = () => `
-  <div class="panel-heading"><div><span class="eyebrow">PROJECT MAP</span><h2>Scenes</h2></div><button class="small-icon-button" type="button">${icons.plus}</button></div>
-  <div class="scene-list">${project.scenes.map((scene, index) => `<div class="scene-item ${scene.id === project.timeline.activeSceneId ? 'active' : ''}"><span class="scene-number">${String(index + 1).padStart(2, '0')}</span><div><strong>${escapeHtml(scene.name)}</strong><span>${escapeHtml(project.project.name)} · ${formatTime(scene.duration)}</span></div><span class="scene-status"></span></div>`).join('')}</div>
-  <div class="scene-empty"><div class="scene-line"></div><span>Scenes will group timeline beats as your story grows.</span></div>
+const TRANSITION_GLYPHS = {
+  'crossfade': '◐',
+  'dip-to-black': '●',
+  'wipe-left': '◧',
+  'wipe-right': '◨',
+  'slide-left': '⇤',
+  'slide-right': '⇥',
+};
+
+const renderTransitionsPanel = () => `
+  <div class="panel-heading"><div><span class="eyebrow">CLIP BLENDS</span><h2>Transitions</h2></div></div>
+  <div class="transition-list">${Object.entries(TRANSITION_TYPES).map(([type, definition]) => `<div class="transition-card" draggable="true" data-transition-type="${escapeHtml(type)}" title="Drag onto the timeline"><div class="transition-thumb" aria-hidden="true">${TRANSITION_GLYPHS[type] || '◐'}</div><div class="transition-card-copy"><strong>${escapeHtml(definition.label)}</strong><span>${definition.defaultDuration}s</span></div></div>`).join('')}</div>
+  <div class="scene-empty"><div class="scene-line"></div><span>Drop between two clips to blend them, or at a lone clip edge to fade to black. Drops snap to the nearest clip edge.</span></div>
 `;
 
 const renderScriptPanel = () => {
@@ -696,6 +719,23 @@ const closeAgentPrompt = () => {
   renderApp();
 };
 
+const updateAgentRunView = (runId) => {
+  const run = agentRuns.get(runId);
+  if (!run) return;
+  const dot = app.querySelector(`.agent-rail-item[data-agent-run-id="${CSS.escape(runId)}"] .agent-status-dot`);
+  if (dot) dot.className = `agent-status-dot ${run.status}`;
+  if (state.expandedAgentRunId !== runId) return;
+  const stepper = app.querySelector('[data-agent-stepper]');
+  if (!stepper) return;
+  const openSteps = new Set([...stepper.querySelectorAll('.agent-step')]
+    .flatMap((step, index) => (step.querySelector('details')?.open ? [index] : [])));
+  stepper.innerHTML = run.steps.map((step, index) => renderAgentStep(step, index, run.steps)).join('');
+  stepper.querySelectorAll('.agent-step').forEach((step, index) => {
+    const details = step.querySelector('details');
+    if (details && openSteps.has(index)) details.open = true;
+  });
+};
+
 const startEditorAgent = (prompt) => {
   const run = agentRuns.create({prompt});
   const controller = new AbortController();
@@ -703,6 +743,8 @@ const startEditorAgent = (prompt) => {
   state.expandedAgentRunId = run.id;
   state.agentStepperScrollTop = 0;
   renderApp();
+  let lastRenderedProject = project;
+  let lastRenderedTime = state.currentTime;
   runEditorAgent({
     prompt,
     tools: agentTools,
@@ -712,7 +754,14 @@ const startEditorAgent = (prompt) => {
       const record = existing
         ? agentRuns.updateStep(run.id, existing.id, step)
         : agentRuns.appendStep(run.id, step);
-      renderApp();
+      if (project !== lastRenderedProject) {
+        lastRenderedProject = project;
+        renderApp();
+      } else {
+        updateAgentRunView(run.id);
+        if (state.currentTime !== lastRenderedTime) refreshPlayheadView();
+      }
+      lastRenderedTime = state.currentTime;
       return record;
     },
   })
@@ -980,7 +1029,8 @@ const renderTimeline = () => {
           const clips = state.clips.filter((clip) => clip.trackId === track.id);
           const trackGhosts = ghosts.filter((ghost) => ghost.clip?.trackId === track.id);
           const generating = pendingAddGeneration();
-          const content = `${clips.map(renderClip).join('')}${trackGhosts.map(renderGhostClip).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating) : ''}`;
+          const trackTransitions = state.transitions.filter((transition) => transition.trackId === track.id);
+          const content = `${clips.map(renderClip).join('')}${trackTransitions.map(renderTransitionMarker).join('')}${trackGhosts.map(renderGhostClip).join('')}${generating?.trackId === track.id ? renderGenerationPendingClip(generating) : ''}`;
           return `<div class="track-lane ${track.kind}-lane" data-track-id="${escapeHtml(track.id)}">${content || `<div class="lane-placeholder">Drop ${track.kind} here</div>`}</div>`;
         }).join('')}
         <div class="timeline-drag-guide" id="timelineDragGuide" hidden></div>
@@ -999,6 +1049,15 @@ const renderClip = (clip) => {
   const frameSelected = frame?.videoAssetId === clip.assetId && frame.time >= sourceStart && frame.time <= sourceStart + clip.duration;
   const regenerating = clipRegeneration.listJobs(clip.id).some((job) => job.status === 'queued' || job.status === 'running');
   return `<div class="timeline-clip ${media.kind} ${clip.id === state.selectedClipId ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px">${renderClipContents(media, clip.duration)}</div>`;
+};
+
+const renderTransitionMarker = (transition) => {
+  const edgeTime = transitionEdgeTime(transition, state.clips);
+  if (!Number.isFinite(edgeTime)) return '';
+  const label = TRANSITION_TYPES[transition.type]?.label || transition.type;
+  const placement = transition.fromClipId && transition.toClipId ? 'between clips' : transition.fromClipId ? 'to black' : 'from black';
+  const description = `${label} · ${placement} · ${formatTime(transition.duration)}`;
+  return `<button class="timeline-transition ${transition.id === state.selectedTransitionId ? 'selected' : ''}" data-transition-id="${escapeHtml(transition.id)}" type="button" style="left:${edgeTime * scale()}px" title="${escapeHtml(description)}" aria-label="${escapeHtml(`${label} transition, ${placement}`)}"><span aria-hidden="true">${TRANSITION_GLYPHS[transition.type] || '◐'}</span></button>`;
 };
 
 const renderClipContents = (media, duration) => `<div class="clip-thumb">${media.url ? media.kind === 'audio' ? `<span>${icons.audio}</span>` : renderMediaVisual(media) : `<span>${kindIcon(media.kind)}</span>`}</div><div class="clip-copy"><strong>${escapeHtml(media.name)}</strong><span>${formatTime(duration)}</span></div><div class="clip-handle left"></div><div class="clip-handle right"></div>`;
@@ -1021,6 +1080,17 @@ const renderGhostClip = (ghost) => {
   return `<button class="timeline-ghost ghost-${ghost.type} ghost-${ghost.role} ${ghost.status} ${ghost.key === state.selectedGhostKey ? 'selected' : ''}" ${draggable ? 'draggable="true"' : ''} data-ghost-key="${escapeHtml(ghost.key)}" data-ghost-status="${escapeHtml(ghost.status)}" data-ghost-role="${escapeHtml(ghost.role)}" type="button" style="left:${clip.start * scale()}px;width:${width}px" aria-label="${escapeHtml(label)}" aria-pressed="${ghost.key === state.selectedGhostKey}"><span class="ghost-kind">${escapeHtml(ghost.type)}</span><strong>${escapeHtml(media?.name || 'Proposed clip')}</strong><small>${statusLabel} · ${formatTime(clip.duration)}</small></button>`;
 };
 
+const filteredModalModels = (modal) => modal.categoryFilter
+  ? modal.models.filter((entry) => entry.category === modal.categoryFilter)
+  : modal.models;
+
+const renderModelCategorySelect = (modal, busy) => {
+  const categories = [...new Set(modal.models.map((entry) => entry.category))];
+  if (categories.length < 2) return '';
+  return `<label for="generateVideoCategory">Model type</label>
+          <select id="generateVideoCategory" aria-label="Filter models by type" ${busy ? 'disabled' : ''}><option value="">All types</option>${categories.map((category) => `<option value="${escapeHtml(category)}" ${category === modal.categoryFilter ? 'selected' : ''}>${escapeHtml(category)}</option>`).join('')}</select>`;
+};
+
 const renderGenerateVideoModal = () => {
   const modal = state.generateVideoModal;
   if (!modal) return '';
@@ -1033,17 +1103,18 @@ const renderGenerateVideoModal = () => {
         <form class="generate-form" data-generate-video-form>
           <label for="generateVideoPrompt">Prompt</label>
           <textarea id="generateVideoPrompt" rows="3" placeholder="Describe the shot…" required ${busy ? 'disabled' : ''}>${escapeHtml(modal.prompt)}</textarea>
-          <label for="generateVideoModel">Model</label>
           ${modal.status === 'loading-models'
-            ? '<p class="generate-note">Loading model catalog…</p>'
-            : `<select id="generateVideoModel" ${busy ? 'disabled' : ''}>${modal.models.map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === modal.modelId ? 'selected' : ''}>${escapeHtml(modelOptionLabel(entry))}</option>`).join('')}</select>`}
+            ? '<label for="generateVideoModel">Model</label><p class="generate-note">Loading model catalog…</p>'
+            : `${renderModelCategorySelect(modal, busy)}<label for="generateVideoModel">Model</label><select id="generateVideoModel" ${busy ? 'disabled' : ''}>${filteredModalModels(modal).map((entry) => `<option value="${escapeHtml(entry.id)}" ${entry.id === modal.modelId ? 'selected' : ''}>${escapeHtml(modelOptionLabel(entry))}</option>`).join('')}</select>`}
           ${model?.category.includes('video') ? `
           <label for="generateVideoDuration">Duration</label>
           <select id="generateVideoDuration" ${busy ? 'disabled' : ''}><option value="">Model default</option>${GENERATION_DURATIONS.map((seconds) => `<option value="${seconds}" ${modal.duration === seconds ? 'selected' : ''}>${seconds}s</option>`).join('')}</select>` : ''}
-          ${model ? `<p class="generate-note">${escapeHtml(generateCostLine(model, modal.duration))}</p>` : ''}
           <p class="generate-note">${modal.mode === 'regenerate' ? 'Replaces the clip' : 'Insert'} on ${escapeHtml(modal.trackId)} at ${formatTime(modal.start)}</p>
           ${modal.error ? `<p class="generate-error">${escapeHtml(modal.error)}</p>` : ''}
-          <div class="generate-actions"><button class="button ghost" data-action="close-generate-modal" type="button">Cancel</button><button class="button primary" type="submit" ${busy || modal.status === 'loading-models' ? 'disabled' : ''}>${busy ? 'Generating…' : modal.mode === 'regenerate' ? 'Regenerate' : 'Generate'}</button></div>
+          <div class="generate-footer">
+            <div class="generate-cost">${model ? `<span>Estimated cost</span><strong>${escapeHtml(generateTotalCost(model, modal.duration))}</strong><small>${escapeHtml(generateCostLine(model, modal.duration))}</small>` : ''}</div>
+            <div class="generate-actions"><button class="button ghost" data-action="close-generate-modal" type="button">Cancel</button><button class="button primary" type="submit" ${busy || modal.status === 'loading-models' ? 'disabled' : ''}>${busy ? 'Generating…' : modal.mode === 'regenerate' ? 'Regenerate' : 'Generate'}</button></div>
+          </div>
         </form>
       </section>
     </div>
@@ -1115,6 +1186,14 @@ const bindEvents = () => {
   attachPromptMentions('#composerPrompt');
   app.querySelector('#generateVideoPrompt')?.addEventListener('input', (event) => { if (state.generateVideoModal) state.generateVideoModal.prompt = event.target.value; });
   app.querySelector('#generateVideoModel')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.modelId = event.target.value; renderApp(); } });
+  app.querySelector('#generateVideoCategory')?.addEventListener('change', (event) => {
+    const modal = state.generateVideoModal;
+    if (!modal) return;
+    modal.categoryFilter = event.target.value || null;
+    const filtered = filteredModalModels(modal);
+    if (!filtered.some((entry) => entry.id === modal.modelId)) modal.modelId = filtered[0]?.id || null;
+    renderApp();
+  });
   app.querySelector('#generateVideoDuration')?.addEventListener('change', (event) => { const modal = state.generateVideoModal; if (modal) { modal.duration = event.target.value ? Number(event.target.value) : null; renderApp(); } });
   app.querySelector('[data-character-name-form]')?.addEventListener('submit', renameCharacter);
   app.querySelector('[data-style-name-form]')?.addEventListener('submit', renameStyle);
@@ -1147,7 +1226,12 @@ const bindEvents = () => {
       const clipId = clipElement.dataset.clipId;
       const clip = clipById(clipId);
       const generated = Boolean(clip?.provenance?.prompt && clip?.provenance?.modelId);
+      const clipAsset = mediaById(clip?.assetId);
+      const canDetachAudio = clipAsset?.kind === 'video' && !clip?.audioDetached;
       showContextMenu(event, [
+        ...(canDetachAudio ? [
+          {label: 'Detach audio', onSelect: () => { void detachAudioFromClip(clipId); }},
+        ] : []),
         ...(generated ? [
           {label: 'Regenerate clip', onSelect: () => regenerateClipFromMenu(clipId)},
           {label: 'Modify prompt + regen', onSelect: () => openGenerateVideoModal({mode: 'regenerate', clipId})},
@@ -1175,8 +1259,31 @@ const bindEvents = () => {
     }
   });
   app.querySelectorAll('[data-action="remove-media"]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); removeMedia(button.dataset.mediaId); }));
+  app.querySelectorAll('[data-transition-type]').forEach((element) => {
+    element.addEventListener('dragstart', (event) => {
+      state.dragPayload = {type: 'transition', id: element.dataset.transitionType, native: true, grabOffset: 0};
+      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.setData('text/transition-type', element.dataset.transitionType);
+    });
+    element.addEventListener('dragend', clearNativeDrag);
+    element.addEventListener('pointerdown', (event) => startPointerDrag(event, 'transition', element.dataset.transitionType));
+  });
+  app.querySelectorAll('[data-transition-id]').forEach((marker) => {
+    marker.addEventListener('click', (event) => {
+      event.stopPropagation();
+      state.selectedTransitionId = marker.dataset.transitionId;
+      state.selectedClipId = null;
+      state.selectedGhostKey = null;
+      renderApp();
+    });
+    marker.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showContextMenu(event, [{label: 'Remove transition', danger: true, onSelect: () => removeTransition(marker.dataset.transitionId)}]);
+    });
+  });
   app.querySelectorAll('[data-clip-id]').forEach((clipElement) => {
-    clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; state.selectedGhostKey = null; state.previewDiffId = null; renderApp(); });
+    clipElement.addEventListener('click', () => { state.selectedClipId = clipElement.dataset.clipId; state.selectedTransitionId = null; state.selectedGhostKey = null; state.previewDiffId = null; renderApp(); });
     clipElement.addEventListener('dragstart', (event) => {
       const clip = clipById(clipElement.dataset.clipId);
       state.dragPayload = {type: 'clip', id: clipElement.dataset.clipId, native: true, grabOffset: rawTimeFromClientX(event.clientX) - (clip?.start || 0)};
@@ -1804,13 +1911,48 @@ const dropOnTimeline = (event, trackId) => {
   const mediaId = event.dataTransfer.getData('text/media-id');
   const clipId = event.dataTransfer.getData('text/clip-id');
   const ghostKey = event.dataTransfer.getData('text/ghost-key');
+  const transitionType = event.dataTransfer.getData('text/transition-type');
   const payload = state.dragPayload;
   const start = payload?.native && payload.id === (clipId || ghostKey || mediaId) && payload.type !== 'media'
     ? Math.max(0, rawTimeFromClientX(event.clientX) - payload.grabOffset)
     : undefined;
-  placeOnTimeline({mediaId, clipId, ghostKey, clientX: event.clientX, trackId, start});
+  placeOnTimeline({mediaId, clipId, ghostKey, transitionType, clientX: event.clientX, trackId, start});
   state.dragPayload = null;
 };
+
+// Snaps a transition drop to the nearest clip edge on a video track, preferring
+// the hovered lane, and classifies the edge as between-clips or a lone edge.
+const snapTransitionDrop = (time, preferredTrackId = null) => {
+  const videoTrackIds = new Set(state.tracks.filter((track) => track.kind === 'video').map((track) => track.id));
+  const candidateTrackIds = preferredTrackId && videoTrackIds.has(preferredTrackId)
+    && state.clips.some((clip) => clip.trackId === preferredTrackId)
+    ? new Set([preferredTrackId])
+    : videoTrackIds;
+  let best = null;
+  state.clips.forEach((clip) => {
+    if (!candidateTrackIds.has(clip.trackId)) return;
+    [clip.start, clip.start + clip.duration].forEach((edge) => {
+      const distance = Math.abs(edge - time);
+      if (!best || distance < best.distance) best = {distance, edgeTime: edge, trackId: clip.trackId};
+    });
+  });
+  if (!best) return null;
+  const clipsOnTrack = state.clips.filter((clip) => clip.trackId === best.trackId);
+  const fromClip = clipsOnTrack.find((clip) => Math.abs(clip.start + clip.duration - best.edgeTime) <= TRANSITION_EDGE_EPSILON) || null;
+  const toClip = clipsOnTrack.find((clip) => Math.abs(clip.start - best.edgeTime) <= TRANSITION_EDGE_EPSILON) || null;
+  return {...best, fromClipId: fromClip?.id || null, toClipId: toClip?.id || null};
+};
+
+const removeTransition = (transitionId) => {
+  if (!transitionId || !state.transitions.some((transition) => transition.id === transitionId)) return false;
+  const result = updateProject({type: 'transition/remove', transitionId});
+  if (!result.changed) return false;
+  if (state.selectedTransitionId === transitionId) state.selectedTransitionId = null;
+  renderApp();
+  return true;
+};
+
+const deleteSelectedTransition = () => removeTransition(state.selectedTransitionId);
 
 const clearTimelineDragGuide = () => {
   const guide = app.querySelector('#timelineDragGuide');
@@ -1842,12 +1984,16 @@ const updateTimelineDragPreview = (payload, clientX, clientY) => {
     if (!payload.previewElement) payload.previewElement = createTimelineDragPreview(mediaById(payload.id));
     if (payload.previewElement && payload.previewElement.parentElement !== lane) lane.append(payload.previewElement);
     if (payload.previewElement) payload.previewElement.style.left = `${start * scale()}px`;
+  } else if (payload.type === 'transition') {
+    payload.snap = snapTransitionDrop(rawTimeFromClientX(clientX), lane.dataset.trackId);
   }
 
   const guide = app.querySelector('#timelineDragGuide');
   if (guide) {
     guide.hidden = false;
-    guide.style.left = `${start * scale()}px`;
+    const snapped = payload.type === 'transition' && payload.snap;
+    guide.classList.toggle('snapped', Boolean(snapped));
+    guide.style.left = `${(snapped ? payload.snap.edgeTime : start) * scale()}px`;
   }
   return true;
 };
@@ -1950,14 +2096,16 @@ const startPointerDrag = (event, type, id) => {
     ? clipById(id)
     : type === 'ghost'
       ? findGhostItem(state.pendingDiffs, id)?.clip
-      : mediaById(id);
+      : type === 'transition'
+        ? null
+        : mediaById(id);
   const sourceStart = Number.isFinite(source?.start) ? source.start : 0;
   const payload = {
     type,
     id,
     startX: event.clientX,
     startY: event.clientY,
-    grabOffset: rawTimeFromClientX(event.clientX) - sourceStart,
+    grabOffset: type === 'transition' ? 0 : rawTimeFromClientX(event.clientX) - sourceStart,
     currentStart: sourceStart,
     currentTrackId: source?.trackId || null,
     element: event.currentTarget,
@@ -1996,6 +2144,7 @@ const startPointerDrag = (event, type, id) => {
         mediaId: type === 'media' ? id : '',
         clipId: type === 'clip' ? id : '',
         ghostKey: type === 'ghost' ? id : '',
+        transitionType: type === 'transition' ? id : '',
         clientX: upEvent.clientX,
         trackId: finalTrackId,
         start: finalStart,
@@ -2016,8 +2165,25 @@ const startPointerDrag = (event, type, id) => {
   document.addEventListener('pointercancel', onPointerCancel);
 };
 
-const placeOnTimeline = ({mediaId, clipId, ghostKey, clientX, trackId, start: requestedStart}) => {
+const placeOnTimeline = ({mediaId, clipId, ghostKey, transitionType, clientX, trackId, start: requestedStart}) => {
   const start = Number.isFinite(requestedStart) ? Math.max(0, requestedStart) : timeFromClientX(clientX);
+  if (transitionType) {
+    const snap = snapTransitionDrop(start, trackId);
+    if (!snap) {
+      showToast('Add clips to a video track before dropping a transition.');
+    } else {
+      try {
+        const result = updateProject({type: 'transition/add', transitionType, fromClipId: snap.fromClipId, toClipId: snap.toClipId});
+        state.selectedTransitionId = result.affectedId;
+        state.selectedClipId = null;
+        state.selectedGhostKey = null;
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : String(error));
+      }
+    }
+    renderApp();
+    return;
+  }
   if (mediaId) {
     const media = mediaById(mediaId);
     if (!media) return;
@@ -2140,6 +2306,57 @@ const removeClip = (clipId) => {
 
 const deleteSelectedClip = () => removeClip(state.selectedClipId);
 
+const detachAudioFromClip = async (clipId) => {
+  const clip = clipById(clipId);
+  const asset = mediaById(clip?.assetId);
+  if (!clip || asset?.kind !== 'video' || clip.audioDetached) return false;
+  showToast('Extracting audio…');
+  let extracted;
+  try {
+    let blob = null;
+    try { blob = await projectDatabase.getAsset(asset.id); } catch {}
+    if (!blob && asset.url) blob = await fetch(asset.url).then((response) => response.ok ? response.blob() : null).catch(() => null);
+    if (!blob) throw new Error('The source media for this clip is unavailable.');
+    extracted = await extractAudioFromBlob(blob);
+  } catch (error) {
+    if (error instanceof AudioExtractError && error.code === 'no-audio') showToast('This video has no audio track.');
+    else showToast(`Audio could not be detached: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+  const audioAssetId = `media-${globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+  const url = URL.createObjectURL(extracted.wavBlob);
+  const result = updateProject({
+    type: 'clip/detach-audio',
+    clipId,
+    audioAsset: {
+      id: audioAssetId,
+      name: `${asset.name} (audio)`,
+      kind: 'audio',
+      mimeType: 'audio/wav',
+      size: extracted.wavBlob.size,
+      duration: extracted.duration,
+      url,
+      source: {type: 'detached-audio', fileName: asset.name},
+      metadata: {},
+    },
+  });
+  if (!result.changed) {
+    URL.revokeObjectURL(url);
+    return false;
+  }
+  try {
+    await projectDatabase.putAsset(audioAssetId, extracted.wavBlob);
+  } catch {
+    showToast('Audio detached for this session, but could not be saved for refresh.');
+  }
+  renderApp();
+  showToast('Audio detached to the audio track.');
+  void audioIndexer.run({asset: mediaById(audioAssetId), blob: extracted.wavBlob, audioBuffer: extracted.audioBuffer}).catch((error) => {
+    showToast(`Audio transcription failed: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  return true;
+};
+
 const GENERATION_DURATIONS = [4, 5, 6, 8, 10, 12];
 
 const loadModelCatalog = () => {
@@ -2252,8 +2469,14 @@ const modelOptionLabel = (model) => {
 const generateCostLine = (model, duration) => {
   if (model.unitPrice === null) return `${model.category} · pricing unavailable`;
   const base = `$${model.unitPrice} per ${model.unit || 'run'}`;
-  if (model.unit === 'seconds' && duration) return `${base} · ≈ $${(model.unitPrice * duration).toFixed(2)} for ${duration}s`;
+  if (model.unit === 'seconds' && duration) return `${base} · ${duration}s`;
   return base;
+};
+
+const generateTotalCost = (model, duration) => {
+  if (model.unitPrice === null) return '—';
+  if (model.unit === 'seconds') return duration ? `≈ $${(model.unitPrice * duration).toFixed(2)}` : 'Select a duration';
+  return `≈ $${model.unitPrice.toFixed(2)}`;
 };
 
 const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', clipId = null}) => {
@@ -2268,6 +2491,7 @@ const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', 
     prompt: provenance?.prompt || '',
     modelId: null,
     models: [],
+    categoryFilter: null,
     duration: provenance?.params?.duration ? Number(provenance.params.duration) || null : null,
     status: 'loading-models',
     error: null,
@@ -2441,7 +2665,70 @@ const playbackSignature = ({visual, audio}) => {
     .filter(({media}) => Boolean(media.url))
     .map(({clip, media}) => `${clip.id}:${media.id}`)
     .join(',');
-  return `${visualPart}|${audioPart}`;
+  const active = activeTransitionAt(state.currentTime);
+  const transitionPart = active ? `${active.transition.id}:${active.mode}` : '';
+  return `${visualPart}|${audioPart}|${transitionPart}`;
+};
+
+// Finds the transition whose window covers a timeline time. Windows sit on the
+// outgoing clip's tail (or the incoming clip's head for fade-from-black), so
+// the blend happens while the main layer still shows the outgoing clip.
+const activeTransitionAt = (time) => {
+  for (const transition of state.transitions) {
+    const edge = transitionEdgeTime(transition, state.clips);
+    if (!Number.isFinite(edge)) continue;
+    const duration = transition.duration;
+    if (transition.fromClipId && transition.toClipId && transition.type === 'dip-to-black') {
+      if (time >= edge - duration / 2 && time < edge + duration / 2) {
+        return {transition, progress: (time - (edge - duration / 2)) / duration, incomingClip: null, mode: 'dip'};
+      }
+    } else if (transition.fromClipId && transition.toClipId) {
+      if (time >= edge - duration && time < edge) {
+        return {transition, progress: (time - (edge - duration)) / duration, incomingClip: clipById(transition.toClipId), mode: 'blend'};
+      }
+    } else if (transition.fromClipId) {
+      if (time >= edge - duration && time < edge) {
+        return {transition, progress: (time - (edge - duration)) / duration, incomingClip: null, mode: 'to-black'};
+      }
+    } else if (time >= edge && time < edge + duration) {
+      return {transition, progress: (time - edge) / duration, incomingClip: null, mode: 'from-black'};
+    }
+  }
+  return null;
+};
+
+// Style-only writes each frame: layer-B effect for blends, black overlay for fades.
+const applyTransitionFrame = () => {
+  const fade = app.querySelector('#previewFade');
+  const videoB = app.querySelector('#previewVideoB');
+  const imageB = app.querySelector('#previewImageB');
+  if (!fade || !videoB || !imageB) return;
+  const active = activeTransitionAt(state.currentTime);
+  const resetLayer = (element) => { element.style.opacity = ''; element.style.clipPath = ''; element.style.transform = ''; };
+  if (!active || active.mode !== 'blend') [videoB, imageB].forEach(resetLayer);
+  if (!active) {
+    fade.style.opacity = '0';
+    return;
+  }
+  const {mode, progress, transition} = active;
+  if (mode === 'blend') {
+    fade.style.opacity = '0';
+    const layer = videoB.classList.contains('visible') ? videoB : imageB.classList.contains('visible') ? imageB : null;
+    if (!layer) return;
+    const remaining = (1 - progress) * 100;
+    resetLayer(layer);
+    if (transition.type === 'crossfade') layer.style.opacity = String(progress);
+    else if (transition.type === 'wipe-left') { layer.style.opacity = '1'; layer.style.clipPath = `inset(0 0 0 ${remaining}%)`; }
+    else if (transition.type === 'wipe-right') { layer.style.opacity = '1'; layer.style.clipPath = `inset(0 ${remaining}% 0 0)`; }
+    else if (transition.type === 'slide-left') { layer.style.opacity = '1'; layer.style.transform = `translateX(${remaining}%)`; }
+    else if (transition.type === 'slide-right') { layer.style.opacity = '1'; layer.style.transform = `translateX(-${remaining}%)`; }
+  } else if (mode === 'dip') {
+    fade.style.opacity = String(1 - Math.abs(progress * 2 - 1));
+  } else if (mode === 'to-black') {
+    fade.style.opacity = String(progress);
+  } else {
+    fade.style.opacity = String(1 - progress);
+  }
 };
 
 const sourceTimeAtPlayhead = (clip) => (clip.sourceStart || 0) + Math.max(0, state.currentTime - clip.start);
@@ -2476,6 +2763,7 @@ const syncPreview = (forceSeek = false) => {
 
   video.volume = state.playerVolume;
   if (visual?.media.kind === 'video') {
+    video.muted = Boolean(visual.clip.audioDetached);
     const sourceChanged = video.dataset.clipId !== visual.clip.id || video.dataset.mediaId !== visual.media.id;
     if (sourceChanged) {
       video.pause();
@@ -2533,6 +2821,42 @@ const syncPreview = (forceSeek = false) => {
     element.remove();
   });
 
+  // Incoming layer for clip-to-clip blends: a held first frame of the next clip.
+  const blend = activeTransitionAt(state.currentTime);
+  const incomingClip = blend?.mode === 'blend' ? blend.incomingClip : null;
+  const incomingMedia = incomingClip ? state.media.find((item) => item.id === incomingClip.assetId) : null;
+  const videoB = app.querySelector('#previewVideoB');
+  const imageB = app.querySelector('#previewImageB');
+  if (videoB && imageB) {
+    const showVideoB = Boolean(incomingMedia?.url && incomingMedia.kind === 'video');
+    const showImageB = Boolean(incomingMedia?.url && incomingMedia.kind === 'image');
+    shouldShow(videoB, showVideoB);
+    shouldShow(imageB, showImageB);
+    if (showVideoB) {
+      const sourceChanged = videoB.dataset.clipId !== incomingClip.id || videoB.dataset.mediaId !== incomingMedia.id;
+      if (sourceChanged) {
+        videoB.pause();
+        videoB.src = incomingMedia.url;
+        videoB.dataset.clipId = incomingClip.id;
+        videoB.dataset.mediaId = incomingMedia.id;
+      }
+      if (sourceChanged || forceSeek) seekMediaElement(videoB, () => incomingClip.sourceStart || 0);
+    } else {
+      videoB.pause();
+      delete videoB.dataset.clipId;
+      delete videoB.dataset.mediaId;
+    }
+    if (showImageB) {
+      if (imageB.dataset.mediaId !== incomingMedia.id) {
+        imageB.src = incomingMedia.url;
+        imageB.dataset.mediaId = incomingMedia.id;
+      }
+    } else {
+      delete imageB.dataset.mediaId;
+    }
+  }
+  applyTransitionFrame();
+
   state.previewPlaybackSignature = playbackSignature(playback);
 };
 
@@ -2547,6 +2871,7 @@ const updatePlaybackFrame = () => {
   if (current) current.textContent = formatTime(state.currentTime);
   const playback = playbackAt(state.currentTime);
   if (playbackSignature(playback) !== state.previewPlaybackSignature) syncPreview(true);
+  else applyTransitionFrame();
   if (state.currentTime >= duration) {
     state.isPlaying = false;
     state.currentTime = 0;
@@ -2603,8 +2928,15 @@ const seekTo = (time) => {
     state.playbackOrigin = state.currentTime;
     state.playbackStartedAt = performance.now();
   }
-  state.previewPlaybackSignature = null;
-  renderApp();
+  refreshPlayheadView();
+};
+
+const refreshPlayheadView = () => {
+  const playhead = app.querySelector('#playhead');
+  if (playhead) playhead.style.left = `${state.currentTime * scale()}px`;
+  const current = app.querySelector('#playerCurrent');
+  if (current) current.textContent = formatTime(state.currentTime);
+  syncPreview(true);
 };
 
 let falStatusRequest = null;
@@ -2677,7 +3009,7 @@ const isKeyboardEditingTarget = (target) => target instanceof Element && Boolean
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') closeContextMenu();
   if (
-    event.key === 'Backspace'
+    (event.key === 'Backspace' || event.key === 'Delete')
     && !event.defaultPrevented
     && !event.isComposing
     && !event.metaKey
@@ -2685,7 +3017,7 @@ document.addEventListener('keydown', (event) => {
     && !event.altKey
     && !event.shiftKey
     && !isKeyboardEditingTarget(event.target)
-    && deleteSelectedClip()
+    && (deleteSelectedTransition() || deleteSelectedClip())
   ) {
     event.preventDefault();
     return;
@@ -2720,6 +3052,12 @@ const restoreSession = async () => {
   renderApp();
   void videoIndexer.resume({assets: project.mediaAssets}).catch((error) => {
     showToast(`Video indexing could not resume: ${error instanceof Error ? error.message : String(error)}`);
+  });
+  void audioIndexer.resume({
+    assets: project.mediaAssets,
+    getBlob: (asset) => projectDatabase.getAsset(asset.id).catch(() => null),
+  }).catch((error) => {
+    showToast(`Audio transcription could not resume: ${error instanceof Error ? error.message : String(error)}`);
   });
 
   if (new URLSearchParams(globalThis.location.search).get('syncModelPricing') === '1') {

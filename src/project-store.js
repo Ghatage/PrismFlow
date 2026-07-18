@@ -11,6 +11,16 @@ const DEFAULT_TRACKS = [
   {id: 'A1', name: 'Audio', kind: 'audio', order: 1},
 ];
 const SECRET_KEY_PATTERN = /(api.?key|authorization|bearer|credential|password|secret|token)/i;
+export const TRANSITION_TYPES = {
+  'crossfade': {label: 'Crossfade', defaultDuration: 1},
+  'dip-to-black': {label: 'Dip to black', defaultDuration: 1},
+  'wipe-left': {label: 'Wipe left', defaultDuration: 0.8},
+  'wipe-right': {label: 'Wipe right', defaultDuration: 0.8},
+  'slide-left': {label: 'Slide left', defaultDuration: 0.8},
+  'slide-right': {label: 'Slide right', defaultDuration: 0.8},
+};
+export const TRANSITION_EDGE_EPSILON = 0.05;
+const MIN_TRANSITION_DURATION = 0.1;
 const TIMELINE_DIFF_OPERATION_TYPES = new Set(['add', 'move', 'trim', 'replace', 'remove']);
 const TIMELINE_DIFF_STATUSES = new Set(['pending', 'accepted', 'rejected', 'stale']);
 const TIMELINE_DIFF_SOURCES = new Set(['agent', 'generation', 'user']);
@@ -155,6 +165,61 @@ const cloneJson = (value) => globalThis.structuredClone
   ? globalThis.structuredClone(value)
   : JSON.parse(JSON.stringify(value));
 
+export const transitionEdgeTime = (transition, clips) => {
+  const fromClip = transition.fromClipId ? clips.find((clip) => clip.id === transition.fromClipId) : null;
+  if (fromClip) return fromClip.start + fromClip.duration;
+  const toClip = transition.toClipId ? clips.find((clip) => clip.id === transition.toClipId) : null;
+  return toClip ? toClip.start : null;
+};
+
+const resolveTransitionAttachment = (transition, clips) => {
+  const fromClip = transition.fromClipId ? clips.find((clip) => clip.id === transition.fromClipId) : null;
+  const toClip = transition.toClipId ? clips.find((clip) => clip.id === transition.toClipId) : null;
+  if (transition.fromClipId && !fromClip) return null;
+  if (transition.toClipId && !toClip) return null;
+  if (!fromClip && !toClip) return null;
+  if (fromClip && toClip) {
+    if (fromClip.trackId !== toClip.trackId) return null;
+    if (Math.abs(fromClip.start + fromClip.duration - toClip.start) > TRANSITION_EDGE_EPSILON) return null;
+    return {fromClip, toClip, trackId: fromClip.trackId, edgeTime: fromClip.start + fromClip.duration};
+  }
+  // Single-clip fades stay valid only while their edge is not shared with a neighbor.
+  const anchor = fromClip || toClip;
+  const edgeTime = fromClip ? fromClip.start + fromClip.duration : toClip.start;
+  const neighbor = clips.find((clip) => clip.id !== anchor.id
+    && clip.trackId === anchor.trackId
+    && Math.abs((fromClip ? clip.start : clip.start + clip.duration) - edgeTime) <= TRANSITION_EDGE_EPSILON);
+  if (neighbor) return null;
+  return {fromClip, toClip, trackId: anchor.trackId, edgeTime};
+};
+
+const normalizeTransition = (value, {clips, createId}) => {
+  if (!isRecord(value) || !TRANSITION_TYPES[value.type]) return null;
+  const transition = {
+    id: asString(value.id, createId('transition')),
+    type: value.type,
+    trackId: asString(value.trackId),
+    fromClipId: asNullableString(value.fromClipId),
+    toClipId: asNullableString(value.toClipId),
+    duration: asNumber(value.duration, TRANSITION_TYPES[value.type].defaultDuration, MIN_TRANSITION_DURATION),
+  };
+  const attachment = resolveTransitionAttachment(transition, clips);
+  if (!attachment) return null;
+  transition.trackId = attachment.trackId;
+  return transition;
+};
+
+const pruneInvalidTransitions = (timeline) => {
+  const before = timeline.transitions.length;
+  timeline.transitions = timeline.transitions.filter((transition) => {
+    const attachment = resolveTransitionAttachment(transition, timeline.clips);
+    if (!attachment) return false;
+    transition.trackId = attachment.trackId;
+    return true;
+  });
+  return timeline.transitions.length !== before;
+};
+
 const createDefaultProject = ({now, createId}) => {
   const timestamp = now();
   const sceneId = createId('scene');
@@ -180,6 +245,7 @@ const createDefaultProject = ({now, createId}) => {
       duration: DEFAULT_TIMELINE_DURATION,
       tracks: DEFAULT_TRACKS.map((track) => ({...track})),
       clips: [],
+      transitions: [],
     },
     timelineDiffs: {schemaVersion: TIMELINE_DIFF_SCHEMA_VERSION, items: []},
   };
@@ -294,6 +360,7 @@ const normalizeClip = (value, {assetIds, sceneIds, trackIds, createId}) => {
     start: asNumber(value.start),
     duration: asNumber(value.duration, 5, 0.1),
     sourceStart: asNumber(value.sourceStart),
+    audioDetached: Boolean(value.audioDetached),
     provenance: normalizeProvenance(value.provenance),
   };
 };
@@ -499,6 +566,10 @@ const normalizeProject = (value, dependencies) => {
   const clips = (Array.isArray(timeline.clips) ? timeline.clips : [])
     .map((clip) => normalizeClip(clip, {assetIds, sceneIds, trackIds, createId: dependencies.createId}))
     .filter(Boolean);
+  const seenTransitionIds = new Set();
+  const transitions = (Array.isArray(timeline.transitions) ? timeline.transitions : [])
+    .map((transition) => normalizeTransition(transition, {clips, createId: dependencies.createId}))
+    .filter((transition) => transition && !seenTransitionIds.has(transition.id) && seenTransitionIds.add(transition.id));
   const clipEnd = clips.reduce((maximum, clip) => Math.max(maximum, clip.start + clip.duration), 0);
   const duration = Math.max(DEFAULT_TIMELINE_DURATION, asNumber(timeline.duration, DEFAULT_TIMELINE_DURATION, 0.1), clipEnd);
   const activeSceneId = sceneIds.has(timeline.activeSceneId) ? timeline.activeSceneId : scenes[0].id;
@@ -548,7 +619,7 @@ const normalizeProject = (value, dependencies) => {
     agentWorkspace,
     contextIndex,
     mediaAssets,
-    timeline: {revision, activeSceneId, duration, tracks, clips},
+    timeline: {revision, activeSceneId, duration, tracks, clips, transitions},
     timelineDiffs: {schemaVersion: TIMELINE_DIFF_SCHEMA_VERSION, items: timelineDiffs},
   };
 };
@@ -600,7 +671,16 @@ const toPersistedProject = (project) => ({
       start: clip.start,
       duration: clip.duration,
       sourceStart: clip.sourceStart,
+      audioDetached: clip.audioDetached,
       provenance: normalizeProvenance(clip.provenance),
+    })),
+    transitions: project.timeline.transitions.map((transition) => ({
+      id: transition.id,
+      type: transition.type,
+      trackId: transition.trackId,
+      fromClipId: transition.fromClipId,
+      toClipId: transition.toClipId,
+      duration: transition.duration,
     })),
   },
   timelineDiffs: {
@@ -907,10 +987,83 @@ export const createProjectStore = ({
           acceptedTimelineChanged = true;
         }
       }
+    } else if (command.type === 'clip/detach-audio') {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === command.clipId);
+      const sourceAsset = clip && project.mediaAssets.find((candidate) => candidate.id === clip.assetId);
+      const audioTrack = project.timeline.tracks.find((track) => track.kind === 'audio');
+      if (clip && sourceAsset?.kind === 'video' && !clip.audioDetached && audioTrack) {
+        const audioAsset = normalizeAsset({
+          ...command.audioAsset,
+          kind: 'audio',
+          metadata: {
+            ...(isRecord(command.audioAsset?.metadata) ? command.audioAsset.metadata : {}),
+            detachedFrom: {assetId: sourceAsset.id, clipId: clip.id},
+          },
+        }, dependencies);
+        if (typeof command.audioAsset?.url === 'string' && command.audioAsset.url.trim()) {
+          assetUrls.set(audioAsset.id, command.audioAsset.url);
+        }
+        project.mediaAssets.push(audioAsset);
+        const audioClip = {
+          id: createId('clip'),
+          assetId: audioAsset.id,
+          sceneId: clip.sceneId,
+          trackId: audioTrack.id,
+          start: clip.start,
+          duration: clip.duration,
+          sourceStart: clip.sourceStart || 0,
+          audioDetached: false,
+          provenance: normalizeProvenance({
+            parentAssetId: sourceAsset.id,
+            derivedMetadata: {type: 'detached-audio', detachedFromClipId: clip.id},
+          }),
+        };
+        project.timeline.clips.push(audioClip);
+        clip.audioDetached = true;
+        extendTimeline(audioClip);
+        affectedId = audioClip.id;
+        changed = true;
+        acceptedTimelineChanged = true;
+      }
     } else if (command.type === 'clip/remove') {
       if (project.timeline.clips.some((clip) => clip.id === command.clipId)) {
         project.timeline.clips = project.timeline.clips.filter((clip) => clip.id !== command.clipId);
         affectedId = command.clipId;
+        changed = true;
+        acceptedTimelineChanged = true;
+      }
+    } else if (command.type === 'transition/add') {
+      const definition = TRANSITION_TYPES[command.transitionType];
+      if (!definition) throw new Error(`Unknown transition type: ${String(command.transitionType)}`);
+      const fromClipId = asNullableString(command.fromClipId);
+      const toClipId = asNullableString(command.toClipId);
+      if (!fromClipId && !toClipId) throw new Error('Transitions require at least one clip.');
+      const transition = {
+        id: createId('transition'),
+        type: command.transitionType,
+        trackId: '',
+        fromClipId,
+        toClipId,
+        duration: asNumber(command.duration, definition.defaultDuration, MIN_TRANSITION_DURATION),
+      };
+      const attachment = resolveTransitionAttachment(transition, project.timeline.clips);
+      if (!attachment) throw new Error('Transitions attach to an existing clip edge; between-clip transitions need two adjacent clips on the same track.');
+      const track = project.timeline.tracks.find((candidate) => candidate.id === attachment.trackId);
+      if (track?.kind !== 'video') throw new Error('Transitions can only be placed on video tracks.');
+      transition.trackId = attachment.trackId;
+      const shortestClip = Math.min(...[attachment.fromClip, attachment.toClip].filter(Boolean).map((clip) => clip.duration));
+      transition.duration = Math.max(MIN_TRANSITION_DURATION, Math.min(transition.duration, shortestClip / 2));
+      project.timeline.transitions = project.timeline.transitions.filter((existing) =>
+        existing.trackId !== transition.trackId
+        || Math.abs(transitionEdgeTime(existing, project.timeline.clips) - attachment.edgeTime) > TRANSITION_EDGE_EPSILON);
+      project.timeline.transitions.push(transition);
+      affectedId = transition.id;
+      changed = true;
+      acceptedTimelineChanged = true;
+    } else if (command.type === 'transition/remove') {
+      if (project.timeline.transitions.some((transition) => transition.id === command.transitionId)) {
+        project.timeline.transitions = project.timeline.transitions.filter((transition) => transition.id !== command.transitionId);
+        affectedId = command.transitionId;
         changed = true;
         acceptedTimelineChanged = true;
       }
@@ -1326,6 +1479,7 @@ export const createProjectStore = ({
     }
 
     if (changed) {
+      pruneInvalidTransitions(project.timeline);
       if (acceptedTimelineChanged) advanceTimelineRevision(now());
       commit();
     }

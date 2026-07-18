@@ -5,6 +5,8 @@ const SYSTEM_PROMPT = [
   'Always call get_project_overview and list_timeline_clips before your first edit.',
   'All times are in seconds on the timeline unless a tool says otherwise.',
   'Clip "transcriptions" are visual frame annotations captured every 5 seconds of source footage.',
+  'Transitions live at clip edges: use add_transition with fromClipId+toClipId for clip-to-clip blends,',
+  'or a single clip id for a fade to/from black at a free edge.',
   'If a tool returns ok:false or an error, read the reason, re-check state, and adjust.',
   'When the task is complete, reply with a short plain-text summary of the edits you made,',
   'without calling any more tools.',
