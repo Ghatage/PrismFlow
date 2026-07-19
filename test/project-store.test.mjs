@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {createProjectStore, PROJECT_SCHEMA_VERSION, PROJECT_STORAGE_KEY} from '../src/project-store.js';
+import {
+  createProjectStore,
+  PROJECT_SCHEMA_VERSION,
+  PROJECT_STORAGE_KEY,
+  STORYBOARD_SCHEMA_VERSION,
+} from '../src/project-store.js';
 
 class MemoryStorage {
   constructor(initial = {}) {
@@ -369,6 +374,7 @@ test('round-trips storyboard state, scene tags on assets and agent messages', ()
     storyboard: {
       styleId: 'style-1',
       styleTitle: 'Three act',
+      visualStyle: 'Hand-painted 2D animation, dusk palette.',
       pan: {x: -40, y: 12},
       zoom: 1.4,
       nextZ: 12,
@@ -390,6 +396,7 @@ test('round-trips storyboard state, scene tags on assets and agent messages', ()
   const reloaded = createProjectStore({storage, ...createDependencies()}).getProject();
   const storyboard = reloaded.storyboard;
   assert.equal(storyboard.styleId, 'style-1');
+  assert.equal(storyboard.visualStyle, 'Hand-painted 2D animation, dusk palette.');
   assert.equal(storyboard.zoom, 1.4);
   assert.deepEqual(storyboard.pan, {x: -40, y: 12});
   const act = storyboard.nodes.find((node) => node.kind === 'act');
@@ -400,6 +407,133 @@ test('round-trips storyboard state, scene tags on assets and agent messages', ()
   assert.equal(act.stills[0].status, 'generating');
   assert.equal(reloaded.mediaAssets.find((asset) => asset.id === imported.affectedId).sceneId, actSceneId);
   assert.equal(reloaded.agentWorkspace.messages.at(-1).sceneId, actSceneId);
+});
+
+test('migrates legacy storyboard beats into positioned linked beat workspaces', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const sceneId = store.getProject().scenes[0].id;
+  const stillAssetId = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'legacy-act-still.png', kind: 'image', mimeType: 'image/png', sceneId},
+  }).affectedId;
+
+  store.dispatch({
+    type: 'storyboard/update',
+    storyboard: {
+      schemaVersion: 1,
+      styleId: 'story-circle',
+      nodes: [{
+        id: 'act-node', kind: 'act', actNumber: 1, sceneId, title: 'Departure', summary: 'The tide turns.',
+        beats: [
+          {id: 'beat-one', text: 'The bell rings.', mentions: {}},
+          {id: 'beat-two', text: 'Mara boards the ferry.', mentions: {}},
+        ],
+        stills: [{
+          id: 'legacy-still', assetId: stillAssetId, beatIds: ['beat-one', 'beat-two'],
+          prompt: 'A harbor at dawn', status: 'ready',
+        }],
+      }],
+    },
+  });
+
+  const storyboard = store.getProject().storyboard;
+  const act = storyboard.nodes[0];
+  assert.equal(storyboard.schemaVersion, STORYBOARD_SCHEMA_VERSION);
+  assert.deepEqual(act.connections.map(({fromBeatId, toBeatId}) => [fromBeatId, toBeatId]), [
+    ['beat-one', 'beat-two'],
+  ]);
+  assert.ok(act.beats.every((beat) => Number.isFinite(beat.layout.x) && Number.isFinite(beat.layout.y)));
+  assert.deepEqual(act.beats.map((beat) => beat.hero?.assetId), [stillAssetId, stillAssetId]);
+  assert.deepEqual(act.beats.map((beat) => beat.screenplay), [null, null]);
+});
+
+test('storyboard act saves replace the whole draft atomically and reject dangling links', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const sceneId = store.getProject().scenes[0].id;
+  const heroAssetId = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'beat-hero.png', kind: 'image', mimeType: 'image/png', sceneId},
+  }).affectedId;
+  store.dispatch({
+    type: 'storyboard/update',
+    storyboard: {nodes: [{
+      id: 'act-node', kind: 'act', actNumber: 1, sceneId, title: 'Departure', summary: 'Old summary',
+      beats: [{id: 'beat-one', text: 'Old beat', mentions: {}}], connections: [],
+    }]},
+  });
+
+  const saved = store.dispatch({
+    type: 'storyboard/act-save',
+    actId: 'act-node',
+    act: {
+      ...store.getProject().storyboard.nodes[0],
+      title: 'The Impossible Tide',
+      summary: 'Mara follows the water into the sky.',
+      beats: [
+        {
+          id: 'beat-one', text: 'The tide rises.', mentions: {Mara: 'character-mara'}, layout: {x: 40, y: 60},
+          hero: {assetId: heroAssetId, prompt: 'A cinematic rising tide', characterVersionIds: []},
+          screenplay: {text: 'EXT. HARBOR — DAWN\nThe tide rises into the clouds.', modelId: 'google/gemini-2.5-flash'},
+          videoPrompt: {
+            text: '00:00 - 00:04 @Image1 follows the rising tide.',
+            duration: 4,
+            modelId: 'google/gemini-2.5-flash',
+            generatedAt: '2026-07-18T22:00:00.000Z',
+            editedAt: '2026-07-18T22:01:00.000Z',
+          },
+        },
+        {id: 'beat-two', text: 'Mara follows.', mentions: {}, layout: {x: 420, y: 60}},
+      ],
+      connections: [{id: 'link-one-two', fromBeatId: 'beat-one', toBeatId: 'beat-two'}],
+    },
+  });
+  const act = saved.project.storyboard.nodes[0];
+  assert.equal(saved.affectedId, 'act-node');
+  assert.equal(act.title, 'The Impossible Tide');
+  assert.equal(act.beats[0].hero.assetId, heroAssetId);
+  assert.match(act.beats[0].screenplay.text, /EXT\. HARBOR/);
+  assert.match(act.beats[0].videoPrompt.text, /@Image1/);
+  assert.equal(act.beats[0].videoPrompt.duration, 4);
+  assert.deepEqual(act.connections, [{id: 'link-one-two', fromBeatId: 'beat-one', toBeatId: 'beat-two'}]);
+
+  const beforeInvalidSave = JSON.stringify(store.getProject().storyboard.nodes[0]);
+  assert.throws(() => store.dispatch({
+    type: 'storyboard/act-save',
+    actId: 'act-node',
+    act: {...act, connections: [{id: 'dangling', fromBeatId: 'beat-one', toBeatId: 'missing-beat'}]},
+  }), /connection.*missing beat/i);
+  assert.equal(JSON.stringify(store.getProject().storyboard.nodes[0]), beforeInvalidSave);
+  assert.equal(JSON.parse(storage.getItem(PROJECT_STORAGE_KEY)).storyboard.nodes[0].title, 'The Impossible Tide');
+  assert.match(JSON.parse(storage.getItem(PROJECT_STORAGE_KEY)).storyboard.nodes[0].beats[0].videoPrompt.text, /rising tide/);
+});
+
+test('removing a character clears storyboard mention bindings but preserves prose and generated heroes', () => {
+  const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
+  const characterId = store.dispatch({type: 'character/create', name: 'Mara'}).affectedId;
+  const sceneId = store.getProject().scenes[0].id;
+  const heroAssetId = store.dispatch({
+    type: 'asset/import',
+    asset: {name: 'Mara hero.png', kind: 'image', mimeType: 'image/png', sceneId},
+  }).affectedId;
+  store.dispatch({
+    type: 'storyboard/update',
+    storyboard: {nodes: [{
+      id: 'act-node', kind: 'act', actNumber: 1, sceneId, title: 'Departure', summary: '',
+      beats: [{
+        id: 'beat-one', text: '@Mara leaves the harbor.', mentions: {Mara: characterId},
+        hero: {assetId: heroAssetId, prompt: 'Mara at the harbor'},
+      }],
+      connections: [],
+    }]},
+  });
+
+  store.dispatch({type: 'character/remove', characterId});
+
+  const beat = store.getProject().storyboard.nodes[0].beats[0];
+  assert.equal(beat.text, '@Mara leaves the harbor.');
+  assert.deepEqual(beat.mentions, {});
+  assert.equal(beat.hero.assetId, heroAssetId);
 });
 
 test('scene/add, timeline/set-active-scene, and scene/remove reassign scoped content', () => {

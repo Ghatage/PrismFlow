@@ -5,7 +5,7 @@ export const PROJECT_CONTEXT_SCHEMA_VERSION = 1;
 export const PROJECT_USAGE_SCHEMA_VERSION = 1;
 export const AGENT_WORKSPACE_SCHEMA_VERSION = 1;
 export const STYLE_APPLICATION_SCHEMA_VERSION = 1;
-export const STORYBOARD_SCHEMA_VERSION = 1;
+export const STORYBOARD_SCHEMA_VERSION = 2;
 
 const DEFAULT_TIMELINE_DURATION = 12;
 const DEFAULT_TRACKS = [
@@ -89,17 +89,69 @@ const normalizeAgentWorkspace = (value, {now, createId}) => {
 
 const asCoordinate = (value, fallback = 0) => Number.isFinite(value) ? value : fallback;
 
-const normalizeStoryboardBeat = (value, {createId}) => {
+const normalizeStoryboardHero = (value) => {
+  if (!isRecord(value) || !asNullableString(value.assetId)) return null;
+  return {
+    assetId: asString(value.assetId),
+    prompt: asString(value.prompt),
+    generatedAt: asNullableString(value.generatedAt),
+    characterVersionIds: normalizeStringIds(value.characterVersionIds),
+  };
+};
+
+const normalizeStoryboardScreenplay = (value) => {
+  if (!isRecord(value) || !asNullableString(value.text)) return null;
+  return {
+    text: asString(value.text),
+    generatedAt: asNullableString(value.generatedAt),
+    modelId: asNullableString(value.modelId),
+    usage: isRecord(value.usage) ? sanitizeJson(value.usage) || {} : {},
+    editedAt: asNullableString(value.editedAt),
+  };
+};
+
+const normalizeStoryboardVideoPrompt = (value) => {
+  if (!isRecord(value) || !asNullableString(value.text)) return null;
+  const duration = Number(value.duration);
+  return {
+    text: asString(value.text),
+    duration: Number.isInteger(duration) && duration >= 4 && duration <= 15 ? duration : 6,
+    modelId: asNullableString(value.modelId),
+    videoModelId: asNullableString(value.videoModelId),
+    generatedAt: asNullableString(value.generatedAt),
+    editedAt: asNullableString(value.editedAt),
+    submittedAt: asNullableString(value.submittedAt),
+    usage: isRecord(value.usage) ? sanitizeJson(value.usage) || {} : {},
+  };
+};
+
+const normalizeStoryboardBeat = (value, {createId}, index = 0, legacyStills = []) => {
   if (typeof value === 'string') {
-    return value.trim() ? {id: createId('sb-beat'), text: value, mentions: {}} : null;
+    if (!value.trim()) return null;
+    value = {id: createId('sb-beat'), text: value, mentions: {}};
   }
   if (!isRecord(value)) return null;
   const text = asString(value.text);
   if (!text) return null;
+  const id = asString(value.id, createId('sb-beat'));
+  const legacyHero = [...legacyStills].reverse().find((still) =>
+    still.status === 'ready' && still.assetId && still.beatIds.includes(id));
   return {
-    id: asString(value.id, createId('sb-beat')),
+    id,
     text,
     mentions: isRecord(value.mentions) ? sanitizeJson(value.mentions) || {} : {},
+    layout: {
+      x: asCoordinate(value.layout?.x, 56 + index * 380),
+      y: asCoordinate(value.layout?.y, 72),
+    },
+    hero: normalizeStoryboardHero(value.hero) || (legacyHero ? {
+      assetId: legacyHero.assetId,
+      prompt: legacyHero.prompt,
+      generatedAt: null,
+      characterVersionIds: [],
+    } : null),
+    screenplay: normalizeStoryboardScreenplay(value.screenplay),
+    videoPrompt: normalizeStoryboardVideoPrompt(value.videoPrompt),
   };
 };
 
@@ -114,6 +166,28 @@ const normalizeStoryboard = (value, {createId}) => {
       z: asNumber(node.z, 1),
     };
     if (node.kind === 'act') {
+      const stills = (Array.isArray(node.stills) ? node.stills : []).filter(isRecord).map((still) => ({
+        id: asString(still.id, createId('sb-still')),
+        assetId: asNullableString(still.assetId),
+        beatIds: normalizeStringIds(still.beatIds),
+        prompt: asString(still.prompt),
+        status: ['generating', 'ready', 'failed'].includes(still.status) ? still.status : 'ready',
+      }));
+      const beats = (Array.isArray(node.beats) ? node.beats : [])
+        .map((beat, index) => normalizeStoryboardBeat(beat, {createId}, index, stills))
+        .filter(Boolean);
+      const beatIds = new Set(beats.map((beat) => beat.id));
+      const connections = Array.isArray(node.connections)
+        ? node.connections.filter(isRecord).map((connection) => ({
+          id: asString(connection.id, createId('sb-link')),
+          fromBeatId: asString(connection.fromBeatId),
+          toBeatId: asString(connection.toBeatId),
+        })).filter((connection) => beatIds.has(connection.fromBeatId) && beatIds.has(connection.toBeatId))
+        : beats.slice(1).map((beat, index) => ({
+          id: createId('sb-link'),
+          fromBeatId: beats[index].id,
+          toBeatId: beat.id,
+        }));
       return {
         ...base,
         kind: 'act',
@@ -121,16 +195,9 @@ const normalizeStoryboard = (value, {createId}) => {
         sceneId: asNullableString(node.sceneId),
         title: asString(node.title, `Act ${Math.round(asNumber(node.actNumber, 1, 1))}`),
         summary: asString(node.summary),
-        beats: (Array.isArray(node.beats) ? node.beats : [])
-          .map((beat) => normalizeStoryboardBeat(beat, {createId}))
-          .filter(Boolean),
-        stills: (Array.isArray(node.stills) ? node.stills : []).filter(isRecord).map((still) => ({
-          id: asString(still.id, createId('sb-still')),
-          assetId: asNullableString(still.assetId),
-          beatIds: normalizeStringIds(still.beatIds),
-          prompt: asString(still.prompt),
-          status: ['generating', 'ready', 'failed'].includes(still.status) ? still.status : 'ready',
-        })),
+        beats,
+        connections,
+        stills,
       };
     }
     return {...base, kind: 'note', text: asString(node.text)};
@@ -139,6 +206,7 @@ const normalizeStoryboard = (value, {createId}) => {
     schemaVersion: STORYBOARD_SCHEMA_VERSION,
     styleId: asNullableString(value.styleId),
     styleTitle: asString(value.styleTitle),
+    visualStyle: asString(value.visualStyle),
     pan: {x: asCoordinate(value.pan?.x), y: asCoordinate(value.pan?.y)},
     zoom: Number.isFinite(value.zoom) ? Math.min(2.5, Math.max(0.25, value.zoom)) : 1,
     nextZ: asNumber(value.nextZ, 10),
@@ -1434,6 +1502,38 @@ export const createProjectStore = ({
       project.storyboard = storyboard;
       affectedId = 'storyboard';
       changed = true;
+    } else if (command.type === 'storyboard/act-save') {
+      if (!project.storyboard) throw new Error('Storyboard act saves require an existing storyboard.');
+      const currentIndex = project.storyboard.nodes.findIndex((node) => node.kind === 'act' && node.id === command.actId);
+      if (currentIndex < 0) throw new Error(`Storyboard act was not found: ${command.actId}`);
+      if (!isRecord(command.act) || command.act.id !== command.actId || !Array.isArray(command.act.beats)) {
+        throw new Error('Storyboard act saves require a matching act draft with beats.');
+      }
+      const rawBeatIds = command.act.beats.map((beat) => asNullableString(beat?.id));
+      if (rawBeatIds.some((id) => !id) || new Set(rawBeatIds).size !== rawBeatIds.length) {
+        throw new Error('Storyboard act beats require unique ids.');
+      }
+      const rawBeatIdSet = new Set(rawBeatIds);
+      for (const connection of Array.isArray(command.act.connections) ? command.act.connections : []) {
+        if (!rawBeatIdSet.has(connection?.fromBeatId) || !rawBeatIdSet.has(connection?.toBeatId)) {
+          throw new Error('Storyboard connection references a missing beat.');
+        }
+      }
+      for (const beat of command.act.beats) {
+        if (!beat?.hero?.assetId) continue;
+        const asset = project.mediaAssets.find((candidate) => candidate.id === beat.hero.assetId);
+        if (!asset || asset.kind !== 'image') throw new Error('Storyboard beat heroes must reference an existing image asset.');
+      }
+      const normalized = normalizeStoryboard({
+        ...project.storyboard,
+        nodes: [command.act],
+      }, dependencies)?.nodes?.[0];
+      if (!normalized || normalized.kind !== 'act') throw new Error('Storyboard act draft is invalid.');
+      project.storyboard.nodes[currentIndex] = normalized;
+      const scene = project.scenes.find((candidate) => candidate.id === normalized.sceneId);
+      if (scene) scene.name = normalized.title;
+      affectedId = normalized.id;
+      changed = true;
     } else if (command.type === 'scene/update') {
       const scene = project.scenes.find((candidate) => candidate.id === command.sceneId);
       if (scene && isRecord(command.patch)) {
@@ -1608,6 +1708,13 @@ export const createProjectStore = ({
       if (characterIndex >= 0) {
         const versionIds = new Set(project.characters[characterIndex].versions.map((version) => version.id));
         project.characters.splice(characterIndex, 1);
+        for (const node of project.storyboard?.nodes || []) {
+          if (node.kind !== 'act') continue;
+          for (const beat of node.beats || []) {
+            beat.mentions = Object.fromEntries(Object.entries(beat.mentions || {})
+              .filter(([, characterId]) => characterId !== command.characterId));
+          }
+        }
         for (const clip of project.timeline.clips) {
           const previousIds = clip.provenance.characterVersionIds;
           clip.provenance.characterVersionIds = previousIds.filter((versionId) => !versionIds.has(versionId));

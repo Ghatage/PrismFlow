@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {createFalTimelineGenerationAdapter} from '../server/timeline-generation-adapter.mjs';
+import {nextBeatVideoTimelineStart} from '../src/beat-video.js';
 import {createProjectStore} from '../src/project-store.js';
 import {createTimelineDiffs} from '../src/timeline-diffs.js';
 import {
@@ -264,6 +265,55 @@ test('forwards reference image urls using each model input schema', async () => 
 
   await adapter.submitTimelineGeneration({...base, modelId: 'fal-ai/unknown-model'});
   assert.equal('image_url' in calls[3].payload, false);
+});
+
+test('Seedance 2 reference-to-video always receives @Image1, bounded duration, native audio, and no music', async () => {
+  const calls = [];
+  const fal = {
+    async submit(modelId, payload) { calls.push({modelId, payload}); return {request_id: 'seedance-beat-video'}; },
+    async status() { return {status: 'IN_QUEUE'}; },
+    async result() { return {}; },
+  };
+  const modelId = 'bytedance/seedance-2.0/reference-to-video';
+  const adapter = createFalTimelineGenerationAdapter({
+    fal,
+    modelInputs: {[modelId]: {imageKey: 'image_urls', imageKeyIsArray: true, hasPrompt: true}},
+  });
+
+  await adapter.submitTimelineGeneration({
+    operation: 'add',
+    prompt: '00:00 - 00:06 Pip wakes as moonlight crosses the crawlspace.',
+    modelId,
+    referenceImageUrls: ['https://assets.example.test/beat-still.png'],
+    duration: 6,
+    params: {duration: '6', resolution: '720p', aspect_ratio: 'auto', generate_audio: false},
+  });
+
+  assert.equal(calls[0].modelId, modelId);
+  assert.deepEqual(calls[0].payload.image_urls, ['https://assets.example.test/beat-still.png']);
+  assert.equal(calls[0].payload.duration, '6');
+  assert.equal(calls[0].payload.resolution, '720p');
+  assert.equal(calls[0].payload.generate_audio, true);
+  assert.match(calls[0].payload.prompt, /@Image1/);
+  assert.match(calls[0].payload.prompt, /No music or musical score/i);
+
+  await assert.rejects(() => adapter.submitTimelineGeneration({
+    operation: 'add', prompt: 'Too short', modelId,
+    referenceImageUrls: ['https://assets.example.test/beat-still.png'],
+    duration: 3, params: {duration: '3'},
+  }), /between 4 and 15 seconds/i);
+});
+
+test('beat video placement appends after the last clip on the active act track', () => {
+  const clips = [
+    {id: 'act-1-a', trackId: 'V1', sceneId: 'act-1', start: 0, duration: 4},
+    {id: 'act-1-b', trackId: 'V1', sceneId: 'act-1', start: 4, duration: 2.5},
+    {id: 'other-track', trackId: 'V2', sceneId: 'act-1', start: 20, duration: 5},
+    {id: 'other-act', trackId: 'V1', sceneId: 'act-2', start: 30, duration: 5},
+  ];
+
+  assert.equal(nextBeatVideoTimelineStart({clips, trackId: 'V1', sceneId: 'act-1'}), 6.5);
+  assert.equal(nextBeatVideoTimelineStart({clips, trackId: 'V1', sceneId: 'missing-act'}), 0);
 });
 
 test('normalizes reference image urls and drops unsendable schemes', () => {

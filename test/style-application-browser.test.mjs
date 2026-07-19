@@ -29,7 +29,7 @@ const readPersistedProject = (page) => page.evaluate(() => new Promise((resolve,
   openRequest.onerror = () => reject(openRequest.error);
   openRequest.onsuccess = () => {
     const database = openRequest.result;
-    const request = database.transaction('projects', 'readonly').objectStore('projects').get('current');
+    const request = database.transaction('projects', 'readonly').objectStore('projects').get('project-style-browser');
     request.onerror = () => reject(request.error);
     request.onsuccess = () => { database.close(); resolve(request.result?.project || null); };
   };

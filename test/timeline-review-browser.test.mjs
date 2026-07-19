@@ -215,7 +215,7 @@ const readPersistedProject = (page) => page.evaluate(() => new Promise((resolve,
   openRequest.onerror = () => reject(openRequest.error || new Error('Could not open PrismFlow database.'));
   openRequest.onsuccess = () => {
     const database = openRequest.result;
-    const request = database.transaction('projects', 'readonly').objectStore('projects').get('current');
+    const request = database.transaction('projects', 'readonly').objectStore('projects').get('project-browser');
     request.onerror = () => reject(request.error || new Error('Could not read PrismFlow project.'));
     request.onsuccess = () => {
       database.close();

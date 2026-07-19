@@ -29,7 +29,7 @@ const readPersistedProject = (page) => page.evaluate(() => new Promise((resolve,
   openRequest.onerror = () => reject(openRequest.error || new Error('Could not open PrismFlow database.'));
   openRequest.onsuccess = () => {
     const database = openRequest.result;
-    const request = database.transaction('projects', 'readonly').objectStore('projects').get('current');
+    const request = database.transaction('projects', 'readonly').objectStore('projects').get('project-storyboard-browser');
     request.onerror = () => reject(request.error || new Error('Could not read PrismFlow project.'));
     request.onsuccess = () => {
       database.close();
@@ -139,7 +139,7 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, fixture(origin));
 
-  await page.goto(`${origin}/?view=storyboard&characterAdapter=fake`, {waitUntil: 'networkidle'});
+  await page.goto(`${origin}/?view=storyboard&characterAdapter=fake&storyboardAdapter=fake&timelineAdapter=fake`, {waitUntil: 'networkidle'});
   await page.locator('.storyboard').waitFor();
   await page.waitForFunction(() => localStorage.getItem('prismflow.project') === null);
 
@@ -182,16 +182,101 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   const xAfter = await logicalX(firstAct);
   assert.ok(Math.abs((xAfter - xBefore) - (80 / zoom)) < 4);
 
-  // The act still reuses the fake character-generation pipeline and lands as scoped media.
-  await firstAct.locator('[data-action="generate-still"]').click();
-  await firstAct.locator('.board-still img').waitFor();
+  // A click (not a drag) opens an almost-full-screen act workspace without
+  // disturbing the storyboard canvas behind it.
+  await firstAct.locator('.board-act-header').click();
+  const actWorkspace = page.locator('.act-workspace-modal');
+  await actWorkspace.waitFor();
+  const workspaceBox = await actWorkspace.boundingBox();
+  assert.ok(workspaceBox.width > 1300);
+  assert.ok(workspaceBox.height > 900);
+
+  // Linked beats behave like a small ComfyUI graph. Inserting on a link
+  // splits it; deleting the inserted node removes both incident links and
+  // deliberately leaves the remaining beats disjointed.
+  assert.equal(await actWorkspace.locator('.act-beat-node').count(), 1);
+  await actWorkspace.locator('[data-action="append-linked-beat"]').click();
+  assert.equal(await actWorkspace.locator('.act-beat-node').count(), 2);
+  assert.equal(await actWorkspace.locator('.act-beat-connection').count(), 1);
+  await actWorkspace.locator('[data-action="insert-beat-on-connection"]').click();
+  assert.equal(await actWorkspace.locator('.act-beat-node').count(), 3);
+  assert.equal(await actWorkspace.locator('.act-beat-connection').count(), 2);
+  await actWorkspace.locator('.act-beat-node').nth(1).locator('[data-action="delete-workspace-beat"]').click();
+  assert.equal(await actWorkspace.locator('.act-beat-node').count(), 2);
+  assert.equal(await actWorkspace.locator('.act-beat-connection').count(), 0);
+  await actWorkspace.locator('.act-beat-node').first().locator('[data-action="append-linked-beat"]').click();
+  assert.equal(await actWorkspace.locator('.act-beat-node').count(), 3);
+  assert.equal(await actWorkspace.locator('.act-beat-connection').count(), 1);
+
+  const movableBeat = actWorkspace.locator('.act-beat-node').nth(1);
+  const leftBefore = Number.parseFloat(await movableBeat.evaluate((element) => element.style.left));
+  const modalDragHandle = movableBeat.locator('.act-beat-drag-handle');
+  const modalDragBox = await modalDragHandle.boundingBox();
+  await page.mouse.move(modalDragBox.x + 8, modalDragBox.y + 8);
+  await page.mouse.down();
+  await page.mouse.move(modalDragBox.x + 68, modalDragBox.y + 38, {steps: 4});
+  await page.mouse.up();
+  const leftAfter = Number.parseFloat(await movableBeat.evaluate((element) => element.style.left));
+  assert.ok(Math.abs(leftAfter - leftBefore - 60) < 3);
+
+  const modalBeatText = actWorkspace.locator('[data-beat-description]').last();
+  await modalBeatText.fill('Marlow crosses the impossible tide with @Marlow');
+  await page.getByText('Unsaved changes', {exact: true}).waitFor();
+  await actWorkspace.locator('[data-action="save-act-workspace"]').click();
+  await page.getByText('Saved', {exact: true}).waitFor();
+  await actWorkspace.locator('[data-action="close-act-workspace"]').click();
+  await actWorkspace.waitFor({state: 'detached'});
+  await firstAct.locator('.board-act-header').click();
+  await actWorkspace.waitFor();
+  assert.equal(await actWorkspace.locator('[data-beat-description]').last().inputValue(), 'Marlow crosses the impossible tide with @Marlow');
+
+  // X and Escape share the explicit-draft guard. Dismissing keeps the draft;
+  // accepting discards it and reopening restores the last saved snapshot.
+  await actWorkspace.locator('[data-act-summary]').fill('Unsaved summary draft');
+  page.once('dialog', async (dialog) => {
+    assert.match(dialog.message(), /Discard unsaved changes/);
+    await dialog.dismiss();
+  });
+  await actWorkspace.locator('[data-action="close-act-workspace"]').click();
+  await actWorkspace.waitFor();
+  assert.equal(await actWorkspace.locator('[data-act-summary]').inputValue(), 'Unsaved summary draft');
+  page.once('dialog', async (dialog) => dialog.accept());
+  await page.keyboard.press('Escape');
+  await actWorkspace.waitFor({state: 'detached'});
+  await firstAct.locator('.board-act-header').click();
+  await actWorkspace.waitFor();
+  assert.equal(await actWorkspace.locator('[data-act-summary]').inputValue(), 'The story begins.');
+
+  const reopenedBeat = actWorkspace.locator('.act-beat-node').last();
+  await reopenedBeat.locator('[data-action="generate-beat-still"]').click();
+  await reopenedBeat.locator('.act-beat-hero img').waitFor();
+  await reopenedBeat.locator('[data-action="generate-beat-script"]').click();
+  const screenplay = reopenedBeat.locator('[data-beat-screenplay]');
+  await screenplay.waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-beat-screenplay]')]
+    .some((textarea) => textarea.value.includes('EXT. HARBOR')));
+  await screenplay.fill('EXT. HARBOR — DAWN\n\nMarlow crosses the impossible tide.');
+  await actWorkspace.locator('[data-action="save-act-workspace"]').click();
+  await page.getByText('Saved', {exact: true}).waitFor();
+  await actWorkspace.locator('[data-action="close-act-workspace"]').click();
+
+  assert.match(await firstAct.locator('.board-act-progress').textContent(), /1\/3 stills.*1\/3 scripts/s);
 
   await page.locator('[data-action="jump-to-editor"]').click();
   await page.locator('[data-media-hydrated="true"]').waitFor();
+  assert.equal(await page.locator('[data-action="select-act"]').inputValue(), 'scene-act-1');
+  await page.locator('[data-tab="script"]').click();
+  assert.match(await page.locator('.script-beat-list').textContent(), /Marlow crosses the impossible tide/);
+  const canonicalScriptForm = page.locator('[data-storyboard-script-form]').filter({hasText: 'Marlow crosses the impossible tide'});
+  await canonicalScriptForm.locator('textarea[name="text"]').fill('EXT. HARBOR — DAWN\n\nEDITOR REVISION: Marlow crosses the impossible tide.');
+  await canonicalScriptForm.evaluate((form) => form.requestSubmit());
+  assert.match(await page.locator('[data-storyboard-script-form]').filter({hasText: 'Marlow crosses the impossible tide'}).locator('textarea[name="text"]').inputValue(), /EDITOR REVISION/);
+  await page.locator('[data-tab="media"]').click();
   const actSelect = page.locator('[data-action="select-act"]');
   assert.deepEqual(await actSelect.locator('option').allTextContents(), ['All', 'Act One', 'Act Two']);
 
   // All concatenates the second act after the first act's two-second extent.
+  await actSelect.selectOption('all');
   assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-1"]').evaluate((element) => parseFloat(element.style.left)), 0);
   assert.equal(await page.locator('.timeline-clip[data-clip-id="clip-act-2"]').evaluate((element) => parseFloat(element.style.left)), 176);
 
@@ -221,19 +306,77 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   const movedClip = afterDrag.timeline.clips.find((clip) => clip.id === 'clip-act-2');
   assert.ok(Math.abs(movedClip.start - 1) < 0.15, `expected act-local start near 1s, got ${movedClip.start}`);
 
+  // The selected act exposes its beat stills as a horizontally scrollable,
+  // linked strip. A still opens the large Seedance prompt workspace.
+  await page.locator('[data-action="select-act"]').selectOption('scene-act-1');
+  const beatStrip = page.locator('.editor-beat-strip');
+  await beatStrip.waitFor();
+  assert.equal(await beatStrip.evaluate((element) => getComputedStyle(element.querySelector('.editor-beat-strip-scroll')).overflowX), 'auto');
+  assert.equal(await beatStrip.locator('[data-editor-beat-id]').count(), 3);
+  assert.equal(await beatStrip.locator('.editor-beat-connector').count(), 1);
+  await beatStrip.locator('[data-editor-beat-id]').last().click();
+
+  const beatVideoModal = page.locator('.beat-video-modal');
+  await beatVideoModal.waitFor();
+  const beatVideoBox = await beatVideoModal.boundingBox();
+  assert.ok(beatVideoBox.width > 1250);
+  assert.ok(beatVideoBox.height > 850);
+  assert.match(await beatVideoModal.locator('.beat-video-screenplay').textContent(), /EDITOR REVISION/);
+  await beatVideoModal.locator('[data-beat-video-duration]').selectOption('6');
+  assert.deepEqual(await beatVideoModal.locator('[data-beat-video-duration] option').allTextContents(), [
+    '4 seconds', '5 seconds', '6 seconds', '7 seconds', '8 seconds', '9 seconds',
+    '10 seconds', '11 seconds', '12 seconds', '13 seconds', '14 seconds', '15 seconds',
+  ]);
+  await beatVideoModal.locator('[data-action="generate-beat-video-prompt"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-beat-video-prompt]')?.value.includes('00:04 - 00:06'));
+  const generatedVideoPrompt = beatVideoModal.locator('[data-beat-video-prompt]');
+  assert.match(await generatedVideoPrompt.inputValue(), /@Image1/);
+  assert.match(await generatedVideoPrompt.inputValue(), /No music or musical score/i);
+  await generatedVideoPrompt.fill(`${await generatedVideoPrompt.inputValue()}\nKeep the final camera move gentle.`);
+  await beatVideoModal.locator('[data-action="generate-beat-video"]').click();
+  await beatVideoModal.waitFor({state: 'detached'});
+  const pendingBeatVideo = page.locator('.generation-pending');
+  await pendingBeatVideo.waitFor();
+  // The generated prompt remains internally relative to 00:00, but the clip
+  // appends externally after the accepted two-second act-one plate.
+  assert.equal(await pendingBeatVideo.evaluate((element) => parseFloat(element.style.left)), 176);
+  assert.match(await pendingBeatVideo.textContent(), /Generating beat video/);
+  await pendingBeatVideo.waitFor({state: 'detached', timeout: 8_000});
+
+  const afterBeatVideo = await readPersistedProject(page);
+  const generatedBeatVideo = afterBeatVideo.mediaAssets.find((asset) => asset.metadata?.providerModelId === 'bytedance/seedance-2.0/reference-to-video');
+  assert.ok(generatedBeatVideo);
+  const generatedBeatClip = afterBeatVideo.timeline.clips.find((clip) => clip.assetId === generatedBeatVideo.id);
+  assert.equal(generatedBeatClip.start, 2);
+  assert.equal(generatedBeatClip.duration, 6);
+  assert.match(generatedBeatClip.provenance.prompt, /Keep the final camera move gentle/);
+
+  // Returning to the beat restores the exact editable prompt that was sent.
+  await beatStrip.locator('[data-editor-beat-id]').last().click();
+  await beatVideoModal.waitFor();
+  assert.match(await beatVideoModal.locator('[data-beat-video-prompt]').inputValue(), /Keep the final camera move gentle/);
+  assert.equal(await beatVideoModal.locator('[data-beat-video-duration]').inputValue(), '6');
+  await beatVideoModal.getByRole('button', {name: 'Close', exact: true}).click();
+  await page.waitForFunction(() => [...document.images].every((image) => image.complete));
+
   // Reload returns to the storyboard URL and restores zoom, movement, beat, still, and cast from IDB.
   await page.reload({waitUntil: 'networkidle'});
   await page.locator('.storyboard').waitFor();
   assert.notEqual(await page.locator('#storyboardZoom').textContent(), '100%');
   assert.ok(await logicalX(page.locator('[data-node-id="node-act-1"]')) > 300);
-  await page.locator('[data-node-id="node-act-1"] .board-beat').filter({hasText: '@Marlow'}).waitFor();
-  await page.locator('[data-node-id="node-act-1"] .board-still img').waitFor();
+  await page.locator('[data-node-id="node-act-1"] .board-beat').filter({hasText: '@Marlow'}).last().waitFor();
   await page.locator('[data-cast-character-id]').filter({hasText: 'Marlow'}).waitFor();
+  await page.locator('[data-node-id="node-act-1"] .board-act-header').click();
+  await page.locator('.act-workspace-modal .act-beat-hero img').waitFor();
+  assert.match(await page.locator('.act-workspace-modal [data-beat-screenplay]').last().inputValue(), /EDITOR REVISION/);
 
   const persisted = await readPersistedProject(page);
   const persistedBeat = persisted.storyboard.nodes.find((node) => node.id === 'node-act-1').beats.at(-1);
   assert.equal(persistedBeat.mentions.Marlow, persisted.characters[0].id);
-  assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.actStill).sceneId, 'scene-act-1');
+  assert.ok(persistedBeat.hero.assetId);
+  assert.match(persistedBeat.videoPrompt.text, /Keep the final camera move gentle/);
+  assert.equal(persistedBeat.videoPrompt.duration, 6);
+  assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.storyboardBeatId === persistedBeat.id).sceneId, 'scene-act-1');
   assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.providerModelId === 'local/fake-character-sheet-v1').sceneId, null);
   assert.deepEqual(browserErrors, []);
 });

@@ -1,12 +1,13 @@
 export const PROJECT_DATABASE_NAME = 'prismflow.project';
-export const PROJECT_DATABASE_VERSION = 3;
+export const PROJECT_DATABASE_VERSION = 4;
 export const PROJECT_STORE_NAME = 'projects';
 export const ASSET_STORE_NAME = 'assets';
 export const MODEL_PRICING_STORE_NAME = 'modelPricing';
 export const VIDEO_FRAME_STORE_NAME = 'videoFrames';
 export const VIDEO_FRAME_MANIFEST_STORE_NAME = 'videoFrameManifests';
 
-const CURRENT_PROJECT_ID = 'current';
+const LEGACY_PROJECT_ID = 'current';
+const MIGRATED_PROJECT_FALLBACK_ID = 'project-migrated';
 
 const hasIndexedDb = (indexedDBApi) => Boolean(indexedDBApi && typeof indexedDBApi.open === 'function');
 const hasStoragePersistence = (storageApi) => Boolean(storageApi && typeof storageApi.persist === 'function');
@@ -22,8 +23,9 @@ export const createBrowserDatabase = ({
     if (!databasePromise) {
       databasePromise = new Promise((resolve, reject) => {
         const request = indexedDBApi.open(PROJECT_DATABASE_NAME, PROJECT_DATABASE_VERSION);
-        request.onupgradeneeded = () => {
+        request.onupgradeneeded = (event) => {
           const database = request.result;
+          const oldVersion = event?.oldVersion ?? 0;
           if (!database.objectStoreNames.contains(PROJECT_STORE_NAME)) {
             database.createObjectStore(PROJECT_STORE_NAME, {keyPath: 'id'});
           }
@@ -42,6 +44,19 @@ export const createBrowserDatabase = ({
           }
           if (!database.objectStoreNames.contains(VIDEO_FRAME_MANIFEST_STORE_NAME)) {
             database.createObjectStore(VIDEO_FRAME_MANIFEST_STORE_NAME, {keyPath: 'id'});
+          }
+          if (oldVersion > 0 && oldVersion < 4) {
+            // v3 kept a single project under the 'current' key; rekey it by its
+            // own project id so the store can hold one record per project.
+            const store = request.transaction.objectStore(PROJECT_STORE_NAME);
+            const legacy = store.get(LEGACY_PROJECT_ID);
+            legacy.onsuccess = () => {
+              const record = legacy.result;
+              if (!record?.project) return;
+              const projectId = record.project.project?.id || MIGRATED_PROJECT_FALLBACK_ID;
+              store.put({id: projectId, project: record.project});
+              store.delete(LEGACY_PROJECT_ID);
+            };
           }
         };
         request.onsuccess = () => resolve(request.result);
@@ -80,13 +95,35 @@ export const createBrowserDatabase = ({
       }
     },
 
-    async loadProject() {
-      const record = await run(PROJECT_STORE_NAME, 'readonly', (store) => store.get(CURRENT_PROJECT_ID));
+    async loadProject(projectId) {
+      if (!projectId) return null;
+      const record = await run(PROJECT_STORE_NAME, 'readonly', (store) => store.get(projectId));
       return record?.project || null;
     },
 
     async saveProject(project) {
-      await run(PROJECT_STORE_NAME, 'readwrite', (store) => store.put({id: CURRENT_PROJECT_ID, project}));
+      const projectId = project?.project?.id;
+      if (!projectId) return;
+      await run(PROJECT_STORE_NAME, 'readwrite', (store) => store.put({id: projectId, project}));
+    },
+
+    async listProjects() {
+      const records = await run(PROJECT_STORE_NAME, 'readonly', (store) => store.getAll());
+      return (Array.isArray(records) ? records : []).map((record) => record?.project).filter(Boolean);
+    },
+
+    async deleteProject(projectId) {
+      if (!projectId) return;
+      const persisted = await this.loadProject(projectId);
+      await run(PROJECT_STORE_NAME, 'readwrite', (store) => store.delete(projectId));
+      // Character and style sheets live in mediaAssets too, so this sweep
+      // covers every blob the project owns. Asset ids are never shared
+      // between projects (each is generated within one project).
+      const assetIds = (persisted?.mediaAssets || []).map((asset) => asset?.id).filter(Boolean);
+      for (const assetId of assetIds) {
+        await this.removeAsset(assetId);
+        await this.removeVideoFrames(assetId);
+      }
     },
 
     async putAsset(assetId, blob) {

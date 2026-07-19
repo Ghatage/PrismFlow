@@ -113,9 +113,10 @@ test('renders a custom transition in the preview and creates one from a prompt',
   await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await page.locator('[data-media-hydrated="true"]').waitFor();
 
-  // Panel: built-ins, the fixture's custom card, and the AI add card.
+  // Panel: the fill-gap bridge, built-ins, the fixture's custom card, and the AI add card.
   await page.locator('[data-tab="transitions"]').click();
-  assert.equal(await page.locator('.transition-card[data-transition-type]').count(), 7);
+  assert.equal(await page.locator('.transition-card[data-transition-type]').count(), 8);
+  assert.equal(await page.locator('.transition-card.gap-fill').count(), 1);
   assert.equal(await page.locator('.transition-card.custom').count(), 1);
   await page.locator('.transition-card.add-card').waitFor();
 

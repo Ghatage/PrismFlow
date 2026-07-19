@@ -59,6 +59,16 @@ It returns model metadata, pricing, the derived API documentation URL, and ranki
 
 The editor now persists character versions and generation provenance while keeping final rendering as a separate future layer.
 
+## Storyboard act workspaces
+
+Click an act card to open its near-fullscreen beat workspace. Beats are editable graph nodes: use a link’s `+` to insert into that chain, a node’s output `+` to append a linked beat, or `+ Add beat` to create a standalone node. Deleting a beat removes its incident links without reconnecting the remaining nodes. `Save` commits the whole act atomically; closing a dirty act with X or Escape asks before discarding it.
+
+Each beat can generate a hero still and an editable screenplay block. `@Character` references resolve to that character’s active or locked sheet version. The server combines those reference sheets with the target beat, the ordered story so far, narrative structure, and cinematic direction, then sends the still to `fal-ai/nano-banana-2/edit` (or the text-to-image endpoint when there are no character references). Screenplay generation runs through FAL’s OpenRouter endpoint with `google/gemini-2.5-flash` by default; override it with `PRISMFLOW_STORYBOARD_SCRIPT_MODEL`. Provider credentials and model routing remain server-side.
+
+Use `?storyboardAdapter=fake` for deterministic local still, screenplay, and video-prompt generation. Generated beat screenplays are canonical: the editor’s Script panel reads and saves the same storyboard records.
+
+The editor opens on the first act and shows that act’s saved beat stills in a horizontally scrollable linked strip below the player. Clicking a still opens the beat-video workspace: it displays the canonical screenplay beside the reference image, generates an editable time-coded prompt for a selected 4–15 second duration, and submits the prompt plus `@Image1` to `bytedance/seedance-2.0/reference-to-video`. Generated and edited prompts are stored on their canonical storyboard beats with the selected duration, so reopening a beat restores the exact prompt that was sent. Seedance native audio stays enabled for dialogue, ambience, and sound effects, while the browser and server both enforce an explicit no-music direction. The generated prompt keeps an internal clock beginning at 00:00, but the resulting clip is appended externally after the last clip on the active act’s target video track. After submission, the modal closes and a pulsing timeline clip reserves that appended span until the output lands.
+
 ## Apply Style
 
 Apply Style runs up to three clip jobs concurrently and persists their queue state so unfinished work resumes after a refresh. Video clips are trimmed to their exact source range, then sent to `fal-ai/kling-video/o3/standard/video-to-video/edit`; image clips use `fal-ai/nano-banana-2/edit`. A style version can contribute up to four image references. The optional `PRISMFLOW_STYLE_VIDEO_MODEL`, `PRISMFLOW_STYLE_IMAGE_MODEL`, and `PRISMFLOW_STYLE_TRIM_MODEL` environment variables override those server-side endpoints.

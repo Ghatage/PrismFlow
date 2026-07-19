@@ -1,5 +1,10 @@
 import {normalizeTimelineGenerationInput} from '../src/timeline-generation.js';
 import {imageInputFor} from '../src/prompt-mentions.js';
+import {
+  normalizeSeedanceDuration,
+  SEEDANCE_REFERENCE_VIDEO_MODEL_ID,
+  withSeedanceReferenceDirections,
+} from '../src/beat-video.js';
 
 const providerStatus = (value) => String(value?.status || value || '').toUpperCase();
 
@@ -35,6 +40,16 @@ export const createFalTimelineGenerationAdapter = ({fal, modelInputs = {}}) => {
         payload[imageInput.key] = imageInput.isArray
           ? normalized.referenceImageUrls
           : normalized.referenceImageUrls[0];
+      }
+      if (normalized.modelId === SEEDANCE_REFERENCE_VIDEO_MODEL_ID) {
+        if (!normalized.referenceImageUrls.length) throw new Error('Seedance reference-to-video requires a beat still.');
+        const duration = normalizeSeedanceDuration(normalized.duration ?? payload.duration);
+        payload.prompt = withSeedanceReferenceDirections(payload.prompt);
+        payload.duration = String(duration);
+        payload.resolution = ['480p', '720p', '1080p', '4k'].includes(payload.resolution) ? payload.resolution : '720p';
+        payload.aspect_ratio ||= 'auto';
+        payload.generate_audio = true;
+        payload.bitrate_mode ||= 'standard';
       }
       const submitted = await fal.submit(normalized.modelId, payload);
       const jobId = submitted?.request_id || submitted?.requestId;

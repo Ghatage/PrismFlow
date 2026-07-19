@@ -52,7 +52,7 @@ export const captureVideoFrame = async (video, time, {
   return {blob, width, height};
 };
 
-const blobToDataUrl = async (blob) => {
+export const blobToDataUrl = async (blob) => {
   if (typeof FileReader !== 'undefined') {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();

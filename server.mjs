@@ -12,6 +12,8 @@ import {createLocalVideoVlmAdapter} from './server/video-vlm.mjs';
 import {createVideoSearchAdapter} from './server/video-search.mjs';
 import {createLlmAdapter} from './server/llm-adapter.mjs';
 import {createFalStyleApplicationAdapter} from './server/style-application-adapter.mjs';
+import {createFalStoryboardGenerationAdapter} from './server/storyboard-generation-adapter.mjs';
+import {createFalMusicGenerationAdapter} from './server/music-generation-adapter.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -32,6 +34,8 @@ const videoSearch = createVideoSearchAdapter({
 });
 const llm = createLlmAdapter();
 const styleApplications = createFalStyleApplicationAdapter({fal});
+const storyboardGenerations = createFalStoryboardGenerationAdapter({fal});
+const musicGenerations = createFalMusicGenerationAdapter({fal});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -110,8 +114,13 @@ const server = createServer(async (request, response) => {
       adapter: 'ready',
       configured: fal.configured,
       characterModelId: characterSheets.modelId,
+      storyboardStillModelId: storyboardGenerations.stillModelId,
+      storyboardStillEditModelId: storyboardGenerations.stillEditModelId,
+      storyboardScriptModelId: storyboardGenerations.scriptModelId,
       styleVideoModelId: styleApplications.videoModelId,
       styleImageModelId: styleApplications.imageModelId,
+      musicModelId: musicGenerations.musicModelId,
+      scoreDirectionModelId: musicGenerations.scoreDirectionModelId,
     });
     return;
   }
@@ -263,6 +272,70 @@ const server = createServer(async (request, response) => {
   const characterJobMatch = url.pathname.match(/^\/api\/characters\/jobs\/([^/]+)$/);
   if (characterJobMatch && request.method === 'GET') {
     const result = await characterSheets.getCharacterSheetJob(decodeURIComponent(characterJobMatch[1]));
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === '/api/storyboard/stills' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 16_000_000);
+      sendJson(response, 202, await storyboardGenerations.submitStill(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const storyboardStillJobMatch = url.pathname.match(/^\/api\/storyboard\/stills\/([^/]+)$/);
+  if (storyboardStillJobMatch && request.method === 'GET') {
+    const result = await storyboardGenerations.getStillJob(decodeURIComponent(storyboardStillJobMatch[1]));
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (url.pathname === '/api/storyboard/scripts/generate' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      sendJson(response, 200, await storyboardGenerations.generateScreenplay(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/storyboard/video-prompts/generate' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      sendJson(response, 200, await storyboardGenerations.generateVideoPrompt(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/music/score-direction' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      sendJson(response, 200, await musicGenerations.generateScoreDirection(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  if (url.pathname === '/api/music/generate' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      sendJson(response, 202, await musicGenerations.submitScore(body));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const musicJobMatch = url.pathname.match(/^\/api\/music\/jobs\/([^/]+)$/);
+  if (musicJobMatch && request.method === 'GET') {
+    const result = await musicGenerations.getScoreJob(decodeURIComponent(musicJobMatch[1]));
     sendJson(response, 200, result);
     return;
   }

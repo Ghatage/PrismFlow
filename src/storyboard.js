@@ -37,6 +37,7 @@ export const buildStoryboardFromStyle = (style) => {
     schemaVersion: 1,
     styleId: style.id,
     styleTitle: style.title,
+    visualStyle: '',
     pan: {x: 0, y: 0},
     zoom: 1,
     nextZ: 10,
@@ -92,31 +93,19 @@ const beatTextMarkup = (beat) => {
   return html;
 };
 
-const stillMarkup = (still, options) => {
-  if (still.status === 'generating') {
-    return `<figure class="board-still is-generating" data-still-id="${still.id}"><span>Generating…</span></figure>`;
-  }
-  if (still.status === 'failed') {
-    return `<figure class="board-still is-failed" data-still-id="${still.id}"><span>Still failed</span><button class="board-still-remove" data-action="remove-still" type="button">×</button></figure>`;
-  }
-  const asset = still.assetId ? options.assetById?.(still.assetId) : null;
-  if (!asset?.url) return '';
-  return `<figure class="board-still" data-still-id="${still.id}"><img src="${escapeHtml(asset.url)}" alt="${escapeHtml(asset.name || 'Scene still')}" draggable="false" /></figure>`;
-};
-
 const actInnerMarkup = (node, options) => {
-  const generating = node.stills.some((still) => still.status === 'generating');
-  const stills = node.stills.map((still) => stillMarkup(still, options)).join('');
+  const beats = node.beats || [];
+  const stillCount = beats.filter((beat) => Boolean(beat.hero?.assetId)).length;
+  const scriptCount = beats.filter((beat) => Boolean(beat.screenplay?.text?.trim())).length;
   return `
     <header class="board-act-header">
       <span class="board-act-number">ACT ${node.actNumber}</span>
       <span class="board-act-title" data-editable-title>${escapeHtml(node.title)}</span>
     </header>
     <p class="board-act-summary" data-editable>${escapeHtml(node.summary)}</p>
-    ${node.beats.length ? `<ul class="board-beats">${node.beats.map((beat) => `<li class="board-beat" data-beat-id="${beat.id}"><span class="board-beat-text" data-editable-beat>${beatTextMarkup(beat)}</span><button class="board-beat-delete" data-action="delete-beat" title="Delete beat" aria-label="Delete beat" type="button">×</button></li>`).join('')}</ul>` : ''}
+    ${beats.length ? `<ul class="board-beats">${beats.map((beat) => `<li class="board-beat" data-beat-id="${beat.id}"><span class="board-beat-text" data-editable-beat>${beatTextMarkup(beat)}</span><button class="board-beat-delete" data-action="delete-beat" title="Delete beat" aria-label="Delete beat" type="button">×</button></li>`).join('')}</ul>` : ''}
     <div class="board-beat-add"><textarea data-beat-input rows="1" placeholder="Add a beat · @mention cast · Enter saves"></textarea></div>
-    ${stills ? `<div class="board-act-stills">${stills}</div>` : ''}
-    <div class="board-act-actions"><button class="board-still-button" data-action="generate-still" type="button" ${generating ? 'disabled' : ''}>${generating ? 'Generating still…' : '✦ Generate still'}</button></div>
+    <div class="board-act-progress" aria-label="Act completion"><span>${stillCount}/${beats.length} stills</span><span>${scriptCount}/${beats.length} scripts</span><em>Click card to open</em></div>
   `;
 };
 
@@ -197,11 +186,23 @@ const commitBeat = (textarea) => {
   const node = board.nodes.find((entry) => entry.id === nodeElement?.dataset.nodeId);
   const text = textarea.value.trim();
   if (!node || !text) return;
-  node.beats.push({
+  const outgoingIds = new Set((node.connections || []).map((connection) => connection.fromBeatId));
+  const sourceBeat = [...node.beats].reverse().find((beat) => !outgoingIds.has(beat.id)) || null;
+  const beat = {
     id: nodeId('sb-beat'),
     text,
     mentions: options.resolveMentions?.(text) || {},
-  });
+    layout: sourceBeat
+      ? {x: (sourceBeat.layout?.x || 56) + 380, y: sourceBeat.layout?.y || 72}
+      : {x: 56, y: 72},
+    hero: null,
+    screenplay: null,
+  };
+  node.beats.push(beat);
+  node.connections ||= [];
+  if (sourceBeat) {
+    node.connections.push({id: nodeId('sb-link'), fromBeatId: sourceBeat.id, toBeatId: beat.id});
+  }
   textarea.value = '';
   // The chrome refresher intentionally preserves a focused composer while
   // unrelated board state changes. A committed beat is the exception: release
@@ -216,7 +217,10 @@ const commitBeat = (textarea) => {
 export const renderStoryboard = (app, options) => {
   if (app.querySelector('.storyboard')) {
     // Preserve drag state across stray re-renders; adopt the latest options.
-    if (context) context.options = options;
+    if (context) {
+      context.options = options;
+      context.board = options.storyboard;
+    }
     return;
   }
 
@@ -237,9 +241,13 @@ export const renderStoryboard = (app, options) => {
         <div class="storyboard-topbar-right">
           <span class="storyboard-hint">drag cards · pan background · pinch to zoom</span>
           <span class="storyboard-zoom" id="storyboardZoom">${Math.round((board.zoom || 1) * 100)}%</span>
-          <button class="button primary" type="button" data-action="jump-to-editor">Jump to editor →</button>
+          <button class="button primary" type="button" data-action="jump-to-editor">Editor →</button>
         </div>
       </header>
+      <div class="storyboard-stylebar">
+        <label for="storyboardVisualStyle">Visual style</label>
+        <textarea id="storyboardVisualStyle" rows="1" placeholder="Describe the film look once — medium, palette, lighting, lens, grade. It is applied to every still and video prompt.">${escapeHtml(board.visualStyle || '')}</textarea>
+      </div>
       <div class="board-viewport" id="boardViewport">
         <div class="board-canvas" id="boardCanvas">
           ${board.nodes.map((node) => nodeMarkup(node, options)).join('')}
@@ -252,6 +260,10 @@ export const renderStoryboard = (app, options) => {
   const root = app.querySelector('.storyboard');
   root.querySelector('[data-action="jump-to-editor"]').addEventListener('click', options.onJumpToEditor);
   root.querySelector('[data-action="back-to-picker"]').addEventListener('click', options.onBackToPicker);
+  root.querySelector('#storyboardVisualStyle').addEventListener('input', (event) => {
+    board.visualStyle = event.target.value;
+    scheduleChange();
+  });
 
   const viewport = root.querySelector('#boardViewport');
   const canvas = root.querySelector('#boardCanvas');
@@ -294,7 +306,7 @@ export const renderStoryboard = (app, options) => {
       node.z = ++board.nextZ;
       nodeElement.style.zIndex = node.z;
       nodeElement.classList.add('is-selected', 'is-dragging');
-      gesture = {mode: 'node', node, element: nodeElement, startX: event.clientX, startY: event.clientY, originX: node.x, originY: node.y};
+      gesture = {mode: 'node', node, element: nodeElement, startX: event.clientX, startY: event.clientY, originX: node.x, originY: node.y, moved: false};
     } else {
       viewport.classList.add('is-panning');
       gesture = {mode: 'pan', startX: event.clientX, startY: event.clientY, originX: board.pan.x, originY: board.pan.y};
@@ -304,18 +316,23 @@ export const renderStoryboard = (app, options) => {
 
   viewport.addEventListener('pointermove', (event) => {
     if (!gesture) return;
+    if (Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4) gesture.moved = true;
     lastEvent = event;
     if (!rafId) rafId = requestAnimationFrame(applyGesture);
   });
 
   const endGesture = (event) => {
     if (!gesture) return;
-    if (gesture.element) gesture.element.classList.remove('is-dragging');
+    const completed = gesture;
+    if (completed.element) completed.element.classList.remove('is-dragging');
     viewport.classList.remove('is-panning');
     if (viewport.hasPointerCapture?.(event.pointerId)) viewport.releasePointerCapture(event.pointerId);
     gesture = null;
     lastEvent = null;
     scheduleChange();
+    if (completed.mode === 'node' && !completed.moved && completed.node?.kind === 'act') {
+      options.onOpenAct?.(completed.node.id);
+    }
   };
   viewport.addEventListener('pointerup', endGesture);
   viewport.addEventListener('pointercancel', endGesture);
@@ -362,26 +379,12 @@ export const renderStoryboard = (app, options) => {
       const node = board.nodes.find((entry) => entry.id === deleteBeat.closest('.board-node')?.dataset.nodeId);
       if (node && beatId) {
         node.beats = node.beats.filter((beat) => beat.id !== beatId);
+        node.connections = (node.connections || []).filter((connection) =>
+          connection.fromBeatId !== beatId && connection.toBeatId !== beatId);
         refreshStoryboardChrome();
         scheduleChange();
       }
       return;
-    }
-    const removeStill = event.target.closest('[data-action="remove-still"]');
-    if (removeStill) {
-      const stillId = removeStill.closest('.board-still')?.dataset.stillId;
-      const node = board.nodes.find((entry) => entry.id === removeStill.closest('.board-node')?.dataset.nodeId);
-      if (node && stillId) {
-        node.stills = node.stills.filter((still) => still.id !== stillId);
-        refreshStoryboardChrome();
-        scheduleChange();
-      }
-      return;
-    }
-    const generateStill = event.target.closest('[data-action="generate-still"]');
-    if (generateStill) {
-      const node = board.nodes.find((entry) => entry.id === generateStill.closest('.board-node')?.dataset.nodeId);
-      if (node) options.onGenerateStill?.(node);
     }
   });
 
