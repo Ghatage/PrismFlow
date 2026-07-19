@@ -41,7 +41,7 @@ const referenceImagePlan = ({characterCount = 0, styleCount = 0, hasPreviousStil
     ? `The ${characterCount ? 'next' : 'first'} ${styleCount === 1 ? 'reference image is a visual style reference' : `${styleCount} reference images are visual style references`}. Match their rendering style, palette, lighting quality, and color grade exactly.`
     : '',
   hasPreviousStill
-    ? 'The final reference image is the previous storyboard frame. Keep the same world: match its environment, production design, lighting, and color grade exactly; change only the staging and camera this beat requires.'
+    ? 'The final reference image is the previous storyboard frame. Preserve continuity only where it agrees with the target beat and screenplay. If the target changes location, time, action, or mood, the target overrides this frame. Never reuse its camera, composition, staging, or pose.'
     : '',
 ].filter(Boolean);
 
@@ -59,6 +59,7 @@ const buildStillPrompt = (context, plan = {}) => {
     storyText(context) ? `Story so far:\n${storyText(context)}` : '',
     `Target beat: ${requiredText(context.target?.text, 'Target beat')}`,
     context.target?.screenplay ? `Target screenplay:\n${context.target.screenplay}` : '',
+    'The target beat and target screenplay are authoritative for the location, time, action, mood, blocking, and composition. Use references only for the identity, style, and continuity details that remain compatible with this target; do not copy their framing or pose.',
     castLine(inFrame, 'Characters in this frame'),
     castLine(offFrame, 'Other established cast — include only when the target beat calls for them'),
     ...referenceImagePlan(plan),

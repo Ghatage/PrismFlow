@@ -12,7 +12,7 @@ class MemoryStorage {
   setItem(key, value) { this.values.set(key, value); }
 }
 
-const createFixture = () => {
+const createFixture = ({adapter = createFakeTimelineGenerationAdapter(), resolveReferenceImageUrls} = {}) => {
   let id = 0;
   let seed = 100;
   const store = createProjectStore({
@@ -49,11 +49,43 @@ const createFixture = () => {
   const service = createClipRegenerationService({
     store,
     diffs,
-    adapter: createFakeTimelineGenerationAdapter(),
+    adapter,
     createSeed: () => ++seed,
+    resolveReferenceImageUrls,
   });
   return {store, diffs, service, assetId, clipId};
 };
+
+test('inherits the beat still as the first reference for rerolls and modified prompts', async () => {
+  const submissions = [];
+  const adapter = {
+    async submitGeneration(input) {
+      submissions.push(input);
+      return {jobId: `job-${submissions.length}`};
+    },
+    async getGenerationJob() { return {status: 'queued'}; },
+  };
+  const {service, clipId} = createFixture({
+    adapter,
+    resolveReferenceImageUrls: async ({clip}) => {
+      assert.equal(clip.id, clipId);
+      return ['https://assets.example.test/beat-still.png'];
+    },
+  });
+
+  await service.rerollSeed(clipId);
+  await service.regenerateClip({
+    clipId,
+    prompt: 'Pip sees a different constellation.',
+    referenceImageUrls: ['https://assets.example.test/pip-sheet.png'],
+  });
+
+  assert.deepEqual(submissions[0].referenceImageUrls, ['https://assets.example.test/beat-still.png']);
+  assert.deepEqual(submissions[1].referenceImageUrls, [
+    'https://assets.example.test/beat-still.png',
+    'https://assets.example.test/pip-sheet.png',
+  ]);
+});
 
 const finish = async (service, jobId) => {
   let job;

@@ -1,3 +1,9 @@
+import {
+  applyStillContextSettings,
+  buildStillContextItems,
+  normalizeStillContextSettings,
+} from './still-context.js';
+
 const clone = (value) => globalThis.structuredClone
   ? globalThis.structuredClone(value)
   : JSON.parse(JSON.stringify(value));
@@ -17,6 +23,7 @@ const normalizeBeat = (beat, index) => ({
   hero: beat?.hero && typeof beat.hero === 'object' ? clone(beat.hero) : null,
   screenplay: beat?.screenplay && typeof beat.screenplay === 'object' ? clone(beat.screenplay) : null,
   videoPrompt: beat?.videoPrompt && typeof beat.videoPrompt === 'object' ? clone(beat.videoPrompt) : null,
+  stillContext: normalizeStillContextSettings(beat?.stillContext),
 });
 
 const validConnections = (connections, beats) => {
@@ -68,6 +75,9 @@ export const createActWorkspace = ({project, actId, narrativeStyle = null, creat
         }
         if (command.patch.videoPrompt === null || (command.patch.videoPrompt && typeof command.patch.videoPrompt === 'object')) {
           beat.videoPrompt = clone(command.patch.videoPrompt);
+        }
+        if (command.patch.stillContext && typeof command.patch.stillContext === 'object') {
+          beat.stillContext = normalizeStillContextSettings(command.patch.stillContext);
         }
       }
     } else if (command.type === 'beat/insert') {
@@ -240,5 +250,17 @@ export const createActWorkspace = ({project, actId, narrativeStyle = null, creat
     };
   };
 
-  return {dispatch, read, snapshot, markSaved, contextFor};
+  const stillContextFor = (beatId) => {
+    const beat = act.beats.find((entry) => entry.id === beatId);
+    if (!beat) throw new Error(`Storyboard beat was not found: ${beatId}`);
+    return applyStillContextSettings(contextFor(beatId), beat.stillContext);
+  };
+
+  const stillContextItemsFor = (beatId) => {
+    const beat = act.beats.find((entry) => entry.id === beatId);
+    if (!beat) throw new Error(`Storyboard beat was not found: ${beatId}`);
+    return buildStillContextItems(contextFor(beatId), beat.stillContext);
+  };
+
+  return {dispatch, read, snapshot, markSaved, contextFor, stillContextFor, stillContextItemsFor};
 };

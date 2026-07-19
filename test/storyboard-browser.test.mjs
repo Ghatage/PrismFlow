@@ -191,6 +191,20 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   assert.ok(workspaceBox.width > 1300);
   assert.ok(workspaceBox.height > 900);
 
+  // Mention suggestions are portalled to document.body and must remain above
+  // the act workspace instead of being visually buried beneath its scrim.
+  const modalMentionInput = actWorkspace.locator('[data-beat-description]').first();
+  await modalMentionInput.fill('Marlow enters @Mar');
+  const modalMentionOption = page.locator('.mention-menu button').filter({hasText: 'Marlow'});
+  await modalMentionOption.waitFor();
+  assert.equal(await modalMentionOption.evaluate((button) => {
+    const rect = button.getBoundingClientRect();
+    const topmost = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return Boolean(topmost?.closest('.mention-menu'));
+  }), true);
+  await modalMentionOption.click();
+  assert.equal(await modalMentionInput.inputValue(), 'Marlow enters @Marlow ');
+
   // Linked beats behave like a small ComfyUI graph. Inserting on a link
   // splits it; deleting the inserted node removes both incident links and
   // deliberately leaves the remaining beats disjointed.
@@ -247,9 +261,32 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   await actWorkspace.waitFor();
   assert.equal(await actWorkspace.locator('[data-act-summary]').inputValue(), 'The story begins.');
 
+  // Generate one earlier still so the last beat's context exposes the prior
+  // image anchor that can otherwise make a very different screenplay look alike.
+  const priorBeat = actWorkspace.locator('.act-beat-node').first();
+  assert.equal(await priorBeat.locator('[data-action="modify-beat-still-context"]').textContent(), 'Modify context');
+  assert.equal(await priorBeat.locator('[data-action="generate-beat-still"]').textContent(), 'Generate still');
+  await priorBeat.locator('[data-action="generate-beat-still"]').click();
+  await priorBeat.locator('.act-beat-hero img').waitFor();
+
   const reopenedBeat = actWorkspace.locator('.act-beat-node').last();
+  await reopenedBeat.locator('[data-beat-screenplay]').fill('INT. ORBITAL OBSERVATORY — NIGHT\n\nMarlow floats between unfamiliar stars.');
+  await reopenedBeat.locator('[data-action="modify-beat-still-context"]').click();
+  const stillContextModal = page.locator('.still-context-modal');
+  await stillContextModal.waitFor();
+  assert.match(await stillContextModal.textContent(), /NANO BANANA INPUT/);
+  assert.equal(await stillContextModal.locator('[data-context-item-id="target:screenplay"] textarea').inputValue(), 'INT. ORBITAL OBSERVATORY — NIGHT\n\nMarlow floats between unfamiliar stars.');
+  assert.equal(await stillContextModal.locator('[data-context-item-id="previous-still"] img').count(), 1);
+  await stillContextModal.locator('[data-context-item-id="target:screenplay"] textarea').fill('INT. ZERO-G GLASS OBSERVATORY — NIGHT\n\nMarlow tumbles through a field of violet stars.');
+  await stillContextModal.locator('[data-context-item-id^="character:"] [data-action="toggle-still-context-item"]').click();
+  await stillContextModal.locator('[data-context-item-id="previous-still"] [data-action="toggle-still-context-item"]').click();
+  assert.match(await stillContextModal.locator('[data-context-item-id="previous-still"]').textContent(), /Hidden/);
+  await stillContextModal.getByRole('button', {name: 'Done'}).click();
+  await stillContextModal.waitFor({state: 'detached'});
+
   await reopenedBeat.locator('[data-action="generate-beat-still"]').click();
   await reopenedBeat.locator('.act-beat-hero img').waitFor();
+  assert.equal(await reopenedBeat.locator('[data-action="generate-beat-still"]').textContent(), 'Regenerate still');
   await reopenedBeat.locator('[data-action="generate-beat-script"]').click();
   const screenplay = reopenedBeat.locator('[data-beat-screenplay]');
   await screenplay.waitFor();
@@ -260,7 +297,7 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   await page.getByText('Saved', {exact: true}).waitFor();
   await actWorkspace.locator('[data-action="close-act-workspace"]').click();
 
-  assert.match(await firstAct.locator('.board-act-progress').textContent(), /1\/3 stills.*1\/3 scripts/s);
+  assert.match(await firstAct.locator('.board-act-progress').textContent(), /2\/3 stills.*1\/3 scripts/s);
 
   await page.locator('[data-action="jump-to-editor"]').click();
   await page.locator('[data-media-hydrated="true"]').waitFor();
@@ -354,6 +391,28 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   assert.equal(generatedBeatClip.duration, 6);
   assert.match(generatedBeatClip.provenance.prompt, /Keep the final camera move gentle/);
 
+  // Both timeline regeneration paths inherit @Image1 from the storyboard beat
+  // instead of submitting Seedance with an empty reference list.
+  const generatedBeatTimelineClip = page.locator(`.timeline-clip[data-clip-id="${generatedBeatClip.id}"]`);
+  await generatedBeatTimelineClip.click({button: 'right'});
+  await page.locator('.context-menu button').filter({hasText: 'Modify prompt + regen'}).click();
+  const regenerationModal = page.locator('.generate-modal');
+  await regenerationModal.waitFor();
+  assert.match(await regenerationModal.locator('.generate-attached-reference').textContent(), /AUTO-ATTACHED BEAT STILL.*@IMAGE1/s);
+  assert.equal(await regenerationModal.locator('.generate-attached-reference img').count(), 1);
+  await regenerationModal.locator('#generateVideoPrompt').fill('00:00 - 00:03 HARD CUT Marlow studies a violet star map. DIALOGUE (Marlow, 2s): "A different way home."\n00:03 - 00:06 HARD CUT overhead as the map unfolds. DIALOGUE (Marlow, 2s): "Now I see it."');
+  await regenerationModal.getByRole('button', {name: 'Regenerate', exact: true}).click();
+  await regenerationModal.waitFor({state: 'detached'});
+  await page.waitForFunction((clipId) => document.querySelector(`.timeline-clip[data-clip-id="${clipId}"]`)?.classList.contains('regenerating'), generatedBeatClip.id);
+  await page.waitForFunction((clipId) => !document.querySelector(`.timeline-clip[data-clip-id="${clipId}"]`)?.classList.contains('regenerating'), generatedBeatClip.id);
+  const afterModifiedRegeneration = await readPersistedProject(page);
+  assert.match(afterModifiedRegeneration.timeline.clips.find((clip) => clip.id === generatedBeatClip.id).provenance.prompt, /different way home/i);
+
+  await page.locator(`.timeline-clip[data-clip-id="${generatedBeatClip.id}"]`).click({button: 'right'});
+  await page.locator('.context-menu button').filter({hasText: 'Regenerate clip'}).click();
+  await page.waitForFunction((clipId) => document.querySelector(`.timeline-clip[data-clip-id="${clipId}"]`)?.classList.contains('regenerating'), generatedBeatClip.id);
+  await page.waitForFunction((clipId) => !document.querySelector(`.timeline-clip[data-clip-id="${clipId}"]`)?.classList.contains('regenerating'), generatedBeatClip.id);
+
   // Returning to the beat restores the exact editable prompt that was sent.
   await beatStrip.locator('[data-editor-beat-id]').last().click();
   await beatVideoModal.waitFor();
@@ -370,13 +429,18 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   await page.locator('[data-node-id="node-act-1"] .board-beat').filter({hasText: '@Marlow'}).last().waitFor();
   await page.locator('[data-cast-character-id]').filter({hasText: 'Marlow'}).waitFor();
   await page.locator('[data-node-id="node-act-1"] .board-act-header').click();
-  await page.locator('.act-workspace-modal .act-beat-hero img').waitFor();
+  await page.locator('.act-workspace-modal .act-beat-hero img').last().waitFor();
   assert.match(await page.locator('.act-workspace-modal [data-beat-screenplay]').last().inputValue(), /EDITOR REVISION/);
 
   const persisted = await readPersistedProject(page);
   const persistedBeat = persisted.storyboard.nodes.find((node) => node.id === 'node-act-1').beats.at(-1);
   assert.equal(persistedBeat.mentions.Marlow, persisted.characters[0].id);
   assert.ok(persistedBeat.hero.assetId);
+  assert.deepEqual(persistedBeat.stillContext.hiddenItemIds.sort(), [
+    `character:${persisted.characters[0].id}`,
+    'previous-still',
+  ].sort());
+  assert.match(persistedBeat.stillContext.overrides['target:screenplay'], /ZERO-G GLASS OBSERVATORY/);
   assert.match(persistedBeat.videoPrompt.text, /Keep the final camera move gentle/);
   assert.equal(persistedBeat.videoPrompt.duration, 6);
   assert.equal(persisted.mediaAssets.find((asset) => asset.metadata?.storyboardBeatId === persistedBeat.id).sceneId, 'scene-act-1');

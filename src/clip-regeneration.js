@@ -33,7 +33,13 @@ const changedFieldsFor = (clip, input) => {
   return changedFields;
 };
 
-export const createClipRegenerationService = ({store, diffs, adapter, createSeed = defaultSeed}) => {
+export const createClipRegenerationService = ({
+  store,
+  diffs,
+  adapter,
+  createSeed = defaultSeed,
+  resolveReferenceImageUrls = async () => [],
+}) => {
   if (!store || typeof store.getProject !== 'function' || typeof store.dispatch !== 'function') {
     throw new TypeError('Clip regeneration requires a project store.');
   }
@@ -53,7 +59,7 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
     return {project, clip};
   };
 
-  const deriveInput = (clip, overrides = {}) => {
+  const deriveInput = async (clip, overrides = {}) => {
     const project = store.getProject();
     const characterVersionIds = stringIds(clip.provenance.characterVersionIds);
     const persistedStyleVersionIds = stringIds(clip.provenance.styleVersionIds);
@@ -67,6 +73,7 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
       && !equalIds(characterVersionIds, stringIds(overrides.characterVersionIds))) {
       throw new Error('A locked character version cannot be replaced during regeneration.');
     }
+    const inheritedReferenceImageUrls = await resolveReferenceImageUrls({project, clip});
     return normalizeTimelineGenerationInput({
       operation: 'replace',
       sourceClipId: clip.id,
@@ -76,7 +83,12 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
       params: overrides.params ?? clip.provenance.params,
       qualityTier: overrides.qualityTier ?? clip.provenance.qualityTier,
       qualitySettings: overrides.qualitySettings ?? clip.provenance.qualitySettings,
-      referenceImageUrls: overrides.referenceImageUrls,
+      // The beat still is inherited first so reference-to-video providers keep
+      // it as @Image1; prompt mentions and other caller references follow it.
+      referenceImageUrls: [
+        ...(Array.isArray(inheritedReferenceImageUrls) ? inheritedReferenceImageUrls : []),
+        ...(Array.isArray(overrides.referenceImageUrls) ? overrides.referenceImageUrls : []),
+      ],
       characterVersionIds,
       styleVersionIds,
       parentAssetIds: [clip.assetId, ...(clip.provenance.parentAssetIds || [])],
@@ -89,7 +101,7 @@ export const createClipRegenerationService = ({store, diffs, adapter, createSeed
 
   const regenerateClip = async ({clipId, ...overrides}) => {
     const {project, clip} = sourceFor(clipId);
-    const input = deriveInput(clip, overrides);
+    const input = await deriveInput(clip, overrides);
     const {jobId} = await adapter.submitGeneration(input);
     if (typeof jobId !== 'string' || !jobId.trim()) throw new Error('Generation adapter returned no job id.');
     const job = {

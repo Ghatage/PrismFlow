@@ -482,6 +482,10 @@ test('storyboard act saves replace the whole draft atomically and reject danglin
             generatedAt: '2026-07-18T22:00:00.000Z',
             editedAt: '2026-07-18T22:01:00.000Z',
           },
+          stillContext: {
+            hiddenItemIds: ['previous-still', 'character:character-pip'],
+            overrides: {'target:screenplay': 'MARA: The sky is an ocean now.'},
+          },
         },
         {id: 'beat-two', text: 'Mara follows.', mentions: {}, layout: {x: 420, y: 60}},
       ],
@@ -495,6 +499,10 @@ test('storyboard act saves replace the whole draft atomically and reject danglin
   assert.match(act.beats[0].screenplay.text, /EXT\. HARBOR/);
   assert.match(act.beats[0].videoPrompt.text, /@Image1/);
   assert.equal(act.beats[0].videoPrompt.duration, 4);
+  assert.deepEqual(act.beats[0].stillContext, {
+    hiddenItemIds: ['previous-still', 'character:character-pip'],
+    overrides: {'target:screenplay': 'MARA: The sky is an ocean now.'},
+  });
   assert.deepEqual(act.connections, [{id: 'link-one-two', fromBeatId: 'beat-one', toBeatId: 'beat-two'}]);
 
   const beforeInvalidSave = JSON.stringify(store.getProject().storyboard.nodes[0]);

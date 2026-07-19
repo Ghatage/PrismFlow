@@ -168,6 +168,10 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 .brand-lockup { gap: 12px; cursor: pointer; }
 @property --spin { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
 .brand-mark {
+  --prism-face-size: 15px;
+  --prism-face-offset: -7.5px;
+  --prism-depth: 4.33px;
+  --prism-edge-width: 1px;
   height: 24px;
   width: 24px;
   perspective: 140px;
@@ -179,21 +183,21 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
 /* Each span is one face of a triangular prism: 120deg apart, pushed out by the
    apothem (15px face / 2*tan(60deg) = 4.33px), spun via the inherited --spin. */
 .brand-mark span {
-  border: 1px solid rgba(40, 50, 95, .28);
+  border: var(--prism-edge-width) solid rgba(40, 50, 95, .28);
   border-radius: 2px;
   box-shadow: 0 0 10px rgba(110, 130, 220, .3), inset 0 0 6px rgba(255, 255, 255, .5);
   display: block;
-  height: 15px;
+  height: var(--prism-face-size);
   left: 50%;
-  margin: -7.5px 0 0 -7.5px;
+  margin: var(--prism-face-offset) 0 0 var(--prism-face-offset);
   position: absolute;
   top: 50%;
-  width: 15px;
+  width: var(--prism-face-size);
   animation: prism-sheen 9s linear infinite;
 }
-.brand-mark span:nth-child(1) { background: linear-gradient(180deg, rgba(88, 90, 118, .55), rgba(89, 168, 255, .4)); transform: rotateY(var(--spin)) translateZ(4.33px); }
-.brand-mark span:nth-child(2) { background: linear-gradient(180deg, rgba(89, 220, 255, .55), rgba(62, 230, 194, .4)); transform: rotateY(calc(var(--spin) + 120deg)) translateZ(4.33px); animation-delay: -3s; }
-.brand-mark span:nth-child(3) { background: linear-gradient(180deg, rgba(255, 194, 96, .55), rgba(255, 125, 156, .4)); transform: rotateY(calc(var(--spin) + 240deg)) translateZ(4.33px); animation-delay: -6s; }
+.brand-mark span:nth-child(1) { background: linear-gradient(180deg, rgba(88, 90, 118, .55), rgba(89, 168, 255, .4)); transform: rotateY(var(--spin)) translateZ(var(--prism-depth)); }
+.brand-mark span:nth-child(2) { background: linear-gradient(180deg, rgba(89, 220, 255, .55), rgba(62, 230, 194, .4)); transform: rotateY(calc(var(--spin) + 120deg)) translateZ(var(--prism-depth)); animation-delay: -3s; }
+.brand-mark span:nth-child(3) { background: linear-gradient(180deg, rgba(255, 194, 96, .55), rgba(255, 125, 156, .4)); transform: rotateY(calc(var(--spin) + 240deg)) translateZ(var(--prism-depth)); animation-delay: -6s; }
 @keyframes prism-spin { to { --spin: 360deg; } }
 /* Lissajous tilt (Z at 1x, X at 2x frequency): the spin axis traces a
    figure-eight. 13s vs the 9s spin keeps the combined motion from ever
@@ -1208,7 +1212,9 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
   overflow: auto;
   padding: 4px;
   position: fixed;
-  z-index: 70;
+  /* The menu is portalled to document.body, so it must clear the act
+     workspace layer (z-index 80) as well as ordinary editor modals. */
+  z-index: 100;
 }
 .mention-menu button { align-items: baseline; background: transparent; border-radius: 6px; color: var(--muted); display: flex; font-size: 10px; gap: 8px; justify-content: space-between; padding: 7px 8px; text-align: left; width: 100%; }
 .mention-menu button strong { color: var(--text); font-size: 11px; }
@@ -1251,6 +1257,25 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
   width: 100%;
 }
 .generate-form textarea { font-family: inherit; resize: vertical; }
+.generate-attached-reference {
+  align-items: center;
+  background: rgba(62, 230, 194, .07);
+  border: 1px solid rgba(62, 230, 194, .3);
+  border-radius: 9px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  margin-bottom: 4px;
+  padding: 7px;
+}
+.generate-attached-reference > div { align-items: center; background: #111522; border-radius: 6px; display: flex; height: 48px; justify-content: center; overflow: hidden; }
+.generate-attached-reference img { height: 100%; object-fit: cover; width: 100%; }
+.generate-attached-reference svg { color: var(--dim); height: 20px; width: 20px; }
+.generate-attached-reference > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.generate-attached-reference small { color: var(--teal); font: 7px var(--mono); letter-spacing: .08em; }
+.generate-attached-reference strong { color: var(--text); font-size: 9px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.generate-attached-reference.is-missing { background: rgba(194, 64, 94, .06); border-color: rgba(194, 64, 94, .25); }
+.generate-attached-reference.is-missing small { color: #c2405e; }
 .generate-note { color: var(--dim); font-family: var(--mono); font-size: 9px; margin: 0; }
 .generate-error { color: #c2405e; font-size: 10px; margin: 0; }
 .generate-footer {
@@ -1407,9 +1432,30 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
   0%, 100% { opacity: .65; transform: scale(.94); }
   50% { opacity: 1; transform: scale(1.06); }
 }
-/* Scale a wrapper, never the prism itself — its face math stays intact. */
-.splash-prism { transform: scale(6.4); }
-.splash-prism .brand-mark { perspective: 520px; }
+/* Draw the hero prism at its final size. Enlarging the 15px nav mark blurred
+   its faces and turned the 1px outline into a heavy 6.4px stroke. */
+.splash-prism {
+  display: grid;
+  height: 154px;
+  place-items: center;
+  width: 154px;
+}
+.splash-prism .brand-mark {
+  --prism-face-size: 96px;
+  --prism-face-offset: -48px;
+  --prism-depth: 27.71px;
+  --prism-edge-width: 0;
+  height: 154px;
+  perspective: 3328px;
+  width: 154px;
+}
+.splash-prism .brand-mark span {
+  border-radius: 1px;
+  box-shadow:
+    0 0 6px rgba(110, 130, 220, .18),
+    inset 0 0 0 .5px rgba(40, 50, 95, .28),
+    inset 0 0 1px rgba(255, 255, 255, .35);
+}
 .splash-title {
   font-family: var(--display);
   font-size: 44px;
@@ -1465,13 +1511,30 @@ svg { fill: none; height: 16px; stroke: currentColor; stroke-linecap: round; str
   height: 72px;
   width: 72px;
 }
-/* Scale a wrapper, never the prism itself — its face math stays intact. */
-.hub-prism { transform: scale(2.1); }
-.hub-prism .brand-mark {
-  perspective: 300px;
-  animation-duration: 27s, 39s;
+.hub-prism {
+  display: grid;
+  height: 50.4px;
+  place-items: center;
+  width: 50.4px;
 }
-.hub-prism .brand-mark span { animation-duration: 27s; }
+.hub-prism .brand-mark {
+  --prism-face-size: 31.5px;
+  --prism-face-offset: -15.75px;
+  --prism-depth: 9.09px;
+  --prism-edge-width: 0;
+  animation-duration: 27s, 39s;
+  height: 50.4px;
+  perspective: 630px;
+  width: 50.4px;
+}
+.hub-prism .brand-mark span {
+  animation-duration: 27s;
+  border-radius: 1px;
+  box-shadow:
+    0 0 4px rgba(110, 130, 220, .2),
+    inset 0 0 0 .5px rgba(40, 50, 95, .28),
+    inset 0 0 1px rgba(255, 255, 255, .35);
+}
 /* While the splash layer is present its travelling prism plays the docked
    role; hide the hub's own copy so the two never show at once. */
 body:has(#splashLayer) .hub-prism { visibility: hidden; }
@@ -1970,10 +2033,103 @@ body:has(#splashLayer) .hub-prism { visibility: hidden; }
 @keyframes act-hero-pulse { 50% { opacity: .55; } }
 .act-screenplay-field { border-top: 1px solid var(--line); padding-top: 10px; }
 .act-screenplay-field textarea { min-height: 108px; }
+.act-still-actions { display: grid; gap: 7px; grid-template-columns: 1fr 1fr; }
 .act-generate-button { justify-content: center; width: 100%; }
 .act-generation-error { color: #c2405e; font-size: 10px; line-height: 1.4; margin: -3px 0 0; }
+.still-context-backdrop {
+  align-items: center;
+  background: rgba(27, 31, 49, .52);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 28px;
+  position: absolute;
+  z-index: 20;
+}
+.still-context-modal {
+  background: #fff;
+  border: 1px solid rgba(44, 50, 78, .22);
+  border-radius: 16px;
+  box-shadow: 0 28px 80px rgba(20, 24, 44, .34);
+  display: flex;
+  flex-direction: column;
+  max-height: min(820px, calc(100vh - 88px));
+  overflow: hidden;
+  width: min(780px, calc(100vw - 72px));
+}
+.still-context-header {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 22px 16px;
+}
+.still-context-header h2 { color: var(--text); font: 700 21px var(--display); margin: 4px 0 3px; }
+.still-context-header p { color: var(--muted); font-size: 11px; margin: 0; }
+.still-context-intro {
+  background: #f6f8fc;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 22px;
+}
+.still-context-intro strong { color: var(--text); font-size: 12px; }
+.still-context-intro span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.still-context-list { display: flex; flex: 1; flex-direction: column; gap: 20px; min-height: 0; overflow: auto; padding: 20px 22px 26px; }
+.still-context-group { display: flex; flex-direction: column; gap: 8px; }
+.still-context-group h3 { color: var(--cyan); font: 700 9px var(--mono); letter-spacing: .14em; margin: 0; text-transform: uppercase; }
+.still-context-item {
+  align-items: flex-start;
+  background: #fbfcfe;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 34px auto minmax(0, 1fr);
+  padding: 11px;
+  transition: opacity .15s, background .15s;
+}
+.still-context-item:not(:has(.still-context-reference)) { grid-template-columns: 34px minmax(0, 1fr); }
+.still-context-item.is-hidden { background: #f4f5f8; opacity: .58; }
+.still-context-visibility {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  display: flex;
+  font-size: 15px;
+  height: 32px;
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+}
+.still-context-reference { align-items: center; background: #e8ebf2; border-radius: 7px; display: flex; height: 72px; justify-content: center; overflow: hidden; width: 112px; }
+.still-context-reference img { height: 100%; object-fit: cover; width: 100%; }
+.still-context-reference span { color: var(--dim); font: 9px var(--mono); text-transform: uppercase; }
+.still-context-item-copy { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.still-context-item-title { align-items: baseline; display: flex; gap: 8px; justify-content: space-between; }
+.still-context-item-title strong { color: var(--text); font-size: 11px; }
+.still-context-item-title span { color: var(--dim); font: 8px var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+.still-context-item-copy small { color: var(--dim); font-size: 9px; line-height: 1.35; }
+.still-context-item-copy p { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 0; white-space: pre-wrap; }
+.still-context-item-copy textarea {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  font: 11px/1.5 inherit;
+  min-height: 52px;
+  padding: 7px 8px;
+  resize: vertical;
+  width: 100%;
+}
+.still-context-item-copy textarea:focus { border-color: rgba(89, 168, 255, .72); outline: 0; }
+.still-context-footer { align-items: center; border-top: 1px solid var(--line); display: flex; justify-content: space-between; padding: 13px 22px; }
 @media (max-width: 760px), (max-height: 760px) {
   .act-workspace-modal { inset: 8px; }
+  .still-context-backdrop { padding: 8px; }
+  .still-context-modal { max-height: calc(100vh - 32px); width: calc(100vw - 32px); }
 }
 .board-node--act { padding: 0 16px 16px; }
 .board-node--act::before {

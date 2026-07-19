@@ -30,6 +30,7 @@ import {
   landGenerationResult,
 } from './timeline-generation.js';
 import {createClipRegenerationService} from './clip-regeneration.js';
+import {storyboardReferenceForClip} from './storyboard-clip-reference.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
 import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
 import {expandMentionPrompt, findMentions, imageInputFor, resolveMentionedVersions} from './prompt-mentions.js';
@@ -296,6 +297,12 @@ const clipRegeneration = createClipRegenerationService({
   store: {getProject: () => project, dispatch: updateProject},
   diffs: timelineDiffs,
   adapter: timelineGenerationAdapter,
+  resolveReferenceImageUrls: async ({project: currentProject, clip}) => {
+    const reference = storyboardReferenceForClip(currentProject, clip);
+    const asset = reference ? currentProject.mediaAssets.find((entry) => entry.id === reference.assetId) : null;
+    const url = asset?.url ? await toUploadableUrl(asset.url) : null;
+    return url ? [url] : [];
+  },
 });
 let regenerationPollTimer = null;
 const timelineAddGeneration = createTimelineGenerationController({
@@ -619,7 +626,7 @@ const generateBeatStill = async (beatId) => {
   if (!session) return;
   let context;
   try {
-    context = session.workspace.contextFor(beatId);
+    context = session.workspace.stillContextFor(beatId);
     const unresolved = context.characters.filter((character) =>
       character.mentioned && (!character.versionId || !character.sheetAssetId));
     if (unresolved.length) throw new Error(`Generate a character sheet for ${unresolved.map((character) => character.name).join(', ')} first.`);
@@ -1956,12 +1963,17 @@ const renderGenerateVideoModal = () => {
   const modal = state.generateVideoModal;
   if (!modal) return '';
   const model = modalModel(modal);
+  const referenceAsset = modal.referenceAssetId ? mediaById(modal.referenceAssetId) : null;
   const busy = modal.status === 'submitting' || modal.status === 'generating';
   return `
     <div class="modal-backdrop" data-action="close-generate-modal">
       <section class="generate-modal" role="dialog" aria-modal="true" aria-labelledby="generateVideoTitle">
         <div class="modal-head"><div><span class="eyebrow">TIMELINE</span><h2 id="generateVideoTitle">${modal.mode === 'regenerate' ? 'Regenerate clip' : 'Generate video'}</h2></div><button class="small-icon-button" data-action="close-generate-modal" aria-label="Close" type="button">${icons.close}</button></div>
         <form class="generate-form" data-generate-video-form>
+          ${modal.mode === 'regenerate' ? `<section class="generate-attached-reference ${referenceAsset?.url ? '' : 'is-missing'}" aria-label="Automatically attached regeneration reference">
+            <div>${referenceAsset?.url ? `<img src="${escapeHtml(referenceAsset.url)}" alt="Automatically attached beat still" />` : icons.image}</div>
+            <span><small>${modal.referenceSource === 'beat' ? 'AUTO-ATTACHED BEAT STILL · @IMAGE1' : modal.referenceSource === 'provenance' ? 'AUTO-ATTACHED SOURCE STILL · @IMAGE1' : 'NO LINKED STILL'}</small><strong>${escapeHtml(modal.referenceLabel || 'Reference-to-video models require a saved beat still.')}</strong></span>
+          </section>` : ''}
           <label for="generateVideoPrompt">Prompt</label>
           <textarea id="generateVideoPrompt" rows="3" placeholder="Describe the shot…" required ${busy ? 'disabled' : ''}>${escapeHtml(modal.prompt)}</textarea>
           ${modal.status === 'loading-models'
@@ -4196,6 +4208,7 @@ const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', 
   const sourceClip = mode === 'regenerate' ? clipById(clipId) : null;
   if (mode === 'regenerate' && !sourceClip?.provenance?.prompt) { showToast('Only generated clips can be regenerated.'); return; }
   const provenance = sourceClip?.provenance || null;
+  const reference = sourceClip ? storyboardReferenceForClip(project, sourceClip) : null;
   const placement = sourceClip
     ? {sceneId: sourceClip.sceneId, start: sourceClip.start}
     : placementForViewStart(start);
@@ -4210,6 +4223,9 @@ const openGenerateVideoModal = async ({trackId = null, start = 0, mode = 'add', 
     models: [],
     categoryFilter: null,
     duration: provenance?.params?.duration ? Number(provenance.params.duration) || null : null,
+    referenceAssetId: reference?.assetId || null,
+    referenceSource: reference?.source || null,
+    referenceLabel: reference?.label || '',
     status: 'loading-models',
     error: null,
   };

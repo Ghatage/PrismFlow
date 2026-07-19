@@ -45,6 +45,54 @@ const heroMarkup = (beat, job, assetById) => {
   return `<div class="act-beat-hero is-empty"><span>${job?.status === 'failed' ? 'Still failed — retry below' : 'No still yet'}</span></div>`;
 };
 
+const stillContextMarkup = (beat, items, assetById) => {
+  if (!beat) return '';
+  const groups = [...new Set(items.map((entry) => entry.group))];
+  const includedCount = items.filter((entry) => entry.included).length;
+  return `
+    <div class="still-context-backdrop">
+      <section class="still-context-modal" role="dialog" aria-modal="true" aria-labelledby="stillContextTitle">
+        <header class="still-context-header">
+          <div>
+            <span class="eyebrow">NANO BANANA INPUT</span>
+            <h2 id="stillContextTitle">Modify still context</h2>
+            <p>${includedCount} of ${items.length} context items will be sent for this beat.</p>
+          </div>
+          <button class="small-icon-button" type="button" data-action="close-still-context" aria-label="Close still context">×</button>
+        </header>
+        <div class="still-context-intro">
+          <strong>${escapeHtml(beat.text)}</strong>
+          <span>Use the eye to exclude a competing prompt or reference. Hidden items stay attached to the beat and can be restored later.</span>
+        </div>
+        <div class="still-context-list">
+          ${groups.map((group) => `
+            <section class="still-context-group" aria-labelledby="stillContextGroup-${escapeHtml(group.replaceAll(/[^a-z0-9]+/gi, '-'))}">
+              <h3 id="stillContextGroup-${escapeHtml(group.replaceAll(/[^a-z0-9]+/gi, '-'))}">${escapeHtml(group)}</h3>
+              ${items.filter((entry) => entry.group === group).map((entry) => {
+                const asset = entry.assetId ? assetById?.(entry.assetId) : null;
+                return `<article class="still-context-item ${entry.included ? '' : 'is-hidden'}" data-context-item-id="${escapeHtml(entry.id)}">
+                  <button class="still-context-visibility" type="button" data-action="toggle-still-context-item" aria-label="${entry.included ? 'Hide' : 'Include'} ${escapeHtml(entry.title)}" title="${entry.included ? 'Hide from generation' : 'Include in generation'}">${entry.included ? '👁' : '🙈'}</button>
+                  ${entry.assetId ? `<div class="still-context-reference">
+                    ${asset?.url ? `<img src="${escapeHtml(asset.url)}" alt="${escapeHtml(entry.title)}" />` : '<span>Reference</span>'}
+                  </div>` : ''}
+                  <div class="still-context-item-copy">
+                    <div class="still-context-item-title"><strong>${escapeHtml(entry.title)}</strong><span>${entry.included ? 'Included' : 'Hidden'}</span></div>
+                    ${entry.detail || asset?.name ? `<small>${escapeHtml(asset?.name || entry.detail)}</small>` : ''}
+                    ${entry.editable ? `<textarea data-still-context-text rows="${entry.type === 'reference' ? '2' : '3'}" aria-label="Edit ${escapeHtml(entry.title)}">${escapeHtml(entry.text)}</textarea>` : entry.text ? `<p>${escapeHtml(entry.text)}</p>` : ''}
+                    ${entry.required ? '<small>Hiding this replaces it with a neutral still instruction so generation can continue.</small>' : ''}
+                  </div>
+                </article>`;
+              }).join('')}
+            </section>`).join('')}
+        </div>
+        <footer class="still-context-footer">
+          <button class="button ghost" type="button" data-action="reset-still-context">Reset to automatic context</button>
+          <button class="button primary" type="button" data-action="close-still-context">Done</button>
+        </footer>
+      </section>
+    </div>`;
+};
+
 const bindDialogKeyboard = (layer, modal, onClose) => {
   const handleKeydown = (event) => {
     if (event.key === 'Escape') {
@@ -107,11 +155,13 @@ export const renderActWorkspace = (layer, {
 } = {}) => {
   if (!layer) return;
   const wasOpen = Boolean(layer.querySelector('.act-workspace-modal'));
+  const wasContextOpen = Boolean(layer.querySelector('.still-context-modal'));
   layer._actWorkspaceCleanup?.();
   layer._actWorkspaceCleanup = null;
   if (!workspace) {
     layer.innerHTML = '';
     layer.hidden = true;
+    layer._stillContextBeatId = null;
     layer._actWorkspaceReturnFocus?.focus?.();
     layer._actWorkspaceReturnFocus = null;
     return;
@@ -124,6 +174,9 @@ export const renderActWorkspace = (layer, {
   };
   const rerender = () => renderActWorkspace(layer, renderOptions);
   const {act, dirty, completion} = workspace.read();
+  let stillContextBeat = act.beats.find((beat) => beat.id === layer._stillContextBeatId) || null;
+  if (!stillContextBeat) layer._stillContextBeatId = null;
+  const stillContextItems = stillContextBeat ? workspace.stillContextItemsFor(stillContextBeat.id) : [];
   const beatById = new Map(act.beats.map((beat) => [beat.id, beat]));
   const outgoingIds = new Set(act.connections.map((connection) => connection.fromBeatId));
   const size = graphSize(act.beats);
@@ -178,7 +231,10 @@ export const renderActWorkspace = (layer, {
                 </header>
                 ${heroMarkup(beat, job.still, assetById)}
                 <label><span>Beat</span><textarea data-beat-description rows="3" aria-label="Beat description ${index + 1}">${escapeHtml(beat.text)}</textarea></label>
-                <button class="button ghost act-generate-button" data-action="generate-beat-still" type="button" ${stillWorking ? 'disabled' : ''}>${stillWorking ? 'Generating still…' : job.still?.status === 'failed' ? 'Retry still' : beat.hero?.assetId ? 'Regenerate still' : 'Generate still'}</button>
+                <div class="act-still-actions">
+                  <button class="button ghost act-generate-button" data-action="modify-beat-still-context" type="button" ${stillWorking ? 'disabled' : ''}>Modify context</button>
+                  <button class="button ghost act-generate-button" data-action="generate-beat-still" type="button" ${stillWorking ? 'disabled' : ''}>${stillWorking ? 'Generating still…' : job.still?.status === 'failed' ? 'Retry still' : beat.hero?.assetId ? 'Regenerate still' : 'Generate still'}</button>
+                </div>
                 ${job.still?.error ? `<p class="act-generation-error">${escapeHtml(job.still.error)}</p>` : ''}
                 <label class="act-screenplay-field"><span>Screenplay</span><textarea data-beat-screenplay rows="6" aria-label="Screenplay for beat ${index + 1}" placeholder="Generate or write action and dialogue…">${escapeHtml(beat.screenplay?.text || '')}</textarea></label>
                 <button class="button ghost act-generate-button" data-action="generate-beat-script" type="button" ${scriptWorking ? 'disabled' : ''}>${scriptWorking ? 'Writing screenplay…' : job.screenplay?.status === 'failed' ? 'Retry script' : beat.screenplay?.text ? 'Regenerate script' : 'Generate script'}</button>
@@ -188,13 +244,22 @@ export const renderActWorkspace = (layer, {
             }).join('')}
           </div>
         </div>
+        ${stillContextMarkup(stillContextBeat, stillContextItems, assetById)}
       </section>
     </div>
   `;
 
   const modal = layer.querySelector('.act-workspace-modal');
-  layer._actWorkspaceCleanup = bindDialogKeyboard(layer, modal, onClose);
-  if (!wasOpen) layer.querySelector('#actWorkspaceTitle')?.focus();
+  const contextModal = layer.querySelector('.still-context-modal');
+  const closeStillContext = () => {
+    const beatId = layer._stillContextBeatId;
+    layer._stillContextBeatId = null;
+    rerender();
+    layer.querySelector(`[data-beat-id="${CSS.escape(beatId || '')}"] [data-action="modify-beat-still-context"]`)?.focus();
+  };
+  layer._actWorkspaceCleanup = bindDialogKeyboard(layer, contextModal || modal, contextModal ? closeStillContext : onClose);
+  if (contextModal && !wasContextOpen) contextModal.querySelector('[data-action="close-still-context"]')?.focus();
+  else if (!wasOpen) layer.querySelector('#actWorkspaceTitle')?.focus();
   layer.querySelector('[data-action="close-act-workspace"]')?.addEventListener('click', onClose);
   layer.querySelector('[data-action="save-act-workspace"]')?.addEventListener('click', onSave);
   layer.querySelector('[data-action="add-standalone-beat"]')?.addEventListener('click', () => {
@@ -249,6 +314,55 @@ export const renderActWorkspace = (layer, {
   });
   layer.querySelectorAll('[data-action="generate-beat-still"]').forEach((button) => {
     button.addEventListener('click', () => onGenerateStill?.(button.closest('[data-beat-id]')?.dataset.beatId));
+  });
+  layer.querySelectorAll('[data-action="modify-beat-still-context"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      layer._stillContextBeatId = button.closest('[data-beat-id]')?.dataset.beatId || null;
+      rerender();
+    });
+  });
+  layer.querySelectorAll('[data-action="close-still-context"]').forEach((button) => {
+    button.addEventListener('click', closeStillContext);
+  });
+  layer.querySelectorAll('[data-action="toggle-still-context-item"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const beatId = layer._stillContextBeatId;
+      const itemId = button.closest('[data-context-item-id]')?.dataset.contextItemId;
+      const beat = workspace.read().act.beats.find((entry) => entry.id === beatId);
+      if (!beat || !itemId) return;
+      const hidden = new Set(beat.stillContext?.hiddenItemIds || []);
+      if (hidden.has(itemId)) hidden.delete(itemId);
+      else hidden.add(itemId);
+      workspace.dispatch({
+        type: 'beat/update', beatId,
+        patch: {stillContext: {...beat.stillContext, hiddenItemIds: [...hidden]}},
+      });
+      rerender();
+      layer.querySelector(`[data-context-item-id="${CSS.escape(itemId)}"] [data-action="toggle-still-context-item"]`)?.focus();
+    });
+  });
+  layer.querySelectorAll('[data-still-context-text]').forEach((textarea) => {
+    textarea.addEventListener('input', () => {
+      const beatId = layer._stillContextBeatId;
+      const itemId = textarea.closest('[data-context-item-id]')?.dataset.contextItemId;
+      const beat = workspace.read().act.beats.find((entry) => entry.id === beatId);
+      if (!beat || !itemId) return;
+      workspace.dispatch({
+        type: 'beat/update', beatId,
+        patch: {stillContext: {
+          ...beat.stillContext,
+          overrides: {...(beat.stillContext?.overrides || {}), [itemId]: textarea.value},
+        }},
+      });
+      patchDraftChrome(layer, workspace, busy);
+    });
+  });
+  layer.querySelector('[data-action="reset-still-context"]')?.addEventListener('click', () => {
+    const beatId = layer._stillContextBeatId;
+    if (!beatId) return;
+    workspace.dispatch({type: 'beat/update', beatId, patch: {stillContext: {hiddenItemIds: [], overrides: {}}}});
+    rerender();
+    layer.querySelector('[data-action="reset-still-context"]')?.focus();
   });
   layer.querySelectorAll('[data-action="generate-beat-script"]').forEach((button) => {
     button.addEventListener('click', () => onGenerateScreenplay?.(button.closest('[data-beat-id]')?.dataset.beatId));

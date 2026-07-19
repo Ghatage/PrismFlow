@@ -79,6 +79,7 @@ test('beat still generation sends story context and character sheets to Nano Ban
   assert.match(submissions[0].input.prompt, /Hand-painted 2D animation/);
   assert.match(submissions[0].input.prompt, /Characters in this frame: Mara/);
   assert.match(submissions[0].input.prompt, /Other established cast[^:]*: Pip/);
+  assert.match(submissions[0].input.prompt, /target beat and target screenplay are authoritative/i);
   assert.deepEqual(await adapter.getStillJob('still-job-1'), {status: 'queued'});
 });
 
@@ -115,6 +116,8 @@ test('beat still generation orders character, style, and previous-frame referenc
   assert.match(submissions[0].input.prompt, /first 2 reference images are character reference sheets/i);
   assert.match(submissions[0].input.prompt, /reference image is a visual style reference/i);
   assert.match(submissions[0].input.prompt, /final reference image is the previous storyboard frame/i);
+  assert.match(submissions[0].input.prompt, /target overrides this frame/i);
+  assert.match(submissions[0].input.prompt, /never reuse its camera, composition, staging, or pose/i);
 });
 
 test('stable still seeds are deterministic per beat and differ between beats', () => {

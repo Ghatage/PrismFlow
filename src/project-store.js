@@ -125,6 +125,19 @@ const normalizeStoryboardVideoPrompt = (value) => {
   };
 };
 
+const normalizeStoryboardStillContext = (value) => {
+  if (!isRecord(value)) return {hiddenItemIds: [], overrides: {}};
+  const overrides = isRecord(value.overrides)
+    ? Object.fromEntries(Object.entries(value.overrides)
+      .filter(([itemId, override]) => asNullableString(itemId) && typeof override === 'string')
+      .map(([itemId, override]) => [itemId, override]))
+    : {};
+  return {
+    hiddenItemIds: normalizeStringIds(value.hiddenItemIds),
+    overrides: sanitizeJson(overrides) || {},
+  };
+};
+
 const normalizeStoryboardBeat = (value, {createId}, index = 0, legacyStills = []) => {
   if (typeof value === 'string') {
     if (!value.trim()) return null;
@@ -152,6 +165,7 @@ const normalizeStoryboardBeat = (value, {createId}, index = 0, legacyStills = []
     } : null),
     screenplay: normalizeStoryboardScreenplay(value.screenplay),
     videoPrompt: normalizeStoryboardVideoPrompt(value.videoPrompt),
+    stillContext: normalizeStoryboardStillContext(value.stillContext),
   };
 };
 

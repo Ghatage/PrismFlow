@@ -220,4 +220,20 @@ test('generation context always carries the full sheeted cast, locked style refe
   assert.deepEqual(context.previousStill, {beatId: 'beat-a', assetId: 'still-beat-a'});
   // The first beat has no earlier still to chain from.
   assert.equal(workspace.contextFor('beat-a').previousStill, null);
+
+  workspace.dispatch({
+    type: 'beat/update', beatId: 'beat-b',
+    patch: {stillContext: {
+      hiddenItemIds: ['character:character-pip', 'style-reference:style-ref-1', 'previous-still'],
+      overrides: {'target:screenplay': 'MARA: This is a completely different world.'},
+    }},
+  });
+  const stillContext = workspace.stillContextFor('beat-b');
+  assert.deepEqual(stillContext.characters.map((character) => character.id), ['character-mara']);
+  assert.deepEqual(stillContext.style.referenceAssetIds, ['style-ref-2']);
+  assert.equal(stillContext.previousStill, null);
+  assert.equal(stillContext.target.screenplay, 'MARA: This is a completely different world.');
+  assert.deepEqual(workspace.snapshot().beats[1].stillContext.hiddenItemIds, [
+    'character:character-pip', 'style-reference:style-ref-1', 'previous-still',
+  ]);
 });
