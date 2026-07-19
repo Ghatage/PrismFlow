@@ -25,6 +25,44 @@ const clipSummary = (project, clip) => ({
   description: describeClip(project, clip).description,
 });
 
+export const buildSelectedClipContext = (project, clipIds = []) => clipIds
+  .map((clipId) => project.timeline.clips.find((clip) => clip.id === clipId))
+  .filter(Boolean)
+  .map((clip) => {
+    const asset = project.mediaAssets.find((candidate) => candidate.id === clip.assetId) || null;
+    const track = project.timeline.tracks.find((candidate) => candidate.id === clip.trackId) || null;
+    return {
+      clipId: clip.id,
+      description: describeClip(project, clip).description,
+      asset: {
+        assetId: clip.assetId,
+        name: asset?.name || null,
+        kind: asset?.kind || null,
+        duration: round(asset?.duration),
+        indexStatus: asset?.metadata?.videoIndex?.status || asset?.metadata?.audioIndex?.status || 'none',
+      },
+      timeline: {
+        trackId: clip.trackId,
+        trackName: track?.name || null,
+        sceneId: clip.sceneId || null,
+        start: round(clip.start),
+        end: round(clip.start + clip.duration),
+        duration: round(clip.duration),
+        sourceStart: round(clip.sourceStart),
+        sourceEnd: round((clip.sourceStart || 0) + clip.duration),
+      },
+      provenance: {
+        prompt: clip.provenance?.prompt || null,
+        modelId: clip.provenance?.modelId || null,
+        seed: clip.provenance?.seed ?? null,
+        params: clip.provenance?.params || {},
+        parentAssetIds: clip.provenance?.parentAssetIds || [],
+        characterVersionIds: clip.provenance?.characterVersionIds || [],
+        styleVersionIds: clip.provenance?.styleVersionIds || [],
+      },
+    };
+  });
+
 export const createAgentTools = ({
   getProject,
   dispatch,
@@ -134,12 +172,16 @@ export const createAgentTools = ({
     get_project_overview() {
       const project = getProject();
       const state = getState();
+      const selectedClipIds = state.selectedClipIds instanceof Set
+        ? [...state.selectedClipIds]
+        : state.selectedClipId ? [state.selectedClipId] : [];
       return {
         projectName: project.project.name,
         timelineDuration: round(project.timeline.duration),
         revision: project.timeline.revision,
         playhead: round(state.currentTime),
         selectedClipId: state.selectedClipId || null,
+        selectedClipIds,
         tracks: project.timeline.tracks.map(({id, name, kind}) => ({id, name, kind})),
         clipCount: project.timeline.clips.length,
         sceneNames: project.scenes.map((scene) => scene.name),
@@ -337,7 +379,7 @@ export const createAgentTools = ({
 
     select_clip({clipId}) {
       requireClip(clipId);
-      setState({selectedClipId: clipId});
+      setState({selectedClipId: clipId, selectedClipIds: new Set([clipId])});
       return {ok: true, selectedClipId: clipId};
     },
 

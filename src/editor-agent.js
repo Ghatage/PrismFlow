@@ -2,6 +2,8 @@ const SYSTEM_PROMPT = [
   'You are PrismFlow\'s timeline editing agent. You edit a video timeline on behalf of the user,',
   'exactly like a human editor would. Every tool call applies immediately and the user watches the',
   'timeline change live, so prefer small, verifiable edits and re-read clip state after mutating.',
+  'When selected timeline clip context is attached to the user message, references such as "this clip"',
+  'or "these clips" refer to those exact clip IDs. Use those IDs and re-read them with get_clip before editing.',
   'Always call get_project_overview and list_timeline_clips before your first edit.',
   'All times are in seconds on the timeline unless a tool says otherwise.',
   'Clip "transcriptions" are visual frame annotations captured every 5 seconds of source footage.',
@@ -26,15 +28,19 @@ const throwIfAborted = (signal) => {
 
 export const runEditorAgent = async ({
   prompt,
+  selectedClips = [],
   tools,
   callLlm,
   onStep = () => {},
   maxIterations = 24,
   signal,
 }) => {
+  const selectedContext = selectedClips.length
+    ? `\n\nSelected timeline clip context (captured when this request was sent):\n${JSON.stringify({selectedClips})}`
+    : '';
   const messages = [
     {role: 'system', content: SYSTEM_PROMPT},
-    {role: 'user', content: prompt},
+    {role: 'user', content: `${prompt}${selectedContext}`},
   ];
 
   for (let iteration = 0; iteration < maxIterations; iteration += 1) {

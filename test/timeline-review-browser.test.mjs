@@ -259,11 +259,15 @@ test('keeps the agent rail visible and toggles a run pane from its icon', {timeo
     contentType: 'application/json',
     body: JSON.stringify({provider: 'openai-compatible', configured: true, model: 'test-model'}),
   }));
-  await page.route(`${origin}/api/agent/llm`, (route) => route.fulfill({
-    status: 200,
-    contentType: 'application/json',
-    body: JSON.stringify({choices: [{message: {role: 'assistant', content: 'Reviewed the timeline.'}}]}),
-  }));
+  const llmRequests = [];
+  await page.route(`${origin}/api/agent/llm`, async (route) => {
+    llmRequests.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({choices: [{message: {role: 'assistant', content: 'Reviewed the timeline.'}}]}),
+    });
+  });
   await page.addInitScript((project) => {
     localStorage.setItem('prismflow.project', JSON.stringify(project));
   }, regenerationFixture);
@@ -275,14 +279,24 @@ test('keeps the agent rail visible and toggles a run pane from its icon', {timeo
   assert.equal(await rail.evaluate((element) => Math.round(element.getBoundingClientRect().width)), 44);
   assert.equal(await page.locator('[data-action="toggle-agent-rail"]').count(), 0);
 
+  await page.locator('.timeline-clip[data-clip-id="clip-browser"]').click();
   await page.getByRole('button', {name: 'Launch AI editing agent'}).click();
+  const promptModal = page.locator('.agent-prompt-modal');
+  assert.equal(await promptModal.evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+  assert.equal(await promptModal.locator('[data-agent-context-clip-id="clip-browser"]').count(), 1);
+  assert.match(await promptModal.locator('.agent-clip-context').textContent(), /V1.*00:00\.00–00:02\.00/s);
   const prompt = page.locator('#agentPromptInput');
   await prompt.fill('Review the current cut.');
   await prompt.press('Enter');
 
   const runIcon = page.locator('[data-agent-run-id]');
   await runIcon.waitFor();
-  await page.locator('.agent-run-card').waitFor();
+  const runCard = page.locator('.agent-run-card');
+  await runCard.waitFor();
+  assert.equal(await runCard.evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(255, 255, 255)');
+  assert.equal(await runCard.locator('[data-agent-context-clip-id="clip-browser"]').count(), 1);
+  assert.equal(llmRequests.length, 1);
+  assert.match(llmRequests[0].messages.find((message) => message.role === 'user').content, /"clipId":"clip-browser"/);
   await runIcon.click();
   await page.locator('.agent-run-card').waitFor({state: 'detached'});
   assert.equal(await rail.isVisible(), true);

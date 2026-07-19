@@ -3,6 +3,11 @@ import test from 'node:test';
 
 import {createFalStoryboardGenerationAdapter} from '../server/storyboard-generation-adapter.mjs';
 import {
+  CUT_AND_DIALOGUE_DIRECTION,
+  MAX_BEAT_VIDEO_SHOT_SECONDS,
+  normalizeTimedVideoPrompt,
+} from '../src/beat-video.js';
+import {
   createFakeStoryboardGenerationAdapter,
   createServerStoryboardGenerationAdapter,
   stableStillSeed,
@@ -224,9 +229,9 @@ test('beat video prompt generation produces bounded timecodes and an immutable n
       runs.push({modelId, input});
       return {
         output: [
-          '00:00 - 00:02 @Image1 holds on Mara asleep beneath the floorboards, moonlit and still.',
-          '00:02 - 00:04 Mara opens her eyes as dust falls from above.',
-          '00:04 - 00:06 Mara whispers that she is hungry; Pip wakes beside her.',
+          '00:00 - 00:02 @Image1 opens as a low-angle close-up on Mara. DIALOGUE (Mara, 1.4s): "The tide is rising."',
+          '00:02 - 00:04 HARD CUT to a wide profile as Mara stands. DIALOGUE (Mara, 1.6s): "I cannot wait here."',
+          '00:04 - 00:06 HARD CUT to an overhead reaction shot on Pip. DIALOGUE (Pip, 1.2s): "Then we leave now."',
           '00:06 - 00:08 This segment exceeds the requested duration and must be removed.',
         ].join('\n'),
         usage: {prompt_tokens: 410, completion_tokens: 92},
@@ -240,14 +245,37 @@ test('beat video prompt generation produces bounded timecodes and an immutable n
   assert.equal(runs[0].modelId, 'openrouter/router');
   assert.equal(runs[0].input.model, 'google/gemini-2.5-flash');
   assert.match(runs[0].input.system_prompt, /timecoded/i);
+  assert.match(runs[0].input.system_prompt, /hard cut/i);
+  assert.match(runs[0].input.system_prompt, /no more than 3 seconds/i);
+  assert.match(runs[0].input.system_prompt, /speak to themself/i);
   assert.match(runs[0].input.prompt, /exactly 6 seconds/i);
+  assert.match(runs[0].input.prompt, /Do not use a master shot as the whole video/i);
+  assert.match(runs[0].input.prompt, /dialogue.*every cut/i);
   assert.match(runs[0].input.prompt, /Mara steps onto the ferry/);
   assert.match(generated.text, /^00:00 - 00:02/m);
   assert.match(generated.text, /^00:04 - 00:06/m);
   assert.doesNotMatch(generated.text, /00:08/);
   assert.match(generated.text, /@Image1/);
+  assert.equal(generated.text.match(/DIALOGUE \(/g)?.length, 3);
+  assert.match(generated.text, /Treat every timecoded segment as a hard camera cut/i);
   assert.match(generated.text, /No music or musical score/i);
   assert.equal(generated.duration, 6);
+});
+
+test('beat video prompt normalization rejects long cuts and missing or long dialogue', () => {
+  assert.equal(MAX_BEAT_VIDEO_SHOT_SECONDS, 3);
+  assert.match(CUT_AND_DIALOGUE_DIRECTION, /hard camera cut/i);
+  assert.throws(() => normalizeTimedVideoPrompt([
+    '00:00 - 00:04 @Image1 holds one unbroken master shot. DIALOGUE (Mara, 2s): "I am still here."',
+  ].join('\n'), 4), /3 seconds or shorter/i);
+  assert.throws(() => normalizeTimedVideoPrompt([
+    '00:00 - 00:02 @Image1 cuts close on Mara without speech.',
+    '00:02 - 00:04 HARD CUT wider. DIALOGUE (Mara, 1s): "Now."',
+  ].join('\n'), 4), /Every generated video prompt cut must include DIALOGUE/i);
+  assert.throws(() => normalizeTimedVideoPrompt([
+    '00:00 - 00:02 @Image1 cuts close. DIALOGUE (Mara, 3s): "This line runs too long."',
+    '00:02 - 00:04 HARD CUT wider. DIALOGUE (Mara, 1s): "Now."',
+  ].join('\n'), 4), /Every generated video prompt cut must include DIALOGUE/i);
 });
 
 test('browser storyboard adapter sends structured context and uploadable references without provider credentials', async () => {
@@ -256,7 +284,7 @@ test('browser storyboard adapter sends structured context and uploadable referen
     new Response(JSON.stringify({jobId: 'browser-still-job'}), {status: 202, headers: {'Content-Type': 'application/json'}}),
     new Response(JSON.stringify({status: 'queued'}), {status: 200, headers: {'Content-Type': 'application/json'}}),
     new Response(JSON.stringify({text: 'INT. FERRY — DAWN\nMara watches the sky.', provider: 'fal', modelId: 'google/gemini-2.5-flash', usage: {cost: 0.001}}), {status: 200, headers: {'Content-Type': 'application/json'}}),
-    new Response(JSON.stringify({text: '00:00 - 00:06 @Image1 animates the beat.\nAUDIO DIRECTION: No music or musical score.', duration: 6, provider: 'fal', modelId: 'google/gemini-2.5-flash'}), {status: 200, headers: {'Content-Type': 'application/json'}}),
+    new Response(JSON.stringify({text: '00:00 - 00:02 @Image1 starts close. DIALOGUE (Mara, 1s): "Wake up."\n00:02 - 00:04 HARD CUT wide. DIALOGUE (Pip, 1s): "I am awake."\n00:04 - 00:06 HARD CUT overhead. DIALOGUE (Mara, 1s): "Then move."\nEDITING DIRECTION: Treat every timecoded segment as a hard camera cut.\nAUDIO DIRECTION: No music or musical score.', duration: 6, provider: 'fal', modelId: 'google/gemini-2.5-flash'}), {status: 200, headers: {'Content-Type': 'application/json'}}),
   ];
   const uploadable = {
     'blob:http://localhost/mara': 'data:image/png;base64,AAAA',
@@ -321,6 +349,8 @@ test('fake storyboard adapter completes stills and screenplay without remote req
   assert.equal(script.modelId, 'local/fake-gemini-screenplay-v1');
   const videoPrompt = await adapter.generateVideoPrompt({context: context(), duration: 6});
   assert.match(videoPrompt.text, /^00:00 - 00:02/m);
+  assert.match(videoPrompt.text, /HARD CUT/);
+  assert.equal(videoPrompt.text.match(/DIALOGUE \(/g)?.length, 3);
   assert.match(videoPrompt.text, /No music or musical score/i);
   assert.equal(videoPrompt.duration, 6);
 });

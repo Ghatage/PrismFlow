@@ -16,8 +16,9 @@ test('creates runs and records steps through the lifecycle', () => {
   let notified = 0;
   store.subscribe(() => { notified += 1; });
 
-  const run = store.create({prompt: 'Split the first clip.'});
+  const run = store.create({prompt: 'Split the first clip.', clipContext: [{clipId: 'clip-1'}]});
   assert.equal(run.status, 'running');
+  assert.deepEqual(run.clipContext, [{clipId: 'clip-1'}]);
   assert.equal(store.list().length, 1);
 
   const step = store.appendStep(run.id, {type: 'tool', name: 'split_clip', args: {clipId: 'clip-1'}, status: 'running'});

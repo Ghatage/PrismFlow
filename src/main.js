@@ -51,7 +51,7 @@ import {
 import {createAudioTranscriptionIndexer} from './audio-indexing.js';
 import {AudioExtractError, extractAudioFromBlob} from './audio-extract.js';
 import {createAgentRunStore} from './agent-runs.js';
-import {createAgentTools} from './agent-tools.js';
+import {buildSelectedClipContext, createAgentTools} from './agent-tools.js';
 import {AgentCancelledError, runEditorAgent} from './editor-agent.js';
 import {
   DEFAULT_STYLE_IMAGE_MODEL,
@@ -433,10 +433,11 @@ const selectTimelineClip = (clipId, event = {}) => {
       const anchorIndex = trackClips.findIndex((candidate) => candidate.id === anchor.id);
       const clipIndex = trackClips.findIndex((candidate) => candidate.id === clip.id);
       const [start, end] = anchorIndex < clipIndex ? [anchorIndex, clipIndex] : [clipIndex, anchorIndex];
-      state.selectedClipIds = new Set(trackClips.slice(start, end + 1).map((candidate) => candidate.id));
+      state.selectedClipIds = new Set([...state.selectedClipIds, ...trackClips.slice(start, end + 1).map((candidate) => candidate.id)]);
       state.selectedClipId = clip.id;
     } else {
-      selectOnlyClip(clip.id);
+      state.selectedClipIds = new Set([...state.selectedClipIds, clip.id]);
+      state.selectedClipId = clip.id;
     }
   } else if (event.metaKey || event.ctrlKey) {
     const next = new Set(state.selectedClipIds);
@@ -1361,11 +1362,13 @@ const RUN_STATUS_LABELS = {running: 'Running', completed: 'Done', failed: 'Faile
 const renderAgentPromptModal = () => {
   const status = state.agentLlmStatus;
   const unconfigured = status && !status.configured;
+  const clipContext = buildSelectedClipContext(project, [...state.selectedClipIds]);
   return `
     <div class="modal-backdrop" data-action="close-agent-prompt">
       <section class="agent-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="agentPromptTitle">
         <div class="modal-head"><div><span class="eyebrow">TIMELINE AGENT</span><h2 id="agentPromptTitle">What should the agent do?</h2></div><button class="small-icon-button" data-action="close-agent-prompt" aria-label="Close" type="button">${icons.close}</button></div>
         <form class="agent-prompt-form" data-agent-prompt-form>
+          ${renderAgentClipContext(clipContext)}
           <textarea id="agentPromptInput" name="prompt" rows="3" placeholder="Trim the dead air at the start, then tighten the middle section…" required ${unconfigured ? 'disabled' : ''}>${escapeHtml(state.agentPromptDraft)}</textarea>
           ${unconfigured ? '<p class="agent-prompt-note error">Set LLM_BASE_URL (and LLM_API_KEY) in .env, then restart the server.</p>' : '<p class="agent-prompt-note">Enter to launch · Shift+Enter for a new line</p>'}
         </form>
@@ -1383,6 +1386,22 @@ const renderAgentStep = (step, index, steps) => {
   return `<li class="agent-step ${step.status}"><span class="agent-step-marker"><span class="agent-step-dot"></span>${isLast ? '' : '<span class="agent-step-line"></span>'}</span><div class="agent-step-body"><strong>${escapeHtml(label)}</strong>${detail}</div></li>`;
 };
 
+const renderAgentClipContext = (clipContext = []) => {
+  if (!clipContext.length) return '';
+  return `
+    <section class="agent-clip-context" aria-label="Selected clip context">
+      <div class="agent-clip-context-head"><span>Selected context</span><strong>${clipContext.length} clip${clipContext.length === 1 ? '' : 's'}</strong></div>
+      <div class="agent-context-clips">
+        ${clipContext.map((entry) => {
+          const asset = mediaById(entry.asset.assetId);
+          const visual = asset ? renderMediaVisual(asset) : `<div class="offline-thumb">${icons.film}</div>`;
+          return `<div class="agent-context-clip" data-agent-context-clip-id="${escapeHtml(entry.clipId)}"><div class="agent-context-thumb">${visual}</div><div><strong>${escapeHtml(entry.asset.name || entry.clipId)}</strong><small>${escapeHtml(entry.timeline.trackId)} · ${formatTime(entry.timeline.start)}–${formatTime(entry.timeline.end)}</small></div></div>`;
+        }).join('')}
+      </div>
+      <p>Clip IDs, timing, source ranges, asset metadata, and provenance will be sent with your request.</p>
+    </section>`;
+};
+
 const renderAgentRunCard = () => {
   const run = agentRuns.get(state.expandedAgentRunId);
   if (!run) return '';
@@ -1395,6 +1414,7 @@ const renderAgentRunCard = () => {
           <button class="small-icon-button" data-action="close-agent-run-card" aria-label="Close run detail" type="button">${icons.close}</button>
         </div>
       </div>
+      ${renderAgentClipContext(run.clipContext)}
       <ol class="agent-stepper" data-agent-stepper>
         ${run.steps.length ? run.steps.map((step, index) => renderAgentStep(step, index, run.steps)).join('') : `<li class="agent-step running"><span class="agent-step-marker"><span class="agent-step-dot"></span></span><div class="agent-step-body"><strong>Starting…</strong></div></li>`}
         ${run.status === 'failed' && run.error ? `<li class="agent-step error"><span class="agent-step-marker"><span class="agent-step-dot"></span></span><div class="agent-step-body"><strong>Failed</strong><p>${escapeHtml(run.error)}</p></div></li>` : ''}
@@ -1519,8 +1539,8 @@ const updateAgentRunView = (runId) => {
   });
 };
 
-const startEditorAgent = (prompt) => {
-  const run = agentRuns.create({prompt});
+const startEditorAgent = (prompt, {clipContext = buildSelectedClipContext(project, [...state.selectedClipIds])} = {}) => {
+  const run = agentRuns.create({prompt, clipContext});
   const controller = new AbortController();
   agentRuns.registerAbort(run.id, controller);
   state.expandedAgentRunId = run.id;
@@ -1528,8 +1548,10 @@ const startEditorAgent = (prompt) => {
   renderApp();
   let lastRenderedProject = project;
   let lastRenderedTime = state.currentTime;
+  let lastRenderedSelection = [...state.selectedClipIds].join('\u0000');
   runEditorAgent({
     prompt,
+    selectedClips: clipContext,
     tools: agentTools,
     callLlm,
     signal: controller.signal,
@@ -1537,7 +1559,8 @@ const startEditorAgent = (prompt) => {
       const record = existing
         ? agentRuns.updateStep(run.id, existing.id, step)
         : agentRuns.appendStep(run.id, step);
-      if (project !== lastRenderedProject) {
+      const selectionSignature = [...state.selectedClipIds].join('\u0000');
+      if (project !== lastRenderedProject || selectionSignature !== lastRenderedSelection) {
         lastRenderedProject = project;
         renderApp();
       } else {
@@ -1545,6 +1568,7 @@ const startEditorAgent = (prompt) => {
         if (state.currentTime !== lastRenderedTime) refreshPlayheadView();
       }
       lastRenderedTime = state.currentTime;
+      lastRenderedSelection = selectionSignature;
       return record;
     },
   })
@@ -1570,9 +1594,10 @@ const submitAgentPrompt = (event) => {
   event.preventDefault();
   const prompt = state.agentPromptDraft.trim();
   if (!prompt || (state.agentLlmStatus && !state.agentLlmStatus.configured)) return;
+  const clipContext = buildSelectedClipContext(project, [...state.selectedClipIds]);
   state.agentPromptModalOpen = false;
   state.agentPromptDraft = '';
-  startEditorAgent(prompt);
+  startEditorAgent(prompt, {clipContext});
 };
 
 const renderInspectorCharacters = (clip) => {
@@ -1880,7 +1905,8 @@ const renderClip = (clip, {top = 9} = {}) => {
   const frameSelected = frame?.videoAssetId === clip.assetId && frame.time >= sourceStart && frame.time <= sourceStart + clip.duration;
   const regenerating = clipRegeneration.listJobs(clip.id).some((job) => job.status === 'queued' || job.status === 'running');
   const styleApplying = (project.styleApplications?.batches || []).some((batch) => batch.jobs.some((job) => job.clipId === clip.id && ['queued', 'uploading', 'trimming', 'generating'].includes(job.status)));
-  return `<div class="timeline-clip ${media.kind} ${state.selectedClipIds.has(clip.id) ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''} ${styleApplying ? 'style-applying' : ''}" draggable="true" data-clip-id="${clip.id}" style="left:${clip.start * scale()}px;width:${width}px;top:${top}px">${renderClipContents(media, clip.duration)}</div>`;
+  const selected = state.selectedClipIds.has(clip.id);
+  return `<div class="timeline-clip ${media.kind} ${selected ? 'selected' : ''} ${frameSelected ? 'frame-selected' : ''} ${regenerating ? 'regenerating' : ''} ${styleApplying ? 'style-applying' : ''}" draggable="true" data-clip-id="${clip.id}" aria-selected="${selected}" style="left:${clip.start * scale()}px;width:${width}px;top:${top}px">${renderClipContents(media, clip.duration)}</div>`;
 };
 
 const renderTransitionMarker = (transition, {top = 26} = {}, clips = viewClips()) => {
@@ -2163,7 +2189,7 @@ const renderBeatVideoModal = () => {
             <section class="beat-video-prompt-workspace">
               <div class="beat-video-prompt-head"><label for="beatVideoPrompt">Time-coded Seedance prompt</label><div class="beat-video-prompt-actions"><select data-beat-video-duration aria-label="Video duration" ${busy ? 'disabled' : ''}>${SEEDANCE_VIDEO_DURATIONS.map((seconds) => `<option value="${seconds}" ${modal.duration === seconds ? 'selected' : ''}>${seconds} seconds</option>`).join('')}</select><button class="button ghost" data-action="generate-beat-video-prompt" type="button" ${busy ? 'disabled' : ''}>${modal.status === 'generating-prompt' ? 'Generating prompt…' : 'Generate prompt'}</button></div></div>
               <textarea id="beatVideoPrompt" data-beat-video-prompt placeholder="Generate a time-coded prompt from this screenplay, then edit it here…" ${busy ? 'disabled' : ''}>${escapeHtml(modal.prompt)}</textarea>
-              <p class="beat-video-audio-note">Ambient sound, sound effects, and dialogue are allowed. Music is always disabled.</p>
+              <p class="beat-video-audio-note">Hard camera cuts are capped at 3 seconds. Every cut changes composition and includes dialogue under 3 seconds—even for a solo character. Music is always disabled.</p>
               ${modal.error ? `<p class="generate-error">${escapeHtml(modal.error)}</p>` : ''}
             </section>
           </div>
@@ -2436,8 +2462,13 @@ const bindEvents = () => {
     lane.addEventListener('dragover', (event) => { event.preventDefault(); lane.classList.add('dragging'); });
     lane.addEventListener('dragleave', () => lane.classList.remove('dragging'));
     lane.addEventListener('drop', (event) => { event.preventDefault(); lane.classList.remove('dragging'); dropOnTimeline(event, lane.dataset.trackId); });
-    lane.addEventListener('click', (event) => { if (event.target.closest('.timeline-clip, .timeline-ghost')) return; seekFromTimeline(event); });
+    lane.addEventListener('click', (event) => {
+      if (performance.now() < suppressTimelineClickUntil) return;
+      if (event.target.closest('.timeline-clip, .timeline-ghost')) return;
+      seekFromTimeline(event);
+    });
   });
+  app.querySelector('#timelineContent')?.addEventListener('pointerdown', startTimelineMarquee);
   app.querySelector('#timelineRuler')?.addEventListener('click', seekFromTimeline);
   app.querySelector('[data-action="split"]')?.addEventListener('click', splitClipAtPlayhead);
   app.querySelector('[data-action="add-track"]')?.addEventListener('click', () => {
@@ -3396,6 +3427,105 @@ const cleanupPointerDrag = (payload) => {
 const clearNativeDrag = () => {
   if (state.dragPayload?.native) state.dragPayload = null;
   clearTimelineDragGuide();
+};
+
+let suppressTimelineClickUntil = 0;
+
+const startTimelineMarquee = (event) => {
+  if (event.button !== 0 || !(event.target instanceof Element)) return;
+  if (!event.target.closest('.track-lane')) return;
+  if (event.target.closest('.timeline-clip, .timeline-ghost, .timeline-transition, .generation-pending, .clip-handle')) return;
+  const content = event.currentTarget;
+  const contentRect = content.getBoundingClientRect();
+  const additive = event.shiftKey || event.metaKey || event.ctrlKey;
+  const baseSelection = additive ? new Set(state.selectedClipIds) : new Set();
+  const originalSelection = new Set(state.selectedClipIds);
+  const originalPrimary = state.selectedClipId;
+  const payload = {
+    startX: event.clientX,
+    startY: event.clientY,
+    dragging: false,
+    marquee: null,
+  };
+
+  const localPoint = (clientX, clientY) => ({
+    x: Math.min(Math.max(0, clientX - contentRect.left), contentRect.width),
+    y: Math.min(Math.max(0, clientY - contentRect.top), contentRect.height),
+  });
+
+  const paintSelection = (nextSelection) => {
+    state.selectedClipIds = nextSelection;
+    state.selectedClipId = nextSelection.has(originalPrimary)
+      ? originalPrimary
+      : [...nextSelection].at(-1) || null;
+    content.querySelectorAll('.timeline-clip[data-clip-id]').forEach((clipElement) => {
+      const selected = nextSelection.has(clipElement.dataset.clipId);
+      clipElement.classList.toggle('selected', selected);
+      clipElement.setAttribute('aria-selected', String(selected));
+    });
+  };
+
+  const onPointerMove = (moveEvent) => {
+    const moved = Math.hypot(moveEvent.clientX - payload.startX, moveEvent.clientY - payload.startY) >= 4;
+    if (!payload.dragging && !moved) return;
+    if (!payload.dragging) {
+      payload.dragging = true;
+      payload.marquee = document.createElement('div');
+      payload.marquee.className = 'timeline-selection-marquee';
+      content.append(payload.marquee);
+      state.selectedTransitionId = null;
+      state.selectedGhostKey = null;
+      state.previewDiffId = null;
+    }
+    const start = localPoint(payload.startX, payload.startY);
+    const end = localPoint(moveEvent.clientX, moveEvent.clientY);
+    const left = Math.min(start.x, end.x);
+    const right = Math.max(start.x, end.x);
+    const top = Math.min(start.y, end.y);
+    const bottom = Math.max(start.y, end.y);
+    Object.assign(payload.marquee.style, {
+      left: `${left}px`,
+      top: `${top}px`,
+      width: `${right - left}px`,
+      height: `${bottom - top}px`,
+    });
+    const selectionRect = {
+      left: contentRect.left + left,
+      right: contentRect.left + right,
+      top: contentRect.top + top,
+      bottom: contentRect.top + bottom,
+    };
+    const intersecting = [...content.querySelectorAll('.timeline-clip[data-clip-id]')]
+      .filter((clipElement) => {
+        const rect = clipElement.getBoundingClientRect();
+        return rect.right >= selectionRect.left && rect.left <= selectionRect.right
+          && rect.bottom >= selectionRect.top && rect.top <= selectionRect.bottom;
+      })
+      .map((clipElement) => clipElement.dataset.clipId);
+    paintSelection(new Set([...baseSelection, ...intersecting]));
+    moveEvent.preventDefault();
+  };
+
+  const finish = (upEvent, cancelled = false) => {
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    document.removeEventListener('pointercancel', onPointerCancel);
+    payload.marquee?.remove();
+    if (!payload.dragging) return;
+    if (cancelled) {
+      state.selectedClipId = originalPrimary;
+      paintSelection(originalSelection);
+    } else {
+      suppressTimelineClickUntil = performance.now() + 250;
+      upEvent.preventDefault();
+    }
+  };
+
+  const onPointerUp = (upEvent) => finish(upEvent);
+  const onPointerCancel = (cancelEvent) => finish(cancelEvent, true);
+  document.addEventListener('pointermove', onPointerMove, {passive: false});
+  document.addEventListener('pointerup', onPointerUp, {passive: false});
+  document.addEventListener('pointercancel', onPointerCancel);
 };
 
 const startTrimDrag = (event, clipId, edge) => {

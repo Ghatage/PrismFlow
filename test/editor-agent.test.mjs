@@ -47,6 +47,30 @@ test('executes tool calls, feeds results back, and returns the final summary', a
   assert.equal(steps.at(-1).type, 'result');
 });
 
+test('attaches selected clip IDs and metadata to the user request', async () => {
+  let firstMessages;
+  await runEditorAgent({
+    prompt: 'Trim these clips.',
+    selectedClips: [{
+      clipId: 'clip-selected',
+      asset: {assetId: 'asset-selected', name: 'Opening shot', kind: 'video'},
+      timeline: {trackId: 'V1', start: 2, end: 7, duration: 5, sourceStart: 4, sourceEnd: 9},
+      provenance: {modelId: 'fal/example'},
+    }],
+    tools: {definitions: [], execute: async () => ({ok: true})},
+    callLlm: async ({messages}) => {
+      firstMessages = messages;
+      return assistantText('Done.');
+    },
+  });
+
+  assert.equal(firstMessages[1].role, 'user');
+  assert.match(firstMessages[1].content, /^Trim these clips\./);
+  assert.match(firstMessages[1].content, /Selected timeline clip context/);
+  assert.match(firstMessages[1].content, /"clipId":"clip-selected"/);
+  assert.match(firstMessages[1].content, /"sourceStart":4/);
+});
+
 test('tool errors are surfaced to the model and the loop continues', async () => {
   const executed = [];
   const scripted = [

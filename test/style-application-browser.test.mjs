@@ -120,6 +120,23 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
   await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').click({modifiers: ['Meta']});
   assert.equal(await page.locator('.timeline-clip.selected').count(), 2);
 
+  const selectionGlow = await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').evaluate((element) => getComputedStyle(element).boxShadow);
+  assert.match(selectionGlow, /32px/);
+  await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
+  assert.equal(await page.locator('.timeline-clip.selected').count(), 1);
+  const laneBox = await page.locator('.track-lane[data-track-id="V1"]').boundingBox();
+  const firstClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').boundingBox();
+  const secondClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').boundingBox();
+  const marqueeStartX = Math.min(laneBox.x + laneBox.width - 6, secondClipBox.x + secondClipBox.width + 28);
+  const marqueeY = firstClipBox.y + firstClipBox.height / 2;
+  await page.mouse.move(marqueeStartX, marqueeY);
+  await page.mouse.down();
+  await page.mouse.move(firstClipBox.x + 2, marqueeY, {steps: 10});
+  assert.equal(await page.locator('.timeline-selection-marquee').count(), 1);
+  await page.mouse.up();
+  assert.equal(await page.locator('.timeline-selection-marquee').count(), 0);
+  assert.equal(await page.locator('.timeline-clip.selected').count(), 2);
+
   await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').click({button: 'right'});
   await page.getByRole('menuitem', {name: 'Apply Style to 2 clips'}).click();
   await page.getByRole('heading', {name: 'Restyle 2 selected clips'}).waitFor();

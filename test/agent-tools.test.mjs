@@ -23,7 +23,7 @@ const setup = () => {
     project = result.project;
     return result;
   };
-  const state = {currentTime: 1.5, selectedClipId: null};
+  const state = {currentTime: 1.5, selectedClipId: null, selectedClipIds: new Set()};
   const frames = new Map();
   const tools = createAgentTools({
     getProject: () => project,
@@ -58,6 +58,7 @@ test('read tools return compact project data', async () => {
   const overview = await tools.execute('get_project_overview', {});
   assert.equal(overview.clipCount, 1);
   assert.equal(overview.playhead, 1.5);
+  assert.deepEqual(overview.selectedClipIds, []);
   assert.ok(overview.tracks.some((track) => track.id === 'V1'));
 
   const clips = await tools.execute('list_timeline_clips', {});
@@ -155,6 +156,7 @@ test('write tools mutate the timeline and report ok/affectedId', async () => {
   const selected = await tools.execute('select_clip', {clipId: secondId});
   assert.equal(selected.ok, true);
   assert.equal(state.selectedClipId, secondId);
+  assert.deepEqual([...state.selectedClipIds], [secondId]);
 
   const sought = await tools.execute('seek_playhead', {time: 9999});
   assert.equal(sought.ok, true);

@@ -331,6 +331,9 @@ test('storyboard work persists and the editor scopes and concatenates acts', {ti
   await page.waitForFunction(() => document.querySelector('[data-beat-video-prompt]')?.value.includes('00:04 - 00:06'));
   const generatedVideoPrompt = beatVideoModal.locator('[data-beat-video-prompt]');
   assert.match(await generatedVideoPrompt.inputValue(), /@Image1/);
+  assert.match(await generatedVideoPrompt.inputValue(), /HARD CUT/);
+  assert.equal((await generatedVideoPrompt.inputValue()).match(/DIALOGUE \(/g)?.length, 3);
+  assert.match(await beatVideoModal.locator('.beat-video-audio-note').textContent(), /Every cut.*dialogue under 3 seconds/i);
   assert.match(await generatedVideoPrompt.inputValue(), /No music or musical score/i);
   await generatedVideoPrompt.fill(`${await generatedVideoPrompt.inputValue()}\nKeep the final camera move gentle.`);
   await beatVideoModal.locator('[data-action="generate-beat-video"]').click();

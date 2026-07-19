@@ -21,12 +21,13 @@ export const createAgentRunStore = ({
   };
 
   return {
-    create({prompt}) {
+    create({prompt, clipContext = []}) {
       const trimmed = typeof prompt === 'string' ? prompt.trim() : '';
       if (!trimmed) throw new Error('Agent prompt is required.');
       const run = {
         id: createId('agent-run'),
         prompt: trimmed,
+        clipContext: Array.isArray(clipContext) ? structuredClone(clipContext) : [],
         status: 'running',
         createdAt: now(),
         updatedAt: now(),

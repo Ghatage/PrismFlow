@@ -78,7 +78,11 @@ const VIDEO_PROMPT_SYSTEM_PROMPT = [
   'You are a cinematic shot planner converting one screenplay beat into a compact timecoded Seedance 2.0 prompt.',
   'Every non-empty line must use exactly this format: 00:SS - 00:SS visual action and audio detail.',
   'Use @Image1 as the exact opening-frame visual reference and preserve its identities, wardrobe, setting, and style.',
-  'Describe camera movement, blocking, performance, lighting, environmental sound, sound effects, and dialogue where useful.',
+  'Treat every timecoded segment as a HARD CUT and never as continuous one-camera coverage.',
+  'Every cut must last no more than 3 seconds and visibly change camera angle, shot size, focal character, depth of field, composition, or staging from the previous cut.',
+  'Every cut must include one exact spoken line shorter than 3 seconds, using the format DIALOGUE (Speaker, 2s): "words".',
+  'Keep each spoken line to roughly seven words or fewer. If only one character is present, that character must speak to themself; never omit dialogue from a cut.',
+  'Describe blocking, performance, lighting, environmental sound, and sound effects within each cut.',
   'Never request music, a musical score, a soundtrack, singing, or rhythmic underscore.',
   'Return plain text only with no Markdown, title, analysis, or preamble.',
 ].join(' ');
@@ -99,6 +103,9 @@ const buildScreenplayPrompt = (context) => [
 
 const buildVideoPromptPrompt = (context, duration) => [
   `Create a timecoded video prompt lasting exactly ${duration} seconds. Do not write any segment beyond 00:${String(duration).padStart(2, '0')}.`,
+  'Cover the full duration with contiguous hard cuts of no more than 3 seconds each. Do not use a master shot as the whole video.',
+  'Recompose from @Image1 on every cut by changing the angle, shot size, focus, depth, or character staging while preserving identity and continuity.',
+  'Write an explicit DIALOGUE (Speaker, <3s): "spoken line" entry in every cut. Solo characters speak aloud to themselves.',
   `Project: ${context.project?.name || 'Untitled project'}`,
   styleBible(context) ? `Visual style bible — every segment must stay inside this look: ${styleBible(context)}` : '',
   context.narrative?.title ? `Narrative structure: ${context.narrative.title}\n${context.narrative.tagline || ''}` : '',
