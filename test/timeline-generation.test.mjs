@@ -209,6 +209,7 @@ test('maps generic FAL queue output and browser routes without remote calls', as
     async submit(modelId, payload) { calls.push({kind: 'submit', modelId, payload}); return {request_id: 'fal-shot-1'}; },
     async status() { statusPolls += 1; return {status: statusPolls === 1 ? 'IN_PROGRESS' : 'COMPLETED'}; },
     async result() { return {video: {url: 'https://fal.media/shot.mp4', content_type: 'video/mp4', duration: 4}, seed: 123}; },
+    async estimateCost() { return {estimatedUsd: 0.16, credits: 16, unit: 'request', quantity: 1, basis: 'historical-api-price'}; },
   };
   const serverAdapter = createFalTimelineGenerationAdapter({fal});
   const input = replacementInput('clip-1', {modelId: 'fal-ai/example-video', seed: 123});
@@ -217,6 +218,7 @@ test('maps generic FAL queue output and browser routes without remote calls', as
   const result = await serverAdapter.getTimelineGenerationJob('fal-shot-1');
   assert.equal(result.status, 'completed');
   assert.equal(result.asset.url, 'https://fal.media/shot.mp4');
+  assert.equal(result.cost.estimatedUsd, 0.16);
   assert.equal(calls[0].payload.prompt, input.prompt);
   assert.equal(calls[0].payload.seed, 123);
 

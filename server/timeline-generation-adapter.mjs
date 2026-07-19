@@ -1,5 +1,6 @@
 import {normalizeTimelineGenerationInput} from '../src/timeline-generation.js';
 import {imageInputFor} from '../src/prompt-mentions.js';
+import {resolveFalResultCost} from './fal-adapter.mjs';
 import {
   normalizeSeedanceDuration,
   SEEDANCE_REFERENCE_VIDEO_MODEL_ID,
@@ -70,13 +71,14 @@ export const createFalTimelineGenerationAdapter = ({fal, modelInputs = {}}) => {
         }
         if (status !== 'COMPLETED') return {status: 'queued'};
         const result = await fal.result(input.modelId, jobId);
+        const cost = await resolveFalResultCost({fal, modelId: input.modelId, result});
         return {
           status: 'completed',
           asset: extractAsset(result),
           modelId: input.modelId,
           seed: result?.seed ?? input.seed,
           params: input.params,
-          cost: result?.cost || result?.usage?.cost || null,
+          ...(cost ? {cost} : {}),
           source: {provider: 'fal', jobId, modelId: input.modelId},
         };
       } catch (error) {

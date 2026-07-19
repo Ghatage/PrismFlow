@@ -4,6 +4,7 @@ import {
   normalizeCueSheet,
   quantizeSectionsToBars,
 } from '../src/score-direction.js';
+import {resolveFalResultCost} from './fal-adapter.mjs';
 
 export const DEFAULT_MUSIC_MODEL_ID = 'fal-ai/elevenlabs/music';
 export const VIDEO_MUSIC_MODEL_ID = 'sonilo/v1.1/video-to-music';
@@ -134,6 +135,7 @@ export const createFalMusicGenerationAdapter = ({
       const result = await fal.result(job.modelId, jobId);
       const audio = result?.audio || result?.audio_file || (Array.isArray(result?.audios) ? result.audios[0] : null);
       if (!audio?.url) return {status: 'failed', error: 'FAL completed without returning a score audio file.'};
+      const cost = await resolveFalResultCost({fal, modelId: job.modelId, result});
       return {
         status: 'completed',
         asset: {
@@ -142,6 +144,7 @@ export const createFalMusicGenerationAdapter = ({
           fileName: audio.file_name || null,
         },
         cueSheet: job.cueSheet,
+        ...(cost ? {cost} : {}),
         source: {provider: 'fal', modelId: job.modelId, jobId},
       };
     } catch (error) {

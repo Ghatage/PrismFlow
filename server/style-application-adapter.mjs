@@ -3,6 +3,7 @@ import {
   DEFAULT_STYLE_TRIM_MODEL,
   DEFAULT_STYLE_VIDEO_MODEL,
 } from '../src/style-application.js';
+import {resolveFalResultCost} from './fal-adapter.mjs';
 
 const providerStatus = (value) => String(value?.status || value || '').toUpperCase();
 const httpsUrl = (value, field) => {
@@ -93,12 +94,13 @@ export const createFalStyleApplicationAdapter = ({
       }
       if (status !== 'COMPLETED') return {status: 'queued'};
       const result = await fal.result(modelId, requestId);
+      const cost = await resolveFalResultCost({fal, modelId, result});
       return {
         status: 'completed',
         asset: extractAsset(result),
         modelId,
         seed: result?.seed ?? null,
-        cost: result?.cost || result?.usage?.cost || null,
+        ...(cost ? {cost} : {}),
         source: {provider: 'fal', requestId, modelId},
       };
     } catch (error) {

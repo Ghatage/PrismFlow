@@ -43,6 +43,17 @@ test('normalizes a quality tier into generation input and usage provenance', () 
   assert.equal(usage.qualityTier, 'final');
 });
 
+test('accepts FAL reported numeric costs instead of dropping them from usage', () => {
+  const usage = createGenerationUsageEntry({
+    job: {jobId: 'fal-reported-job', input: {modelId: 'fal-ai/example'}},
+    output: {modelId: 'fal-ai/example', cost: 0.137},
+    now: () => '2026-07-19T12:00:00.000Z',
+  });
+  assert.equal(usage.estimatedUsd, 0.137);
+  assert.ok(Math.abs(usage.credits - 13.7) < 1e-9);
+  assert.equal(usage.costBasis, 'reported');
+});
+
 test('records generation usage idempotently in the project JSON model', () => {
   const store = createProjectStore({storage: new MemoryStorage(), now: () => '2026-07-17T13:00:00.000Z'});
   const entry = {

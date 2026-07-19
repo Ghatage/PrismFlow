@@ -44,7 +44,8 @@ test('captures, annotates, tags, resumes, and indexes video frames', async () =>
   assert.equal(database.frames.get('video-1@0.000').videoAssetId, 'video-1');
   assert.equal(database.frames.get('video-1@0.000').annotation, 'fox at 0s');
   assert.equal(database.manifests.get('video-1').status, 'complete');
-  assert.equal(progress.length, 3);
+  assert.equal(progress.at(-1).manifest.status, 'complete');
+  assert.equal(progress.at(-1).manifest.indexedCount, 3);
   assert.equal(calls.filter((call) => call.url === '/api/video/annotate').length, 3);
   assert.equal(calls.filter((call) => call.url === '/api/video/index').length, 1);
   assert.equal(calls.find((call) => call.url === '/api/video/index').body.projectId, 'project-1');
@@ -114,6 +115,57 @@ test('resumes incomplete manifests after a refresh without recapturing saved fra
     assert.equal(captureCalls, 1);
     assert.equal(annotationCalls, 1);
     assert.equal(database.manifests.get('video-2').status, 'complete');
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  }
+});
+
+test('indexes videos with no manifest and repairs completed manifests missing from the server index', async () => {
+  const database = new MemoryVideoDatabase();
+  database.manifests.set('video-complete', {
+    id: 'video-complete',
+    videoAssetId: 'video-complete',
+    videoName: 'cat.mp4',
+    interval: 5,
+    duration: 0,
+    frameCount: 1,
+    completedCount: 1,
+    indexedCount: 1,
+    status: 'complete',
+  });
+  database.frames.set('video-complete@0.000', {
+    id: 'video-complete@0.000',
+    videoAssetId: 'video-complete',
+    time: 0,
+    blob: new Blob(['saved'], {type: 'image/jpeg'}),
+    annotation: 'A black cat on a chair',
+  });
+  const indexedAssets = [];
+  const indexer = createVideoFrameIndexer({
+    database,
+    getProject: () => ({project: {id: 'project-1'}}),
+    captureFrame: async (_video, time) => ({blob: new Blob([`frame-${time}`]), width: 320, height: 180}),
+    fetchImpl: async (url, options) => {
+      if (url.startsWith('/api/search/video/status')) return new Response(JSON.stringify({assets: []}));
+      if (url === '/api/video/annotate') return new Response(JSON.stringify({annotation: 'A new black cat frame'}));
+      if (url === '/api/video/index') {
+        indexedAssets.push(...JSON.parse(options.body).records.map((record) => record.videoAssetId));
+        return new Response(JSON.stringify({indexedCount: indexedAssets.length}));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    },
+  });
+  const previousDocument = globalThis.document;
+  globalThis.document = {createElement: () => ({readyState: 1, duration: 0, src: '', removeAttribute() {}, load() {}})};
+  try {
+    const results = await indexer.resume({assets: [
+      {id: 'video-complete', name: 'cat.mp4', kind: 'video', duration: 0, url: 'blob:cat'},
+      {id: 'video-new', name: 'new-cat.mp4', kind: 'video', duration: 0, url: 'blob:new-cat'},
+    ]});
+    assert.equal(results.length, 2);
+    assert.deepEqual(new Set(indexedAssets), new Set(['video-complete', 'video-new']));
+    assert.equal(database.manifests.get('video-new').status, 'complete');
   } finally {
     if (previousDocument === undefined) delete globalThis.document;
     else globalThis.document = previousDocument;

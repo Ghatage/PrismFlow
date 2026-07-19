@@ -140,6 +140,7 @@ test('runs persisted mixed-media jobs independently and lands imports plus repla
       return {
         status: 'completed', modelId,
         asset: {url: `https://fal.media/${stage}-${id}.${stage === 'image-style' ? 'png' : 'mp4'}`, mimeType: stage === 'image-style' ? 'image/png' : 'video/mp4', duration: 5},
+        cost: {estimatedUsd: 0.01, credits: 1, unit: 'request', quantity: 1, basis: 'reported'},
         source: {provider: 'fal'},
       };
     },
@@ -162,6 +163,8 @@ test('runs persisted mixed-media jobs independently and lands imports plus repla
   const landed = data.store.getProject();
   assert.equal(landed.styleApplications.batches[0].status, 'completed');
   assert.equal(landed.mediaAssets.length, 9);
+  assert.equal(landed.usage.generationCount, 3);
+  assert.equal(landed.usage.estimatedUsd, 0.03);
   assert.equal(diffs.listPending().length, 2);
   assert.deepEqual(diffs.listPending().map((diff) => diff.source), ['style-application', 'style-application']);
   assert.deepEqual(new Set(persisted), new Set(landed.styleApplications.batches[0].jobs.map((job) => job.outputAssetId)));

@@ -50,11 +50,17 @@ export const estimateGenerationCost = ({unitPrice, unit = 'generation', quantity
 
 export const createGenerationUsageEntry = ({job, output, now = () => new Date().toISOString()} = {}) => {
   const input = job?.input || job || {};
-  const cost = output?.cost || input.cost || null;
-  const estimate = Number.isFinite(cost?.estimatedUsd)
+  const cost = output?.cost ?? input.cost ?? null;
+  const reportedUsd = Number.isFinite(cost)
+    ? cost
+    : Number.isFinite(cost?.estimatedUsd) ? cost.estimatedUsd
+      : Number.isFinite(cost?.cost) ? cost.cost
+        : Number.isFinite(cost?.total_cost) ? cost.total_cost
+          : null;
+  const estimate = reportedUsd !== null
     ? {
-      estimatedUsd: Math.max(0, cost.estimatedUsd),
-      credits: Number.isFinite(cost.credits) ? Math.max(0, cost.credits) : Math.max(0, cost.estimatedUsd * 100),
+      estimatedUsd: Math.max(0, reportedUsd),
+      credits: Number.isFinite(cost?.credits) ? Math.max(0, cost.credits) : Math.max(0, reportedUsd * 100),
       unit: typeof cost.unit === 'string' && cost.unit.trim() ? cost.unit.trim() : 'generation',
       quantity: Number.isFinite(cost.quantity) ? Math.max(0, cost.quantity) : 1,
       qualityTier: normalizeQualityTier(cost.qualityTier || input.qualityTier),
@@ -79,6 +85,10 @@ export const createGenerationUsageEntry = ({job, output, now = () => new Date().
     credits: estimate.credits,
     unit: estimate.unit,
     quantity: estimate.quantity,
+    currency: typeof cost?.currency === 'string' && cost.currency.trim() ? cost.currency.trim() : 'USD',
+    costBasis: typeof cost?.basis === 'string' && cost.basis.trim()
+      ? cost.basis.trim()
+      : reportedUsd !== null ? 'reported' : 'catalog-estimate',
     createdAt: now(),
   };
 };

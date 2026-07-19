@@ -340,6 +340,14 @@ export const createStyleApplicationController = ({
       if (result.status === 'queued' || result.status === 'running') return;
       if (result.status !== 'completed') throw new Error(result.error || 'Style application failed.');
       if (job.status === 'trimming') {
+        const trimUsage = createGenerationUsageEntry({
+          job: {
+            id: `${job.id}-trim`,
+            input: {modelId: result.modelId || job.providerModelId, qualityTier: 'final'},
+          },
+          output: result,
+        });
+        if (trimUsage) store.dispatch({type: 'usage/record', entry: trimUsage});
         const prompt = buildStyleApplicationPrompt({mediaKind: 'video', styleName: batch.styleName, referenceCount: job.referenceUrls.length, instruction: batch.instruction});
         const submitted = await adapter.submitStage('video-style', {
           videoUrl: result.asset.url,

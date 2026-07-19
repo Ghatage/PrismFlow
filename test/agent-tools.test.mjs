@@ -10,7 +10,7 @@ class MemoryStorage {
   setItem(key, value) { this.values.set(key, value); }
 }
 
-const setup = () => {
+const setup = ({getSearchScope} = {}) => {
   let id = 0;
   const store = createProjectStore({
     storage: new MemoryStorage(),
@@ -33,6 +33,7 @@ const setup = () => {
     projectContext: {search: (query, options) => [{id: 'clip:x', type: 'clip', clipId: 'x', start: 1, duration: 2, description: `hit for ${query} ${options?.type || ''}`.trim()}]},
     videoIndexer: {search: async (query) => [{id: 'frame-1', videoAssetId: 'asset-9', videoName: 'shot.mp4', time: 10, annotation: `frame about ${query}`}]},
     database: {getVideoFrames: async (assetId) => frames.get(assetId) || []},
+    getSearchScope,
   });
 
   const assetId = dispatch({type: 'asset/import', asset: {name: 'shot.mp4', kind: 'video', mimeType: 'video/mp4', duration: 30}}).affectedId;
@@ -124,6 +125,42 @@ test('search tools filter project and frame results to the active act scope', as
   assert.deepEqual(contextResults.map((entry) => entry.id), ['clip:allowed', 'scene:allowed', 'character:allowed']);
   const frameResults = await tools.execute('search_video_frames', {query: 'match'});
   assert.deepEqual(frameResults.map((entry) => entry.frameId), ['frame-allowed']);
+});
+
+test('timeline tools cannot read or mutate clips outside the active act scope', async () => {
+  let activeSceneId = null;
+  let allowedAssetIds = [];
+  const {tools, dispatch, getProject, assetId, clipId: firstActClipId} = setup({
+    getSearchScope: () => ({activeSceneId, assetIds: allowedAssetIds}),
+  });
+  const firstSceneId = getProject().timeline.clips.find((clip) => clip.id === firstActClipId).sceneId;
+  const secondSceneId = dispatch({type: 'scene/add', scene: {name: 'Act 2', metadata: {actNumber: 2}}}).affectedId;
+  dispatch({type: 'timeline/set-active-scene', sceneId: secondSceneId});
+  const secondActClipId = dispatch({type: 'clip/add', assetId, trackId: 'V1', start: 18, duration: 4}).affectedId;
+
+  activeSceneId = firstSceneId;
+  allowedAssetIds = [assetId];
+
+  const overview = await tools.execute('get_project_overview', {});
+  assert.equal(overview.activeSceneId, firstSceneId);
+  assert.equal(overview.clipCount, 1);
+  assert.equal(overview.timelineDuration, 12);
+  assert.deepEqual(overview.sceneNames, [getProject().scenes.find((scene) => scene.id === firstSceneId).name]);
+
+  const listed = await tools.execute('list_timeline_clips', {trackId: 'V1'});
+  assert.deepEqual(listed.map((clip) => clip.clipId), [firstActClipId]);
+
+  const hiddenRead = await tools.execute('get_clip', {clipId: secondActClipId});
+  assert.match(hiddenRead.error, /active act/);
+  const hiddenMove = await tools.execute('move_clip', {clipId: secondActClipId, start: 0});
+  assert.match(hiddenMove.error, /active act/);
+  assert.equal(getProject().timeline.clips.find((clip) => clip.id === secondActClipId).start, 18);
+
+  const allowedMove = await tools.execute('move_clip', {clipId: firstActClipId, start: 0});
+  assert.equal(allowedMove.ok, true);
+  const added = await tools.execute('add_clip', {assetId, trackId: 'V1', start: 12, duration: 2});
+  assert.equal(added.ok, true);
+  assert.equal(getProject().timeline.clips.find((clip) => clip.id === added.affectedId).sceneId, firstSceneId);
 });
 
 test('write tools mutate the timeline and report ok/affectedId', async () => {

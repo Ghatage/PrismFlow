@@ -73,12 +73,6 @@ export const createAgentTools = ({
   database,
   getSearchScope = () => ({}),
 }) => {
-  const requireClip = (clipId) => {
-    const clip = getProject().timeline.clips.find((candidate) => candidate.id === clipId);
-    if (!clip) throw new Error(`No timeline clip with id ${clipId}. Call list_timeline_clips for valid ids.`);
-    return clip;
-  };
-
   const writeResult = (result, reason) => result?.changed
     ? {ok: true, affectedId: result.affectedId || null}
     : {ok: false, reason};
@@ -90,6 +84,26 @@ export const createAgentTools = ({
       assetIds: new Set(Array.isArray(value.assetIds) ? value.assetIds : []),
       characterIds: new Set(Array.isArray(value.characterIds) ? value.characterIds : []),
     };
+  };
+
+  const clipInScope = (clip, scope = searchScope()) => !scope.activeSceneId || clip?.sceneId === scope.activeSceneId;
+
+  const requireClip = (clipId) => {
+    const clip = getProject().timeline.clips.find((candidate) => candidate.id === clipId);
+    if (!clip || !clipInScope(clip)) {
+      const suffix = searchScope().activeSceneId ? ' in the active act' : '';
+      throw new Error(`No timeline clip with id ${clipId}${suffix}. Call list_timeline_clips for valid ids.`);
+    }
+    return clip;
+  };
+
+  const transitionInScope = (transition, project = getProject(), scope = searchScope()) => {
+    if (!scope.activeSceneId) return true;
+    const clipIds = [transition.fromClipId, transition.toClipId].filter(Boolean);
+    return clipIds.length > 0 && clipIds.every((clipId) => {
+      const clip = project.timeline.clips.find((candidate) => candidate.id === clipId);
+      return clipInScope(clip, scope);
+    });
   };
 
   const contextEntryInScope = (entry, scope) => {
@@ -172,26 +186,39 @@ export const createAgentTools = ({
     get_project_overview() {
       const project = getProject();
       const state = getState();
-      const selectedClipIds = state.selectedClipIds instanceof Set
+      const scope = searchScope();
+      const scopedClips = project.timeline.clips.filter((clip) => clipInScope(clip, scope));
+      const selectedClipIds = (state.selectedClipIds instanceof Set
         ? [...state.selectedClipIds]
-        : state.selectedClipId ? [state.selectedClipId] : [];
+        : state.selectedClipId ? [state.selectedClipId] : [])
+        .filter((clipId) => scopedClips.some((clip) => clip.id === clipId));
+      const activeScene = scope.activeSceneId
+        ? project.scenes.find((scene) => scene.id === scope.activeSceneId) || null
+        : null;
       return {
         projectName: project.project.name,
-        timelineDuration: round(project.timeline.duration),
+        activeSceneId: scope.activeSceneId,
+        timelineDuration: round(scope.activeSceneId
+          ? scopedClips.reduce((maximum, clip) => Math.max(maximum, clip.start + clip.duration), 0)
+          : project.timeline.duration),
         revision: project.timeline.revision,
         playhead: round(state.currentTime),
-        selectedClipId: state.selectedClipId || null,
+        selectedClipId: selectedClipIds.includes(state.selectedClipId) ? state.selectedClipId : null,
         selectedClipIds,
         tracks: project.timeline.tracks.map(({id, name, kind}) => ({id, name, kind})),
-        clipCount: project.timeline.clips.length,
-        sceneNames: project.scenes.map((scene) => scene.name),
-        mediaAssetCount: project.mediaAssets.length,
+        clipCount: scopedClips.length,
+        sceneNames: activeScene ? [activeScene.name] : project.scenes.map((scene) => scene.name),
+        mediaAssetCount: scope.activeSceneId
+          ? project.mediaAssets.filter((asset) => scope.assetIds.has(asset.id)).length
+          : project.mediaAssets.length,
       };
     },
 
     list_timeline_clips({trackId} = {}) {
       const project = getProject();
+      const scope = searchScope();
       return project.timeline.clips
+        .filter((clip) => clipInScope(clip, scope))
         .filter((clip) => !trackId || clip.trackId === trackId)
         .sort((a, b) => a.start - b.start)
         .map((clip) => clipSummary(project, clip));
@@ -258,13 +285,16 @@ export const createAgentTools = ({
     },
 
     list_media_assets() {
-      return getProject().mediaAssets.map((asset) => ({
+      const scope = searchScope();
+      return getProject().mediaAssets
+        .filter((asset) => !scope.activeSceneId || scope.assetIds.has(asset.id))
+        .map((asset) => ({
         assetId: asset.id,
         name: asset.name,
         kind: asset.kind,
         duration: round(asset.duration),
         indexStatus: asset.metadata?.videoIndex?.status || 'none',
-      }));
+        }));
     },
 
     search_project({query, type, limit}) {
@@ -330,10 +360,15 @@ export const createAgentTools = ({
 
     add_clip({assetId, trackId, start, duration, sourceStart}) {
       const project = getProject();
+      const scope = searchScope();
       if (!project.mediaAssets.some((asset) => asset.id === assetId)) {
         throw new Error(`No media asset with id ${assetId}. Call list_media_assets for valid ids.`);
       }
+      if (scope.activeSceneId && !scope.assetIds.has(assetId)) {
+        throw new Error(`Media asset ${assetId} is not available in the active act. Call list_media_assets for valid ids.`);
+      }
       const command = {type: 'clip/add', assetId, trackId, start};
+      if (scope.activeSceneId) command.sceneId = scope.activeSceneId;
       if (duration !== undefined) command.duration = duration;
       if (sourceStart !== undefined) command.sourceStart = sourceStart;
       return writeResult(dispatch(command), 'Clip was not added.');
@@ -345,7 +380,10 @@ export const createAgentTools = ({
 
     list_transitions() {
       const project = getProject();
-      return project.timeline.transitions.map((transition) => ({
+      const scope = searchScope();
+      return project.timeline.transitions
+        .filter((transition) => transitionInScope(transition, project, scope))
+        .map((transition) => ({
         transitionId: transition.id,
         type: transition.type,
         trackId: transition.trackId,
@@ -353,7 +391,7 @@ export const createAgentTools = ({
         toClipId: transition.toClipId,
         duration: round(transition.duration),
         edgeTime: round(transitionEdgeTime(transition, project.timeline.clips)),
-      }));
+        }));
     },
 
     add_transition({type, fromClipId, toClipId, duration} = {}) {
@@ -371,8 +409,11 @@ export const createAgentTools = ({
     },
 
     remove_transition({transitionId}) {
-      if (!getProject().timeline.transitions.some((transition) => transition.id === transitionId)) {
-        throw new Error(`No transition with id ${transitionId}. Call list_transitions for valid ids.`);
+      const project = getProject();
+      const transition = project.timeline.transitions.find((candidate) => candidate.id === transitionId);
+      if (!transition || !transitionInScope(transition, project)) {
+        const suffix = searchScope().activeSceneId ? ' in the active act' : '';
+        throw new Error(`No transition with id ${transitionId}${suffix}. Call list_transitions for valid ids.`);
       }
       return writeResult(dispatch({type: 'transition/remove', transitionId}), 'Transition was not removed.');
     },

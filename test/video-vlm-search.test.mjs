@@ -51,6 +51,19 @@ test('TinkerBird video search persists annotation records and traces frames to v
   assert.equal(result.results[0].time, 0);
   const reloaded = createVideoSearchAdapter({indexPath: join(directory, 'video-index.json'), embedder});
   assert.equal((await reloaded.search('city', {projectId: 'project-1'})).results[0].videoAssetId, 'video-b');
+  assert.deepEqual(await reloaded.status({projectId: 'project-1'}), {
+    ready: true,
+    model: 'fake-embedder',
+    dimensions: 3,
+    recordCount: 2,
+    videoCount: 2,
+    assets: [
+      {videoAssetId: 'video-a', frameCount: 1},
+      {videoAssetId: 'video-b', frameCount: 1},
+    ],
+    indexedAt: (await reloaded.status({projectId: 'project-1'})).indexedAt,
+    indexPath: join(directory, 'video-index.json'),
+  });
   await reloaded.removeVideo('video-a');
   assert.equal((await reloaded.search('fox', {projectId: 'project-1'})).results.length, 0);
 });

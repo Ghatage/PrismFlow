@@ -1089,7 +1089,14 @@ export const createProjectStore = ({
     let acceptedTimelineChanged = false;
     let conflicts = [];
 
-    if (command.type === 'asset/import') {
+    if (command.type === 'project/rename') {
+      const name = typeof command.name === 'string' ? command.name.trim() : '';
+      if (name && name !== project.project.name) {
+        project.project.name = name;
+        affectedId = project.project.id;
+        changed = true;
+      }
+    } else if (command.type === 'asset/import') {
       const asset = normalizeAsset(command.asset, dependencies);
       if (typeof command.asset?.url === 'string' && command.asset.url.trim()) {
         assetUrls.set(asset.id, command.asset.url);
@@ -1587,6 +1594,9 @@ export const createProjectStore = ({
           credits: asNumber(input.credits),
           unit: asString(input.unit, 'generation'),
           quantity: asNumber(input.quantity, 1),
+          currency: asString(input.currency, 'USD'),
+          costBasis: asString(input.costBasis, 'catalog-estimate'),
+          operation: asString(input.operation, 'generation'),
           createdAt: asTimestamp(input.createdAt, now()),
         };
         project.usage.entries.push(entry);

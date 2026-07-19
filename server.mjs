@@ -14,6 +14,7 @@ import {createLlmAdapter} from './server/llm-adapter.mjs';
 import {createFalStyleApplicationAdapter} from './server/style-application-adapter.mjs';
 import {createFalStoryboardGenerationAdapter} from './server/storyboard-generation-adapter.mjs';
 import {createFalMusicGenerationAdapter} from './server/music-generation-adapter.mjs';
+import {createTimelineExportService} from './server/timeline-export.mjs';
 
 const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 4173);
@@ -36,6 +37,7 @@ const llm = createLlmAdapter();
 const styleApplications = createFalStyleApplicationAdapter({fal});
 const storyboardGenerations = createFalStoryboardGenerationAdapter({fal});
 const musicGenerations = createFalMusicGenerationAdapter({fal});
+const timelineExports = createTimelineExportService({rootDir});
 
 const contentTypes = {
   '.css': 'text/css; charset=utf-8',
@@ -43,6 +45,7 @@ const contentTypes = {
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
+  '.mp4': 'video/mp4',
   '.svg': 'image/svg+xml',
   '.wasm': 'application/wasm',
 };
@@ -122,6 +125,67 @@ const server = createServer(async (request, response) => {
       musicModelId: musicGenerations.musicModelId,
       scoreDirectionModelId: musicGenerations.scoreDirectionModelId,
     });
+    return;
+  }
+
+  if (url.pathname === '/api/export/sessions' && request.method === 'POST') {
+    try {
+      const body = await readJson(request, 4_000_000);
+      sendJson(response, 201, await timelineExports.createSession(body.manifest));
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const exportAssetMatch = url.pathname.match(/^\/api\/export\/sessions\/([^/]+)\/assets\/([^/]+)$/);
+  if (exportAssetMatch && request.method === 'PUT') {
+    try {
+      const sessionId = decodeURIComponent(exportAssetMatch[1]);
+      const assetId = decodeURIComponent(exportAssetMatch[2]);
+      const result = await timelineExports.uploadAsset(sessionId, assetId, request, {
+        fileName: String(request.headers['x-file-name'] || ''),
+        mimeType: String(request.headers['content-type'] || 'application/octet-stream').split(';')[0],
+      });
+      sendJson(response, 201, result);
+    } catch (error) {
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const exportRenderMatch = url.pathname.match(/^\/api\/export\/sessions\/([^/]+)\/render$/);
+  if (exportRenderMatch && request.method === 'POST') {
+    const sessionId = decodeURIComponent(exportRenderMatch[1]);
+    try {
+      const result = await timelineExports.render(sessionId);
+      response.writeHead(200, {
+        'Content-Type': 'video/mp4',
+        'Content-Disposition': 'attachment; filename="output.mp4"',
+        'Content-Length': result.size,
+        'Cache-Control': 'no-store',
+      });
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        void timelineExports.cleanup(sessionId);
+      };
+      response.once('finish', cleanup);
+      response.once('close', cleanup);
+      result.stream().pipe(response);
+    } catch (error) {
+      await timelineExports.cleanup(sessionId).catch(() => {});
+      sendJson(response, 400, {error: error instanceof Error ? error.message : String(error)});
+    }
+    return;
+  }
+
+  const exportSessionMatch = url.pathname.match(/^\/api\/export\/sessions\/([^/]+)$/);
+  if (exportSessionMatch && request.method === 'DELETE') {
+    await timelineExports.cleanup(decodeURIComponent(exportSessionMatch[1])).catch(() => {});
+    response.writeHead(204, {'Cache-Control': 'no-store'});
+    response.end();
     return;
   }
 
@@ -251,7 +315,9 @@ const server = createServer(async (request, response) => {
 
   if (url.pathname === '/api/search/video/status' && request.method === 'GET') {
     try {
-      sendJson(response, 200, await videoSearch.status());
+      sendJson(response, 200, await videoSearch.status({
+        projectId: url.searchParams.get('projectId') || null,
+      }));
     } catch (error) {
       sendJson(response, 500, {error: error instanceof Error ? error.message : String(error)});
     }

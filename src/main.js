@@ -1,6 +1,7 @@
 import {createProjectStore, TRANSITION_EDGE_EPSILON, transitionEdgeTime} from './project-store.js';
 import {BUILT_IN_TRANSITIONS, applyTransitionStyles, buildTransitionGenerationMessages, getTransitionDefinition} from './transitions.js';
 import {createBrowserDatabase} from './browser-database.js';
+import {createTimelineExporter} from './timeline-export.js';
 import {createCharacterLibrary} from './character-library.js';
 import {createStyleLibrary} from './style-library.js';
 import {
@@ -32,12 +33,14 @@ import {
 import {createClipRegenerationService} from './clip-regeneration.js';
 import {storyboardReferenceForClip} from './storyboard-clip-reference.js';
 import {resolveTimelinePlaybackAt} from './timeline-playback.js';
-import {formatCredits, formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
+import {formatUsd, normalizeQualityTier, qualitySettingsFor} from './quality-tiers.js';
+import {recordProjectFalUsage} from './project-usage.js';
 import {expandMentionPrompt, findMentions, imageInputFor, resolveMentionedVersions} from './prompt-mentions.js';
 import {attachMentionAutocomplete} from './mention-autocomplete.js';
 import {toUploadableUrl} from './asset-data-url.js';
 import {createAgentWorkspace} from './agent-workspace.js';
 import {createProjectContextService} from './project-context.js';
+import {searchMediaAssets} from './media-search.js';
 import {blobToDataUrl, captureVideoFrame, createVideoFrameIndexer} from './video-indexing.js';
 import {
   FILL_GAP_DURATION,
@@ -109,6 +112,9 @@ const legacyStorage = {
   setItem: () => {},
 };
 const projectDatabase = createBrowserDatabase();
+const timelineExporter = createTimelineExporter({
+  resolveAssetBlob: (asset) => asset?.id ? projectDatabase.getAsset(asset.id).catch(() => null) : null,
+});
 // Whether legacy localStorage held a project at boot; only then does the
 // bootstrap store's content deserve to be migrated into IndexedDB — otherwise
 // it is a throwaway default that must not appear in the projects hub.
@@ -126,6 +132,7 @@ const state = {
   view: initialView,
   projectSummaries: [],
   selectedNarrativeStyleId: null,
+  projectNameEditing: false,
   get media() { return project.mediaAssets; },
   get characters() { return project.characters; },
   get styles() { return project.styles; },
@@ -161,7 +168,12 @@ const state = {
   videoSearchLoading: false,
   videoSearchError: '',
   videoSearchResults: [],
+  mediaSearchResults: [],
+  videoSearchStatus: null,
+  videoIndexingActive: false,
+  videoIndexingQueued: false,
   selectedFrameResult: null,
+  selectedMediaSearchAssetId: null,
   videoIndexingByAsset: new Map(),
   trackMenuOpen: false,
   selectedCharacterId: null,
@@ -196,6 +208,13 @@ const updateProject = (command) => {
   return result;
 };
 
+let falUsageSequence = 0;
+const recordFalUsage = (input = {}) => recordProjectFalUsage({
+  dispatch: updateProject,
+  ...input,
+  id: input.id || `${input.operation || 'fal'}-${Date.now()}-${++falUsageSequence}`,
+});
+
 const characterLibrary = createCharacterLibrary({
   getProject: () => project,
   dispatch: updateProject,
@@ -225,8 +244,10 @@ const videoIndexer = createVideoFrameIndexer({
         status: manifest.status,
         frameCount: manifest.frameCount,
         completedCount: manifest.completedCount,
+        indexedCount: manifest.indexedCount,
         interval: manifest.interval,
         modelId: manifest.modelId,
+        error: manifest.error || null,
         updatedAt: manifest.updatedAt,
       }}},
     });
@@ -656,6 +677,14 @@ const generateBeatStill = async (beatId) => {
           return;
         }
         if (result.status !== 'completed') throw new Error(result.error || 'Storyboard still generation failed.');
+        recordFalUsage({
+          id: `storyboard-still-${jobId}`,
+          generationJobId: jobId,
+          provider: result.source?.provider,
+          modelId: result.source?.modelId,
+          operation: 'storyboard-still',
+          cost: result.cost,
+        });
         const act = session.workspace.read().act;
         const beat = act.beats.find((entry) => entry.id === beatId);
         if (!beat) return;
@@ -720,6 +749,12 @@ const generateBeatScreenplay = async (beatId) => {
   updateActWorkspaceJob(session, beatId, 'screenplay', {status: 'generating', error: ''});
   try {
     const result = await storyboardGenerationAdapter.generateScreenplay({context: session.workspace.contextFor(beatId)});
+    recordFalUsage({
+      provider: result.provider,
+      modelId: result.modelId,
+      operation: 'storyboard-screenplay',
+      usage: result.usage,
+    });
     if (actWorkspaceSession === session) {
       session.workspace.dispatch({
         type: 'beat/update',
@@ -830,6 +865,7 @@ const renderApp = () => {
       onOpen: (projectId) => { void openProjectById(projectId); },
       onCreate: () => { void createNewProject(); },
       onDelete: (projectId) => { void deleteProjectById(projectId); },
+      onRename: (projectId, name) => renameProjectById(projectId, name),
     });
     return;
   }
@@ -911,6 +947,14 @@ const renderEditorBeatStrip = () => {
     </section>`;
 };
 
+const renderProjectNameControl = () => state.projectNameEditing ? `
+  <form class="project-name-form" data-project-name-form>
+    <input name="name" value="${escapeHtml(project.project.name)}" maxlength="120" aria-label="Project name" required />
+    <button type="submit" aria-label="Save project name">Save</button>
+    <button type="button" data-action="cancel-project-name" aria-label="Cancel project rename">×</button>
+  </form>
+` : `<button class="project-switcher" data-action="edit-project-name" type="button" aria-label="Rename project" title="Rename project"><span>${escapeHtml(project.project.name)}</span><span class="project-name-edit" aria-hidden="true">✎</span></button>`;
+
 const renderEditorApp = () => {
   if (!state.editorSessionInitialized && state.mediaHydrated) {
     const firstStoryboardAct = (project.storyboard?.nodes || [])
@@ -940,12 +984,12 @@ const renderEditorApp = () => {
           <div class="brand-mark"><span></span><span></span><span></span></div>
           <span class="brand-name">PrismFlow</span>
           <span class="brand-divider"></span>
-          <button class="project-switcher" type="button">${escapeHtml(project.project.name)} ${icons.chevron}</button>
+          ${renderProjectNameControl()}
           <span class="save-state"><i></i> Local draft</span>
         </div>
         <form class="global-search" data-video-search-form role="search">
           <span class="global-search-icon" aria-hidden="true">⌕</span>
-          <input name="query" value="${escapeHtml(state.videoSearchQuery)}" placeholder="Search video frames…" aria-label="Search video frames" autocomplete="off" />
+          <input name="query" value="${escapeHtml(state.videoSearchQuery)}" placeholder="Search imports, prompts, and video frames…" aria-label="Search project media" autocomplete="off" />
           <button type="submit" ${state.videoSearchLoading ? 'disabled' : ''}>${state.videoSearchLoading ? 'Searching…' : 'Search'}</button>
         </form>
         <div class="top-actions">
@@ -955,7 +999,7 @@ const renderEditorApp = () => {
             <span class="fal-chip-label">FAL</span>
             <span id="falStatus">Checking…</span>
           </div>
-          <div class="usage-chip" title="Estimated generation usage"><span>${formatCredits(project.usage?.credits || 0)}</span><small>${formatUsd(project.usage?.estimatedUsd || 0)}</small></div>
+          <div class="usage-chip" data-project-spend title="Total FAL spend tracked for this project; reported costs are used when available and FAL pricing estimates otherwise" aria-label="Project FAL spend ${formatUsd(project.usage?.estimatedUsd || 0)}"><span>${formatUsd(project.usage?.estimatedUsd || 0)}</span><small>${project.usage?.generationCount || 0} FAL ${(project.usage?.generationCount || 0) === 1 ? 'call' : 'calls'}</small></div>
           <button class="button ghost" type="button" data-action="export">Export</button>
           <button class="button primary" type="button" data-action="render"><span class="button-spark">${icons.magic}</span> Render draft</button>
           <button class="avatar" type="button" aria-label="Account">PF</button>
@@ -965,7 +1009,7 @@ const renderEditorApp = () => {
       <main class="workspace ${state.mediaPanelOpen ? '' : 'media-panel-hidden'} ${state.agentPaneOpen ? 'agent-pane-open' : ''}">
         ${renderAgentRail()}
         ${renderAgentRunCard()}
-        <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'}">
+        <aside class="sidebar left-panel ${state.mediaPanelOpen ? '' : 'is-hidden'} ${state.activeTab === 'media' ? 'media-panel' : ''}">
           <div class="panel-tabs">
             <button class="panel-tab ${state.activeTab === 'media' ? 'active' : ''}" data-tab="media" type="button">Media <span class="tab-count">${scopedMedia().length || ''}</span></button>
             <button class="panel-tab ${state.activeTab === 'characters' ? 'active' : ''}" data-tab="characters" type="button">Characters <span class="tab-count">${charactersForAct().length || ''}</span></button>
@@ -1022,18 +1066,77 @@ const renderEditorApp = () => {
   }
 };
 
+const videoSearchCoverage = () => {
+  const videos = scopedMedia().filter((asset) => asset.kind === 'video');
+  const visibleIds = new Set(videos.map((asset) => asset.id));
+  const serverAssets = Array.isArray(state.videoSearchStatus?.assets)
+    ? state.videoSearchStatus.assets.filter((entry) => visibleIds.has(entry.videoAssetId))
+    : null;
+  const localManifests = videos
+    .map((asset) => state.videoIndexingByAsset.get(asset.id) || asset.metadata?.videoIndex)
+    .filter(Boolean);
+  const searchableVideos = serverAssets
+    ? new Set(serverAssets.map((entry) => entry.videoAssetId)).size
+    : localManifests.filter((manifest) => manifest.status === 'complete').length;
+  const searchableAssetIds = serverAssets
+    ? new Set(serverAssets.map((entry) => entry.videoAssetId))
+    : new Set(videos.filter((asset) => (state.videoIndexingByAsset.get(asset.id) || asset.metadata?.videoIndex)?.status === 'complete').map((asset) => asset.id));
+  const searchableFrames = serverAssets
+    ? serverAssets.reduce((total, entry) => total + (entry.frameCount || 0), 0)
+    : localManifests.reduce((total, manifest) => total + (manifest.indexedCount ?? (manifest.status === 'complete' ? manifest.frameCount || 0 : 0)), 0);
+  const processingVideos = localManifests.filter((manifest) => ['capturing', 'annotating', 'indexing'].includes(manifest.status)).length;
+  const indexableMissingVideos = videos.filter((asset) => asset.url && !searchableAssetIds.has(asset.id)).length;
+  return {
+    videoCount: videos.length,
+    searchableVideos,
+    searchableFrames,
+    processingVideos,
+    missingVideos: Math.max(0, videos.length - searchableVideos),
+    indexableMissingVideos,
+    offlineMissingVideos: Math.max(0, videos.length - searchableVideos - indexableMissingVideos),
+  };
+};
+
+const renderVideoSearchCoverage = () => {
+  const coverage = videoSearchCoverage();
+  const importCount = scopedMedia().length;
+  const headline = coverage.videoCount
+    ? `${coverage.searchableVideos}/${coverage.videoCount} videos searchable`
+    : 'No videos to index';
+  const detail = coverage.videoCount
+    ? `${coverage.searchableFrames} indexed ${coverage.searchableFrames === 1 ? 'frame' : 'frames'} · names and prompts searched for all ${importCount} imports${coverage.offlineMissingVideos ? ` · ${coverage.offlineMissingVideos} ${coverage.offlineMissingVideos === 1 ? 'video needs' : 'videos need'} re-import` : ''}`
+    : `Names, prompts, and metadata searched for all ${importCount} imports`;
+  const canIndex = coverage.indexableMissingVideos > 0 || coverage.processingVideos > 0;
+  const incomplete = coverage.missingVideos > 0 || coverage.processingVideos > 0;
+  return `<div class="video-search-coverage ${incomplete ? 'incomplete' : 'complete'}" data-video-search-coverage aria-live="polite">
+    <span class="video-search-coverage-dot" aria-hidden="true"></span>
+    <span><strong>${headline}</strong><small>${detail}</small></span>
+    ${canIndex ? `<button type="button" data-action="resume-video-indexing" ${state.videoIndexingActive ? 'disabled' : ''}>${state.videoIndexingActive ? 'Indexing…' : 'Index missing'}</button>` : ''}
+  </div>`;
+};
+
 const renderMediaPanel = () => `
   <div class="panel-heading"><div><span class="eyebrow">ASSET BIN</span><h2>Media</h2></div></div>
-  <div class="media-library" data-dropzone="media"><div class="media-list">${scopedMedia().map(renderMediaCard).join('')}<button class="media-add-card" data-action="open-file" type="button" aria-label="Import media">${icons.plus}</button></div>${renderVideoSearchResults()}</div>
+  ${renderVideoSearchCoverage()}
+  <div class="media-library ${state.videoSearchQuery ? 'has-search-results' : ''}" data-dropzone="media">
+    <section class="media-imports" aria-label="Imports">
+      <div class="media-section-head"><span class="eyebrow">IMPORTS</span><small>${scopedMedia().length}</small></div>
+      <div class="media-list">${scopedMedia().map(renderMediaCard).join('')}<button class="media-add-card" data-action="open-file" type="button" aria-label="Import media">${icons.plus}</button></div>
+    </section>
+    ${renderMediaSearchResults()}
+  </div>
   <div class="panel-footnote"><span>Drag assets onto the timeline to start editing.</span></div>
 `;
 
 const renderMediaCard = (item) => {
   const videoIndex = state.videoIndexingByAsset.get(item.id) || item.metadata?.videoIndex;
-  const isSelectedFrame = state.selectedFrameResult?.videoAssetId === item.id;
-  const indexingLabel = item.kind === 'video' && videoIndex
-    ? ` · ${videoIndex.status === 'complete' ? `${videoIndex.frameCount} frames indexed` : `indexing ${videoIndex.completedCount || 0}/${videoIndex.frameCount || '…'}`}`
-    : '';
+  const isSelectedFrame = state.selectedFrameResult?.videoAssetId === item.id || state.selectedMediaSearchAssetId === item.id;
+  const videoIndexLabel = !videoIndex ? ''
+    : videoIndex.status === 'complete' ? `${videoIndex.indexedCount ?? videoIndex.frameCount ?? 0} frames searchable`
+      : videoIndex.status === 'partial' ? `${videoIndex.indexedCount || 0}/${videoIndex.frameCount || '…'} frames searchable`
+        : videoIndex.status === 'failed' ? 'index failed'
+          : `indexing ${videoIndex.completedCount || 0}/${videoIndex.frameCount || '…'}`;
+  const indexingLabel = item.kind === 'video' && videoIndexLabel ? ` · ${videoIndexLabel}` : '';
   return `
   <div class="media-card ${isSelectedFrame ? 'frame-selected' : ''}" draggable="true" data-media-id="${item.id}">
     <div class="media-thumb ${item.kind}">${renderMediaVisual(item)}<span class="type-badge">${kindIcon(item.kind)}</span></div>
@@ -1043,17 +1146,30 @@ const renderMediaCard = (item) => {
 `;
 };
 
-const renderVideoSearchResults = () => state.videoSearchQuery ? `
-  <div class="video-search-results" aria-label="Video frame search results">
-    <div class="video-search-results-head"><span class="eyebrow">FRAME HITS</span><button type="button" data-action="clear-video-search">Clear</button></div>
-    ${state.videoSearchLoading ? '<p class="video-search-empty">Searching annotated frames…</p>' : state.videoSearchError ? `<p class="video-search-empty error">${escapeHtml(state.videoSearchError)}</p>` : state.videoSearchResults.length ? state.videoSearchResults.map((result) => `<button class="video-search-result ${state.selectedFrameResult?.id === result.id ? 'selected' : ''}" data-video-frame-id="${escapeHtml(result.id)}" type="button"><strong>${escapeHtml(result.videoName || result.videoAssetId)}</strong><span>${formatTime(result.time)} · ${escapeHtml(result.annotation || result.searchText || '')}</span></button>`).join('') : '<p class="video-search-empty">No annotated video frames matched this search.</p>'}
-  </div>
-` : '';
+const renderMediaSearchResults = () => {
+  if (!state.videoSearchQuery) return '';
+  const mediaResults = state.mediaSearchResults
+    .map((result) => ({...result, asset: mediaById(result.assetId)}))
+    .filter((result) => result.asset);
+  const resultCount = mediaResults.length + state.videoSearchResults.length;
+  const coverage = videoSearchCoverage();
+  return `<section class="video-search-results" aria-label="Search results">
+    <div class="video-search-results-head"><span><span class="eyebrow">SEARCH RESULTS</span><strong>${state.videoSearchLoading ? '…' : resultCount}</strong></span><button type="button" data-action="clear-video-search">Clear</button></div>
+    <div class="video-search-results-scroll">
+      ${mediaResults.length ? `<div class="video-search-result-group"><span>IMPORT MATCHES</span>${mediaResults.map((result) => `<button class="media-search-result ${state.selectedMediaSearchAssetId === result.assetId ? 'selected' : ''}" data-media-search-asset-id="${escapeHtml(result.assetId)}" type="button"><span class="media-search-result-thumb ${result.asset.kind}">${renderMediaVisual(result.asset)}</span><span><strong>${escapeHtml(result.name)}</strong><small>${escapeHtml(result.matchLabel)} · ${escapeHtml(result.matchText)}</small></span></button>`).join('')}</div>` : ''}
+      ${state.videoSearchResults.length ? `<div class="video-search-result-group"><span>VISUAL FRAME MATCHES</span>${state.videoSearchResults.map((result) => `<button class="video-search-result ${state.selectedFrameResult?.id === result.id ? 'selected' : ''}" data-video-frame-id="${escapeHtml(result.id)}" type="button"><strong>${escapeHtml(result.videoName || result.videoAssetId)}</strong><span>${formatTime(result.time)} · ${escapeHtml(result.annotation || result.searchText || '')}</span></button>`).join('')}</div>` : ''}
+      ${state.videoSearchLoading ? '<p class="video-search-empty">Searching indexed video frames…</p>' : ''}
+      ${state.videoSearchError ? `<p class="video-search-empty error">Visual frame search unavailable: ${escapeHtml(state.videoSearchError)}</p>` : ''}
+      ${!state.videoSearchLoading && !resultCount ? `<p class="video-search-empty">No import names, prompts, metadata, or indexed video frames matched “${escapeHtml(state.videoSearchQuery)}”.${coverage.missingVideos ? ` ${coverage.missingVideos} ${coverage.missingVideos === 1 ? 'video is' : 'videos are'} not searchable yet.` : ''}</p>` : ''}
+    </div>
+  </section>`;
+};
 
 const searchVideoFrames = async (query) => {
   const normalizedQuery = String(query || '').trim();
   if (!normalizedQuery) return [];
   state.videoSearchQuery = normalizedQuery;
+  state.mediaSearchResults = searchMediaAssets(project, normalizedQuery, {assetIds: scopedAssetIds(), limit: 20});
   state.videoSearchLoading = true;
   state.videoSearchError = '';
   try {
@@ -1076,16 +1192,53 @@ const submitVideoSearch = async (event) => {
   const query = String(new FormData(event.currentTarget).get('query') || '').trim();
   if (!query) return;
   state.videoSearchQuery = query;
+  state.mediaSearchResults = searchMediaAssets(project, query, {assetIds: scopedAssetIds(), limit: 20});
+  state.selectedMediaSearchAssetId = null;
+  state.selectedFrameResult = null;
   state.activeTab = 'media';
   state.mediaPanelOpen = true;
   state.videoSearchLoading = true;
   renderApp();
   try {
-    await searchVideoFrames(query);
+    await Promise.all([
+      searchVideoFrames(query),
+      refreshVideoSearchStatus().catch(() => null),
+    ]);
     renderApp();
   } catch (error) {
-    showToast(`Video search failed: ${error instanceof Error ? error.message : String(error)}`);
+    if (!state.mediaSearchResults.length) showToast(`Video search failed: ${error instanceof Error ? error.message : String(error)}`);
     renderApp();
+  }
+};
+
+const renameOpenProject = async (name) => {
+  const normalizedName = String(name || '').trim();
+  if (!normalizedName) return false;
+  const result = updateProject({type: 'project/rename', name: normalizedName});
+  if (!result.changed) return true;
+  await projectDatabase.saveProject(project);
+  const summary = summarizeProject(project);
+  const remaining = state.projectSummaries.filter((entry) => entry.id !== summary.id);
+  state.projectSummaries = sortSummaries([summary, ...remaining]);
+  return true;
+};
+
+const submitEditorProjectName = async (event) => {
+  event.preventDefault();
+  const input = event.currentTarget.elements.name;
+  const name = String(input.value || '').trim();
+  if (!name) {
+    input.setCustomValidity('Enter a project name.');
+    input.reportValidity();
+    return;
+  }
+  try {
+    await renameOpenProject(name);
+    state.projectNameEditing = false;
+    renderApp();
+  } catch (error) {
+    showToast(`Project name could not be saved: ${error instanceof Error ? error.message : String(error)}`);
+    input.focus();
   }
 };
 
@@ -1831,10 +1984,25 @@ const selectAgentResult = (entryId) => {
   renderApp();
 };
 
+const selectMediaSearchResult = (assetId) => {
+  const result = state.mediaSearchResults.find((candidate) => candidate.assetId === assetId);
+  if (!result || !mediaById(assetId)) return;
+  state.selectedMediaSearchAssetId = assetId;
+  state.selectedFrameResult = null;
+  state.selectedGhostKey = null;
+  state.previewDiffId = null;
+  const clip = viewClips().find((candidate) => candidate.assetId === assetId) || null;
+  selectOnlyClip(clip?.id || null);
+  if (clip) state.currentTime = clip.start;
+  state.activeTab = 'media';
+  renderApp();
+};
+
 const selectVideoSearchResult = (frameId) => {
   const result = state.videoSearchResults.find((candidate) => candidate.id === frameId) || videoIndexer.getCachedFrame(frameId);
   if (!result) return;
   state.selectedFrameResult = result;
+  state.selectedMediaSearchAssetId = result.videoAssetId;
   state.selectedGhostKey = null;
   state.previewDiffId = null;
   const matchingClips = viewClips().filter((clip) => clip.assetId === result.videoAssetId);
@@ -2074,6 +2242,12 @@ const generateBeatVideoPrompt = async () => {
       context: beatVideoContext(modal.actId, modal.beatId),
       duration: modal.duration,
     });
+    recordFalUsage({
+      provider: result.provider,
+      modelId: result.modelId,
+      operation: 'storyboard-video-prompt',
+      usage: result.usage,
+    });
     persistBeatVideoPrompt({
       actId: modal.actId,
       beatId: modal.beatId,
@@ -2225,6 +2399,25 @@ const bindEvents = () => {
     state.timelineScrollLeft = timelineScroll.scrollLeft;
     timelineScroll.addEventListener('scroll', () => { state.timelineScrollLeft = timelineScroll.scrollLeft; }, {passive: true});
   }
+  app.querySelector('[data-action="edit-project-name"]')?.addEventListener('click', () => {
+    state.projectNameEditing = true;
+    renderApp();
+    const input = app.querySelector('[data-project-name-form] input[name="name"]');
+    input?.focus();
+    input?.select();
+  });
+  app.querySelector('[data-project-name-form]')?.addEventListener('submit', submitEditorProjectName);
+  app.querySelector('[data-project-name-form] input[name="name"]')?.addEventListener('input', (event) => event.target.setCustomValidity(''));
+  app.querySelector('[data-project-name-form] input[name="name"]')?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    state.projectNameEditing = false;
+    renderApp();
+  });
+  app.querySelector('[data-action="cancel-project-name"]')?.addEventListener('click', () => {
+    state.projectNameEditing = false;
+    renderApp();
+  });
   app.querySelectorAll('[data-action="open-file"]').forEach((button) => button.addEventListener('click', () => fileInput.click()));
   app.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => { state.activeTab = button.dataset.tab; renderApp(); }));
   app.querySelector('[data-action="select-act"]')?.addEventListener('change', (event) => {
@@ -2287,13 +2480,15 @@ const bindEvents = () => {
     agentStepper.addEventListener('scroll', () => { state.agentStepperScrollTop = agentStepper.scrollTop; }, {passive: true});
   }
   app.querySelector('[data-video-search-form]')?.addEventListener('submit', submitVideoSearch);
+  app.querySelector('[data-action="resume-video-indexing"]')?.addEventListener('click', () => { void resumeProjectVideoIndexing({announce: true}); });
   app.querySelector('[data-script-title-form]')?.addEventListener('submit', saveScriptTitle);
   app.querySelector('[data-script-add-form]')?.addEventListener('submit', addScriptBeat);
   app.querySelectorAll('[data-script-beat-form]').forEach((form) => form.addEventListener('submit', saveScriptBeat));
   app.querySelectorAll('[data-storyboard-script-form]').forEach((form) => form.addEventListener('submit', saveStoryboardScreenplay));
   app.querySelectorAll('[data-agent-result-id]').forEach((button) => button.addEventListener('click', () => selectAgentResult(button.dataset.agentResultId)));
   app.querySelectorAll('[data-video-frame-id]').forEach((button) => button.addEventListener('click', () => selectVideoSearchResult(button.dataset.videoFrameId)));
-  app.querySelector('[data-action="clear-video-search"]')?.addEventListener('click', () => { state.videoSearchQuery = ''; state.videoSearchResults = []; state.selectedFrameResult = null; state.videoSearchError = ''; renderApp(); });
+  app.querySelectorAll('[data-media-search-asset-id]').forEach((button) => button.addEventListener('click', () => selectMediaSearchResult(button.dataset.mediaSearchAssetId)));
+  app.querySelector('[data-action="clear-video-search"]')?.addEventListener('click', () => { state.videoSearchQuery = ''; state.videoSearchResults = []; state.mediaSearchResults = []; state.selectedFrameResult = null; state.selectedMediaSearchAssetId = null; state.videoSearchError = ''; renderApp(); });
   app.querySelector('[data-action="create-character"]')?.addEventListener('click', createCharacter);
   app.querySelectorAll('[data-character-id]').forEach((button) => button.addEventListener('click', () => openCharacter(button.dataset.characterId)));
   app.querySelector('[data-action="create-style"]')?.addEventListener('click', createStyle);
@@ -2476,12 +2671,12 @@ const bindEvents = () => {
     lane.addEventListener('drop', (event) => { event.preventDefault(); lane.classList.remove('dragging'); dropOnTimeline(event, lane.dataset.trackId); });
     lane.addEventListener('click', (event) => {
       if (performance.now() < suppressTimelineClickUntil) return;
-      if (event.target.closest('.timeline-clip, .timeline-ghost')) return;
-      seekFromTimeline(event);
+      if (event.target.closest('.timeline-clip, .timeline-ghost, .timeline-transition, .generation-pending')) return;
+      seekFromTimelineBackground(event);
     });
   });
   app.querySelector('#timelineContent')?.addEventListener('pointerdown', startTimelineMarquee);
-  app.querySelector('#timelineRuler')?.addEventListener('click', seekFromTimeline);
+  app.querySelector('#timelineRuler')?.addEventListener('click', seekFromTimelineBackground);
   app.querySelector('[data-action="split"]')?.addEventListener('click', splitClipAtPlayhead);
   app.querySelector('[data-action="add-track"]')?.addEventListener('click', () => {
     state.trackMenuOpen = !state.trackMenuOpen;
@@ -2529,7 +2724,7 @@ const bindEvents = () => {
   app.querySelector('[data-action="attach-clip-character"]')?.addEventListener('click', attachCharacterToSelectedClip);
   app.querySelectorAll('[data-action="remove-clip-character"]').forEach((button) => button.addEventListener('click', () => removeCharacterFromSelectedClip(button.dataset.versionId)));
   app.querySelector('[data-action="render"]')?.addEventListener('click', () => showToast('Render queue is ready for a FAL model hookup.'));
-  app.querySelector('[data-action="export"]')?.addEventListener('click', () => showToast('Export will be connected after the composition pipeline is defined.'));
+  app.querySelector('[data-action="export"]')?.addEventListener('click', exportTimelineToMp4);
   if (!bindEvents.fullscreenHandlerBound) {
     document.addEventListener('fullscreenchange', () => {
       const button = app.querySelector('[data-action="toggle-fullscreen"]');
@@ -2687,7 +2882,11 @@ const scheduleStyleApplicationPoll = (delay = 0) => {
     if (styleApplicationPollInFlight) return scheduleStyleApplicationPoll(500);
     styleApplicationPollInFlight = true;
     try {
+      const indexedVideoIdsBefore = new Set(project.mediaAssets.filter((asset) => asset.kind === 'video').map((asset) => asset.id));
       const result = await styleApplicationController.tick();
+      if (project.mediaAssets.some((asset) => asset.kind === 'video' && !indexedVideoIdsBefore.has(asset.id))) {
+        void resumeProjectVideoIndexing();
+      }
       if (state.styleApplicationModal?.batchId || result.hasWork) renderApp();
       if (result.hasWork) scheduleStyleApplicationPoll(1200);
     } catch (error) {
@@ -2899,6 +3098,14 @@ const createComposerController = (characterId) => createCharacterGenerationContr
       characterId,
       input,
       result,
+    });
+    recordFalUsage({
+      id: `character-sheet-${result.source?.jobId || recorded.versionId}`,
+      generationJobId: result.source?.jobId,
+      provider: result.source?.provider,
+      modelId: result.source?.modelId || result.modelId,
+      operation: 'character-sheet',
+      cost: result.cost,
     });
     await persistGeneratedAsset(recorded.assetId);
   },
@@ -3777,6 +3984,18 @@ const rawTimeFromClientX = (clientX) => {
 
 const seekFromTimeline = (event) => seekTo(timeFromPointer(event));
 
+const seekFromTimelineBackground = (event) => {
+  const time = timeFromPointer(event);
+  const selectionChanged = state.selectedClipIds.size > 0
+    || Boolean(state.selectedTransitionId || state.selectedGhostKey || state.previewDiffId);
+  clearTimelineClipSelection();
+  state.selectedTransitionId = null;
+  state.selectedGhostKey = null;
+  state.previewDiffId = null;
+  seekTo(time);
+  if (selectionChanged) renderApp();
+};
+
 const addFiles = async (files) => {
   const acceptedFiles = files.filter((file) => file.type.startsWith('video/') || file.type.startsWith('audio/') || file.type.startsWith('image/'));
   await Promise.all(acceptedFiles.map(async (file) => {
@@ -4022,6 +4241,7 @@ const persistGeneratedAsset = async (assetId) => {
   } catch {
     // Keep the remote URL when the download fails; playback still works while online.
   }
+  if (asset.kind === 'video') void resumeProjectVideoIndexing();
 };
 
 const scoreGenerationLabel = () => ({
@@ -4058,6 +4278,12 @@ const generateBackgroundScore = async () => {
     state.scoreGeneration = {phase: 'direction', durationMs: context.durationMs};
     renderApp();
     const direction = await musicGenerationAdapter.generateScoreDirection({context});
+    recordFalUsage({
+      provider: direction.provider,
+      modelId: direction.modelId,
+      operation: 'score-direction',
+      usage: direction.usage,
+    });
     state.scoreGeneration = {phase: 'composing', durationMs: context.durationMs, cueSheet: direction.cueSheet};
     renderApp();
     const submitted = await musicGenerationAdapter.submitScore({
@@ -4089,6 +4315,14 @@ const pollScoreJob = async () => {
       scheduleScorePoll();
       return;
     }
+    recordFalUsage({
+      id: `background-score-${generation.jobId}`,
+      generationJobId: generation.jobId,
+      provider: job.source?.provider,
+      modelId: job.source?.modelId,
+      operation: 'background-score',
+      cost: job.cost,
+    });
     await landScoreResult(job, generation);
     state.scoreGeneration = null;
     showToast('Background score added to the audio track.');
@@ -4709,6 +4943,30 @@ const showToast = (message) => {
   setTimeout(() => { toast.classList.remove('visible'); setTimeout(() => toast.remove(), 220); }, 2600);
 };
 
+const exportTimelineToMp4 = async (event) => {
+  const button = event.currentTarget;
+  if (!button || button.disabled) return;
+  const original = button.innerHTML;
+  button.disabled = true;
+  button.setAttribute('aria-busy', 'true');
+  try {
+    await timelineExporter.exportProject(project, {
+      onProgress: ({phase, completed, total}) => {
+        if (phase === 'uploading') button.textContent = `Uploading ${completed}/${total}…`;
+        else if (phase === 'rendering') button.textContent = 'Rendering MP4…';
+        else button.textContent = 'Preparing export…';
+      },
+    });
+    showToast('Exported output.mp4 with timeline video and mixed audio.');
+  } catch (error) {
+    showToast(`Export failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    button.disabled = false;
+    button.removeAttribute('aria-busy');
+    button.innerHTML = original;
+  }
+};
+
 const closeContextMenu = () => document.querySelector('.context-menu')?.remove();
 
 const showContextMenu = (event, items) => {
@@ -4776,8 +5034,19 @@ const resetPerProjectState = () => {
   state.currentTime = 0;
   state.isPlaying = false;
   state.selectedNarrativeStyleId = null;
+  state.projectNameEditing = false;
   state.editorSessionInitialized = false;
   state.videoIndexingByAsset.clear();
+  state.videoSearchQuery = '';
+  state.videoSearchLoading = false;
+  state.videoSearchError = '';
+  state.videoSearchResults = [];
+  state.mediaSearchResults = [];
+  state.videoSearchStatus = null;
+  state.videoIndexingActive = false;
+  state.videoIndexingQueued = false;
+  state.selectedFrameResult = null;
+  state.selectedMediaSearchAssetId = null;
   state.mediaHydrated = false;
   state.previewPlaybackSignature = null;
   state.promptMentionMap = {};
@@ -4788,6 +5057,56 @@ const resetPerProjectState = () => {
   state.beatVideoModal = null;
 };
 
+const loadVideoIndexManifests = async () => {
+  const assetIds = new Set(project.mediaAssets.map((asset) => asset.id));
+  const manifests = await projectDatabase.listVideoFrameManifests();
+  state.videoIndexingByAsset = new Map(manifests
+    .filter((manifest) => assetIds.has(manifest.videoAssetId))
+    .map((manifest) => [manifest.videoAssetId, manifest]));
+  return manifests;
+};
+
+const refreshVideoSearchStatus = async () => {
+  state.videoSearchStatus = await videoIndexer.status();
+  return state.videoSearchStatus;
+};
+
+const resumeProjectVideoIndexing = async ({announce = false} = {}) => {
+  if (!project.mediaAssets.some((asset) => asset.kind === 'video' && asset.url)) {
+    if (announce) showToast('There are no available videos to index.');
+    return [];
+  }
+  if (state.videoIndexingActive) {
+    state.videoIndexingQueued = true;
+    return [];
+  }
+  state.videoIndexingActive = true;
+  renderApp();
+  let completed = [];
+  try {
+    completed = await videoIndexer.resume({assets: project.mediaAssets});
+    await loadVideoIndexManifests();
+    await refreshVideoSearchStatus();
+    if (announce) {
+      const count = completed.filter(Boolean).length;
+      showToast(count ? `${count} ${count === 1 ? 'video is' : 'videos are'} now searchable.` : 'Video search coverage is already current.');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await loadVideoIndexManifests().catch(() => {});
+    await refreshVideoSearchStatus().catch(() => {});
+    if (announce) showToast(`Video indexing failed: ${message}`);
+    else showToast(`Video indexing could not resume: ${message}`);
+  } finally {
+    const rerun = state.videoIndexingQueued;
+    state.videoIndexingQueued = false;
+    state.videoIndexingActive = false;
+    renderApp();
+    if (rerun) queueMicrotask(() => { void resumeProjectVideoIndexing(); });
+  }
+  return completed;
+};
+
 const hydrateProjectMedia = async () => {
   await Promise.all(project.mediaAssets.map(async (asset) => {
     const blob = await projectDatabase.getAsset(asset.id);
@@ -4796,14 +5115,14 @@ const hydrateProjectMedia = async () => {
   }));
   project = projectStore.getProject();
   state.mediaHydrated = true;
+  await loadVideoIndexManifests().catch(() => {});
+  await refreshVideoSearchStatus().catch(() => { state.videoSearchStatus = null; });
   styleApplicationController.resume();
   renderApp();
   if ((project.styleApplications?.batches || []).some((batch) => batch.jobs.some((job) => ['queued', 'uploading', 'trimming', 'generating'].includes(job.status)))) {
     scheduleStyleApplicationPoll();
   }
-  void videoIndexer.resume({assets: project.mediaAssets}).catch((error) => {
-    showToast(`Video indexing could not resume: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  void resumeProjectVideoIndexing();
   void audioIndexer.resume({
     assets: project.mediaAssets,
     getBlob: (asset) => projectDatabase.getAsset(asset.id).catch(() => null),
@@ -4859,6 +5178,34 @@ const createNewProject = async () => {
   } catch {}
   await activateProject(fresh);
   setView('picker');
+};
+
+const renameProjectById = async (projectId, name) => {
+  const normalizedName = String(name || '').trim();
+  if (!projectId || !normalizedName) return false;
+  try {
+    let renamedProject;
+    if (projectOpen && project.project.id === projectId) {
+      updateProject({type: 'project/rename', name: normalizedName});
+      renamedProject = project;
+    } else {
+      const persisted = await projectDatabase.loadProject(projectId);
+      if (!persisted) throw new Error('That project could not be loaded.');
+      const store = createProjectStore({storage: null, initialProject: persisted});
+      renamedProject = store.dispatch({type: 'project/rename', name: normalizedName}).project;
+    }
+    await projectDatabase.saveProject(renamedProject);
+    const summary = summarizeProject(renamedProject);
+    state.projectSummaries = sortSummaries([
+      summary,
+      ...state.projectSummaries.filter((entry) => entry.id !== projectId),
+    ]);
+    renderApp();
+    return true;
+  } catch (error) {
+    showToast(`Project name could not be saved: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
 };
 
 const deleteProjectById = async (projectId) => {

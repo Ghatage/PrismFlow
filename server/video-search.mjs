@@ -169,9 +169,26 @@ export const createVideoSearchAdapter = ({
     return {indexedCount: next.records.length};
   };
 
-  const status = async () => {
+  const status = async ({projectId = null} = {}) => {
     const state = loadedState || await load();
-    return {ready: Boolean(state), model: state.embeddingModel, dimensions: state.dimensions, recordCount: state.records.length, indexedAt: state.indexedAt, indexPath};
+    const records = projectId
+      ? state.records.filter((record) => record.projectId === projectId)
+      : state.records;
+    const assetCounts = new Map();
+    records.forEach((record) => assetCounts.set(
+      record.videoAssetId,
+      (assetCounts.get(record.videoAssetId) || 0) + 1,
+    ));
+    return {
+      ready: Boolean(state),
+      model: state.embeddingModel,
+      dimensions: state.dimensions,
+      recordCount: records.length,
+      videoCount: assetCounts.size,
+      assets: [...assetCounts].map(([videoAssetId, frameCount]) => ({videoAssetId, frameCount})),
+      indexedAt: state.indexedAt,
+      indexPath,
+    };
   };
 
   return {upsert, search, removeVideo, status};

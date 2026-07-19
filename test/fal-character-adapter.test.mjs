@@ -72,6 +72,37 @@ test('polls queue status and result at the root app id for nested endpoints', as
   ]);
 });
 
+test('caches FAL historical cost estimates for completed queue jobs', async () => {
+  const requests = [];
+  const fal = createFalAdapter({
+    apiKey: 'server-secret-key',
+    platformOrigin: 'https://api.example.test',
+    fetchImpl: async (url, options) => {
+      requests.push({url, options});
+      return jsonResponse({estimate_type: 'historical_api_price', total_cost: 0.082, currency: 'USD'});
+    },
+  });
+
+  const reported = await fal.estimateCost('fal-ai/nano-banana-2');
+  const cached = await fal.estimateCost('fal-ai/nano-banana-2');
+  assert.deepEqual(reported, {
+    estimatedUsd: 0.082,
+    credits: 8.200000000000001,
+    unit: 'request',
+    quantity: 1,
+    currency: 'USD',
+    basis: 'historical-api-price',
+  });
+  assert.deepEqual(cached, reported);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, 'https://api.example.test/v1/models/pricing/estimate');
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    estimate_type: 'historical_api_price',
+    endpoints: {'fal-ai/nano-banana-2': {call_quantity: 1}},
+  });
+  assert.equal(requests[0].options.headers.Authorization, 'Key server-secret-key');
+});
+
 test('normalizes Nano Banana 2 text and reference requests server-side', () => {
   const textRequest = buildNanoBananaCharacterRequest({
     name: 'Marlow',

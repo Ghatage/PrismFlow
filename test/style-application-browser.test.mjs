@@ -45,6 +45,14 @@ const createFixture = (origin) => ({
     id: 'style-ink', name: 'Ink wash', status: 'ready', activeVersionId: 'style-ink-v1', lockedVersionId: null,
     versions: [{id: 'style-ink-v1', referenceAssetIds: ['asset-style-reference'], prompt: '', modelId: 'local/manual', seed: null, params: {}, parentAssetIds: ['asset-style-reference'], createdAt: '2026-07-18T19:00:00.000Z'}],
   }],
+  usage: {
+    schemaVersion: 1,
+    estimatedUsd: 1.38,
+    credits: 138,
+    generationCount: 1,
+    updatedAt: '2026-07-18T19:00:00.000Z',
+    entries: [{id: 'usage-existing', modelId: 'fal-ai/existing', estimatedUsd: 1.38, credits: 138, unit: 'request', quantity: 1, createdAt: '2026-07-18T19:00:00.000Z'}],
+  },
   mediaAssets: [
     {id: 'asset-source-a', name: 'Source A', kind: 'image', mimeType: 'image/svg+xml', duration: 4, remoteUrl: `${origin}/test-media/source-a.svg`},
     {id: 'asset-source-b', name: 'Source B', kind: 'image', mimeType: 'image/svg+xml', duration: 4, remoteUrl: `${origin}/test-media/source-b.svg`},
@@ -102,6 +110,7 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
     await route.fulfill({status: 200, contentType: 'application/json', body: JSON.stringify({
       status: 'completed', modelId: 'fal-ai/nano-banana-2/edit',
       asset: {url: `https://fal.media/${id}.png`, mimeType: 'image/png', duration: 4},
+      cost: {estimatedUsd: 0.25, credits: 25, unit: 'request', quantity: 1, basis: 'reported'},
       source: {provider: 'fal'},
     })});
   });
@@ -112,6 +121,7 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
 
   await page.goto(`${origin}/?view=editor`, {waitUntil: 'networkidle'});
   await page.locator('[data-media-hydrated="true"]').waitFor();
+  assert.match(await page.locator('[data-project-spend]').textContent(), /\$1\.38.*1 FAL call/);
   await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
   await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').click({modifiers: ['Shift']});
   assert.equal(await page.locator('.timeline-clip.selected').count(), 2);
@@ -124,6 +134,17 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
   assert.match(selectionGlow, /32px/);
   await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
   assert.equal(await page.locator('.timeline-clip.selected').count(), 1);
+  const emptyLaneBox = await page.locator('.track-lane[data-track-id="V1"]').boundingBox();
+  const deselectFirstClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').boundingBox();
+  const deselectSecondClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').boundingBox();
+  const emptyLaneX = (deselectFirstClipBox.x + deselectFirstClipBox.width + deselectSecondClipBox.x) / 2;
+  await page.mouse.click(emptyLaneX, emptyLaneBox.y + emptyLaneBox.height / 2);
+  assert.equal(await page.locator('.timeline-clip.selected').count(), 0);
+  await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
+  const rulerBox = await page.locator('#timelineRuler').boundingBox();
+  await page.mouse.click(emptyLaneX, rulerBox.y + rulerBox.height / 2);
+  assert.equal(await page.locator('.timeline-clip.selected').count(), 0);
+  await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').click();
   const laneBox = await page.locator('.track-lane[data-track-id="V1"]').boundingBox();
   const firstClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-a"]').boundingBox();
   const secondClipBox = await page.locator('.timeline-clip[data-clip-id="clip-style-b"]').boundingBox();
@@ -146,6 +167,7 @@ test('multi-selects clips, applies a style, reviews stacked ghosts, and preserve
 
   await page.locator('.style-application-ghost').first().waitFor({timeout: 12_000});
   assert.equal(await page.locator('.style-application-ghost').count(), 2);
+  assert.match(await page.locator('[data-project-spend]').textContent(), /\$1\.88.*3 FAL calls/);
   assert.equal(await page.locator('.media-card').count(), 5);
   const stacked = await page.evaluate(() => {
     const ghost = document.querySelector('.style-application-ghost').getBoundingClientRect();

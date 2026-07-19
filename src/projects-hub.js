@@ -36,7 +36,7 @@ const updatedLine = (iso) => {
   return `Updated ${date.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}`;
 };
 
-export const renderProjectsHub = (app, {summaries, onOpen, onCreate, onDelete}) => {
+export const renderProjectsHub = (app, {summaries, onOpen, onCreate, onDelete, onRename}) => {
   const tiles = summaries.map((summary, index) => `
     <article class="hub-tile" data-project-id="${escapeHtml(summary.id)}" style="animation-delay:${Math.min((index + 1) * 45, 500)}ms">
       <button class="hub-tile-open" type="button" data-action="hub-open" aria-label="Open ${escapeHtml(summary.name)}">
@@ -44,7 +44,13 @@ export const renderProjectsHub = (app, {summaries, onOpen, onCreate, onDelete}) 
         <span class="hub-tile-meta">${escapeHtml(countLine(summary))}</span>
         <span class="hub-tile-updated">${escapeHtml(updatedLine(summary.updatedAt))}</span>
       </button>
+      <button class="hub-tile-edit" type="button" data-action="hub-edit" aria-label="Rename ${escapeHtml(summary.name)}" title="Rename project">✎</button>
       <button class="hub-tile-delete" type="button" data-action="hub-delete" aria-label="Delete ${escapeHtml(summary.name)}" title="Delete project">×</button>
+      <form class="hub-tile-rename" data-action="hub-rename-form" hidden>
+        <label for="hub-project-name-${escapeHtml(summary.id)}">Project name</label>
+        <input id="hub-project-name-${escapeHtml(summary.id)}" name="name" value="${escapeHtml(summary.name)}" maxlength="120" required />
+        <span><button type="submit" class="button primary" aria-label="Save project name">Save</button><button type="button" class="button ghost" data-action="hub-rename-cancel">Cancel</button></span>
+      </form>
     </article>`).join('');
 
   app.innerHTML = `
@@ -70,8 +76,56 @@ export const renderProjectsHub = (app, {summaries, onOpen, onCreate, onDelete}) 
   root.querySelector('[data-action="hub-create"]').addEventListener('click', () => onCreate());
   root.querySelectorAll('.hub-tile[data-project-id]').forEach((tile) => {
     const projectId = tile.dataset.projectId;
-    tile.querySelector('[data-action="hub-open"]').addEventListener('click', () => onOpen(projectId));
-    tile.querySelector('[data-action="hub-delete"]').addEventListener('click', (event) => {
+    const openButton = tile.querySelector('[data-action="hub-open"]');
+    const editButton = tile.querySelector('[data-action="hub-edit"]');
+    const deleteButton = tile.querySelector('[data-action="hub-delete"]');
+    const renameForm = tile.querySelector('[data-action="hub-rename-form"]');
+    const renameInput = renameForm.querySelector('input[name="name"]');
+    const cancelRename = () => {
+      renameInput.value = tile.querySelector('.hub-tile-name').textContent;
+      renameInput.setCustomValidity('');
+      renameForm.hidden = true;
+      openButton.hidden = false;
+      editButton.hidden = false;
+      deleteButton.hidden = false;
+      tile.classList.remove('is-renaming');
+      editButton.focus();
+    };
+    openButton.addEventListener('click', () => onOpen(projectId));
+    editButton.addEventListener('click', () => {
+      openButton.hidden = true;
+      editButton.hidden = true;
+      deleteButton.hidden = true;
+      renameForm.hidden = false;
+      tile.classList.add('is-renaming');
+      renameInput.focus();
+      renameInput.select();
+    });
+    renameForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const name = renameInput.value.trim();
+      if (!name) {
+        renameInput.setCustomValidity('Enter a project name.');
+        renameInput.reportValidity();
+        return;
+      }
+      renameInput.setCustomValidity('');
+      renameForm.querySelector('button[type="submit"]').disabled = true;
+      const accepted = await onRename(projectId, name);
+      if (accepted === false && renameForm.isConnected) {
+        renameForm.querySelector('button[type="submit"]').disabled = false;
+        renameInput.focus();
+      }
+    });
+    renameInput.addEventListener('input', () => renameInput.setCustomValidity(''));
+    renameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelRename();
+      }
+    });
+    renameForm.querySelector('[data-action="hub-rename-cancel"]').addEventListener('click', cancelRename);
+    deleteButton.addEventListener('click', (event) => {
       event.stopPropagation();
       onDelete(projectId);
     });

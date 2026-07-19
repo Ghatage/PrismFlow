@@ -1,3 +1,5 @@
+import {resolveFalResultCost} from './fal-adapter.mjs';
+
 export const NANO_BANANA_2_MODEL_ID = 'fal-ai/nano-banana-2';
 export const NANO_BANANA_2_EDIT_MODEL_ID = 'fal-ai/nano-banana-2/edit';
 
@@ -106,6 +108,7 @@ export const createFalCharacterSheetAdapter = ({
         const result = await fal.result(provenance.modelId, jobId);
         const image = result?.images?.[0];
         if (!image?.url) return {status: 'failed', error: 'FAL completed without returning a character sheet image.'};
+        const cost = await resolveFalResultCost({fal, modelId: provenance.modelId, result});
         return {
           status: 'completed',
           asset: {
@@ -115,6 +118,7 @@ export const createFalCharacterSheetAdapter = ({
             height: Number.isFinite(image.height) ? image.height : null,
           },
           modelId: provenance.modelId,
+          ...(cost ? {cost} : {}),
           seed: provenance.seed,
           params: provenance.params,
           source: {

@@ -141,9 +141,11 @@ export const createVideoFrameIndexer = ({
         status: 'capturing',
         modelId: null,
         completedCount: 0,
+        indexedCount: 0,
         updatedAt: now(),
       };
       await saveManifest(manifest);
+      onProgress(clone(manifest), null);
       const indexedRecords = [];
       for (let index = 0; index < times.length; index += 1) {
         const time = times[index];
@@ -188,16 +190,33 @@ export const createVideoFrameIndexer = ({
           createdAt: frame.capturedAt || now(),
         });
         manifest.completedCount = index + 1;
-        manifest.status = manifest.completedCount === times.length ? 'complete' : 'annotating';
+        manifest.indexedCount = indexedRecords.length;
+        manifest.status = 'annotating';
         manifest.modelId ||= frame.modelId || null;
         manifest.updatedAt = now();
         await saveManifest(manifest);
         onProgress(clone(manifest), clone(frame));
       }
-      await indexRecords(indexedRecords);
-      manifest.status = indexedRecords.length === times.length ? 'complete' : 'partial';
+      manifest.status = 'indexing';
       manifest.updatedAt = now();
       await saveManifest(manifest);
+      onProgress(clone(manifest), null);
+      try {
+        await indexRecords(indexedRecords);
+      } catch (error) {
+        manifest.status = 'failed';
+        manifest.error = error instanceof Error ? error.message : String(error);
+        manifest.updatedAt = now();
+        await saveManifest(manifest);
+        onProgress(clone(manifest), null);
+        throw error;
+      }
+      manifest.status = indexedRecords.length === times.length ? 'complete' : 'partial';
+      manifest.indexedCount = indexedRecords.length;
+      delete manifest.error;
+      manifest.updatedAt = now();
+      await saveManifest(manifest);
+      onProgress(clone(manifest), null);
       return {manifest: clone(manifest), frames: indexedRecords.map(clone)};
     })();
     active.set(asset.id, task);
@@ -208,21 +227,37 @@ export const createVideoFrameIndexer = ({
     if (typeof document === 'undefined') return [];
     const assetById = new Map((Array.isArray(assets) ? assets : []).map((asset) => [asset.id, asset]));
     const manifests = await database.listVideoFrameManifests();
-    return Promise.all(manifests
-      .filter((manifest) => manifest.status !== 'complete')
-      .map(async (manifest) => {
-        const asset = assetById.get(manifest.videoAssetId);
+    const manifestByAssetId = new Map(manifests.map((manifest) => [manifest.videoAssetId, manifest]));
+    let serverIndexedAssetIds = null;
+    try {
+      const currentStatus = await status();
+      if (Array.isArray(currentStatus.assets)) {
+        serverIndexedAssetIds = new Set(currentStatus.assets.map((entry) => entry.videoAssetId));
+      }
+    } catch {
+      // Existing local manifests can still resume when server status is unavailable.
+    }
+    return Promise.all([...assetById.values()]
+      .filter((asset) => {
+        if (!asset?.url || asset.kind !== 'video') return false;
+        const manifest = manifestByAssetId.get(asset.id);
+        if (!manifest || manifest.status !== 'complete') return true;
+        return serverIndexedAssetIds ? !serverIndexedAssetIds.has(asset.id) : false;
+      })
+      .map(async (asset) => {
+        const manifest = manifestByAssetId.get(asset.id);
         if (!asset?.url || asset.kind !== 'video') return null;
         const video = document.createElement('video');
         video.preload = 'metadata';
         video.muted = true;
+        if (/^https?:\/\//i.test(asset.url)) video.crossOrigin = 'anonymous';
         video.src = asset.url;
         try {
           if (video.readyState < 1) await waitForEvent(video, 'loadedmetadata');
           const duration = Number.isFinite(video.duration) && video.duration > 0
             ? video.duration
-            : manifest.duration;
-          return await run({asset, video, duration, interval: manifest.interval});
+            : manifest?.duration || asset.duration;
+          return await run({asset, video, duration, interval: manifest?.interval || VIDEO_FRAME_INTERVAL_SECONDS});
         } finally {
           video.removeAttribute('src');
           video.load?.();
@@ -240,7 +275,13 @@ export const createVideoFrameIndexer = ({
     return results;
   };
 
+  const status = async () => {
+    const projectId = getProject()?.project?.id || '';
+    const response = await fetchImpl(`/api/search/video/status?projectId=${encodeURIComponent(projectId)}`);
+    return responseJson(response, 'Video search status could not be loaded.');
+  };
+
   const getCachedFrame = (frameId) => clone(frameCache.get(frameId) || null);
 
-  return {run, resume, search, getCachedFrame, snapshotTimes, frameIdFor};
+  return {run, resume, search, status, getCachedFrame, snapshotTimes, frameIdFor};
 };

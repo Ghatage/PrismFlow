@@ -134,6 +134,22 @@ test('recovers from malformed or unavailable browser storage', () => {
   assert.equal(memoryOnlyStore.getProject().timeline.clips.length, 0);
 });
 
+test('renames the project durably and ignores empty names', () => {
+  const storage = new MemoryStorage();
+  const store = createProjectStore({storage, ...createDependencies()});
+  const original = store.getProject();
+
+  const renamed = store.dispatch({type: 'project/rename', name: '  Moonlit Cat  '});
+  assert.equal(renamed.changed, true);
+  assert.equal(renamed.affectedId, original.project.id);
+  assert.equal(renamed.project.project.name, 'Moonlit Cat');
+  assert.equal(JSON.parse(storage.getItem(PROJECT_STORAGE_KEY)).project.name, 'Moonlit Cat');
+
+  const ignored = store.dispatch({type: 'project/rename', name: '   '});
+  assert.equal(ignored.changed, false);
+  assert.equal(ignored.project.project.name, 'Moonlit Cat');
+});
+
 test('splits a clip at a timeline time and preserves source continuity', () => {
   const store = createProjectStore({storage: new MemoryStorage(), ...createDependencies()});
   const imported = store.dispatch({

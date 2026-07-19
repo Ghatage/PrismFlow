@@ -2,6 +2,7 @@ import {
   normalizeSeedanceDuration,
   normalizeTimedVideoPrompt,
 } from '../src/beat-video.js';
+import {resolveFalResultCost} from './fal-adapter.mjs';
 
 const STILL_MODEL_ID = 'fal-ai/nano-banana-2';
 const STILL_EDIT_MODEL_ID = 'fal-ai/nano-banana-2/edit';
@@ -191,6 +192,7 @@ export const createFalStoryboardGenerationAdapter = ({
       const result = await fal.result(job.modelId, jobId);
       const image = result?.images?.[0];
       if (!image?.url) return {status: 'failed', error: 'FAL completed without returning a storyboard still image.'};
+      const cost = await resolveFalResultCost({fal, modelId: job.modelId, result});
       return {
         status: 'completed',
         asset: {
@@ -202,6 +204,7 @@ export const createFalStoryboardGenerationAdapter = ({
         },
         seed: job.seed,
         prompt: job.prompt,
+        ...(cost ? {cost} : {}),
         characterVersionIds: (job.context.characters || []).map((character) => character.versionId).filter(Boolean),
         source: {provider: 'fal', modelId: job.modelId, jobId},
       };
